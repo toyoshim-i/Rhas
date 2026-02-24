@@ -1,0 +1,21 @@
+[package]
+name = "rhas"
+version = "0.1.0"
+edition = "2021"
+description = "X68000 HAS060X assembler ported to Rust"
+authors = ["rhas contributors"]
+
+[dependencies]
+# コマンドライン引数解析
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "=3.10.1"
+
+[lib]
+name = "rhas"
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = 3
+lto = true

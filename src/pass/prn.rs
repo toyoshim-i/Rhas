@@ -1,0 +1,165 @@
+/// PRNリストファイル生成（-p オプション）
+///
+/// HAS060X互換のリストファイルフォーマット:
+/// `NNNNN XXXXXXXX[* ]CCCCCCCCCCCCCCCCSSSSSSSSSSSS\n`
+/// - NNNNN:  行番号 (5桁ゼロサプレス)
+/// - XXXXXXXX: 16進アドレス (8桁)
+/// - [ *]:   スペース（通常）または '*'（マクロ展開中）
+/// - CCCC...: 機械語バイト列 (16文字 = 8バイト分)
+/// - SSSS...: ソース行テキスト
+
+/// PRNの1行エントリ
+#[derive(Debug, Clone)]
+pub struct PrnLine {
+    pub line_num:  u32,
+    pub location:  u32,
+    pub section:   u8,
+    pub bytes:     Vec<u8>,   // 生成されたバイト列
+    pub text:      Vec<u8>,   // ソース行テキスト
+    pub is_macro:  bool,
+}
+
+/// PRN出力のデフォルト設定
+const PRN_CODE_WIDTH: usize = 16;   // コード部文字数 (8バイト = 16 hex chars)
+const PRN_LINE_WIDTH: usize = 136;  // 全体幅
+
+/// PRNリストをバイト列として生成する
+pub fn format_prn(lines: &[PrnLine], title: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+
+    for line in lines {
+        format_prn_line(&mut out, line, title);
+    }
+
+    out
+}
+
+fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8]) {
+    // コードバイトのHEX文字列化（PRN_CODE_WIDTH文字まで）
+    // 8バイト超の場合は継続行に分割
+    let hex_chars: Vec<u8> = bytes_to_hex(&entry.bytes);
+    let source_text = &entry.text;
+
+    let mut code_offset = 0;
+    let mut is_first = true;
+
+    loop {
+        let code_end = (code_offset + PRN_CODE_WIDTH).min(hex_chars.len());
+        let code_chunk = &hex_chars[code_offset..code_end];
+
+        if is_first {
+            // 行番号フィールド (5桁ゼロサプレス)
+            let n = entry.line_num;
+            if n == 0 {
+                out.extend_from_slice(b"     ");
+            } else {
+                let s = format!("{:5}", n);
+                out.extend_from_slice(s.as_bytes());
+            }
+            out.push(b' ');
+
+            // アドレスフィールド (8桁16進)
+            let addr_s = format!("{:08X}", entry.location);
+            out.extend_from_slice(addr_s.as_bytes());
+            out.push(b' ');
+
+            // マクロ識別子
+            out.push(if entry.is_macro { b'*' } else { b' ' });
+        } else {
+            // 継続行: 前置部をスペースで埋める (5+1+8+1+1 = 16文字)
+            out.extend_from_slice(b"               ");
+        }
+
+        // コード部 (PRN_CODE_WIDTH文字、右側スペースパディング)
+        out.extend_from_slice(code_chunk);
+        let padding = PRN_CODE_WIDTH - code_chunk.len();
+        for _ in 0..padding {
+            out.push(b' ');
+        }
+
+        // ソース部（初回のみ、幅制限内）
+        if is_first && !source_text.is_empty() {
+            let max_src = PRN_LINE_WIDTH.saturating_sub(5 + 1 + 8 + 1 + 1 + PRN_CODE_WIDTH);
+            let src_len = source_text.len().min(max_src);
+            out.extend_from_slice(&source_text[..src_len]);
+        }
+
+        out.push(b'\n');
+
+        code_offset = code_end;
+        is_first = false;
+
+        // まだコードバイトが残っている場合は継続行
+        if code_offset >= hex_chars.len() {
+            break;
+        }
+    }
+}
+
+/// バイト列を16進文字列に変換
+fn bytes_to_hex(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        let hi = (b >> 4) as usize;
+        let lo = (b & 0xF) as usize;
+        out.push(b"0123456789ABCDEF"[hi]);
+        out.push(b"0123456789ABCDEF"[lo]);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_simple_line() {
+        let line = PrnLine {
+            line_num: 1,
+            location: 0,
+            section: 1,
+            bytes: vec![0x12, 0x00],
+            text: b"        move.b  d0,d1".to_vec(),
+            is_macro: false,
+        };
+        let out = format_prn(&[line], b"test");
+        let s = String::from_utf8_lossy(&out);
+        // Check structure: "    1 00000000  1200            ..."
+        assert!(s.contains("    1 00000000 "));
+        assert!(s.contains("1200"));
+        assert!(s.contains("move.b"));
+    }
+
+    #[test]
+    fn test_format_long_code() {
+        // 10 bytes = 20 hex chars > PRN_CODE_WIDTH(16)
+        let line = PrnLine {
+            line_num: 2,
+            location: 0x100,
+            section: 1,
+            bytes: vec![0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99],
+            text: b"        long instruction".to_vec(),
+            is_macro: false,
+        };
+        let out = format_prn(&[line], b"test");
+        let s = String::from_utf8_lossy(&out);
+        // Should have 2 lines (first 8 bytes + last 2 bytes)
+        assert_eq!(s.lines().count(), 2);
+    }
+
+    #[test]
+    fn test_format_macro_line() {
+        let line = PrnLine {
+            line_num: 5,
+            location: 0x10,
+            section: 1,
+            bytes: vec![0x4E, 0x71],
+            text: b"        macro_call".to_vec(),
+            is_macro: true,
+        };
+        let out = format_prn(&[line], b"test");
+        let s = String::from_utf8_lossy(&out);
+        // '*' marker for macro
+        assert!(s.contains('*'));
+    }
+}

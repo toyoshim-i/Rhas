@@ -1,0 +1,254 @@
+/// アセンブルコンテキスト（AssemblyContext）
+///
+/// オリジナルの `work.s` のワークエリア全体に相当する。
+/// フィールドは段階的に追加する。Phase 1 では骨格のみ。
+
+use crate::options::Options;
+
+// ----------------------------------------------------------------
+// アセンブルパス番号
+// ----------------------------------------------------------------
+
+/// アセンブルパス（has.equ / work.s: ASMPASS）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AsmPass {
+    Pass1 = 1,
+    Pass2 = 2,
+    Pass3 = 3,
+}
+
+// ----------------------------------------------------------------
+// セクション番号
+// ----------------------------------------------------------------
+
+/// セクション番号（has.equ: SECT_TEXT〜SECT_RLSTACK）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Section {
+    Text    = 0x01,
+    Data    = 0x02,
+    Bss     = 0x03,
+    Stack   = 0x04,
+    Rdata   = 0x05,
+    Rbss    = 0x06,
+    Rstack  = 0x07,
+    Rldata  = 0x08,
+    Rlbss   = 0x09,
+    Rlstack = 0x0A,
+}
+
+impl Section {
+    /// セクション名文字列（HLKオブジェクトファイルに書き込む名前）
+    pub fn name(self) -> &'static str {
+        match self {
+            Section::Text    => "text",
+            Section::Data    => "data",
+            Section::Bss     => "bss",
+            Section::Stack   => "stack",
+            Section::Rdata   => "rdata",
+            Section::Rbss    => "rbss",
+            Section::Rstack  => "rstack",
+            Section::Rldata  => "rldata",
+            Section::Rlbss   => "rlbss",
+            Section::Rlstack => "rlstack",
+        }
+    }
+}
+
+/// セクション数（相対セクションを含む最大）
+pub const N_SECTIONS: usize = 10;
+
+// ----------------------------------------------------------------
+// AssemblyContext
+// ----------------------------------------------------------------
+
+/// アセンブルコンテキスト
+///
+/// アセンブル処理全体を通じて状態を保持する構造体。
+/// `work.s` のワークエリアに対応する。
+///
+/// Phase 1 は Options を保持するだけの最小骨格。
+/// 後のフェーズでシンボルテーブル・中間コードバッファ等が追加される。
+#[derive(Debug)]
+pub struct AssemblyContext {
+    // ---- オプション ----
+    pub opts: Options,
+
+    // ---- アセンブルパス ----
+    pub pass: AsmPass,
+
+    // ---- セクション / ロケーションカウンタ ----
+    /// 現在のセクション番号
+    pub section: Section,
+    /// 各セクションのロケーションカウンタ（LOCCTRBUF）
+    pub loc_ctr: [u32; N_SECTIONS],
+    /// 各セクションの最適化ロケーションオフセット（LOCOFFSETBUF）
+    pub loc_offset: [u32; N_SECTIONS],
+    /// 行頭のロケーションカウンタ（LTOPLOC）
+    pub loc_top: u32,
+
+    // ---- CPU ----
+    /// 現在の CPU 番号（CPUNUMBER）
+    pub cpu_number: u32,
+    /// 現在の CPU タイプビット（CPUTYPE, CPUTYPE2）
+    pub cpu_type: u16,
+
+    // ---- エラー ----
+    /// エラー数（NUMOFERR）
+    pub num_errors: u32,
+    /// ワーニング数
+    pub num_warnings: u32,
+
+    // ---- 状態フラグ ----
+    /// .end 命令が現れた（ISASMEND）
+    pub is_asm_end: bool,
+    /// オブジェクト出力を抑制する（ISOBJOUT）
+    pub is_obj_out_suppressed: bool,
+    /// .align 使用時の最大アライン値（MAXALIGN, 2^n の n）
+    pub max_align: u8,
+    /// 相対セクション情報を出力する（MAKERSECT）
+    pub make_rel_sect: bool,
+
+    // ---- 条件アセンブル ----
+    /// .if のネスト深度（IFNEST）
+    pub if_nest: u16,
+    /// .if スキップ中のネスト深度（IFSKIPNEST）
+    pub if_skip_nest: u16,
+    /// .if の不成立部スキップ中（ISIFSKIP）
+    pub is_if_skip: bool,
+}
+
+impl AssemblyContext {
+    /// オプションからコンテキストを初期化する
+    pub fn new(opts: Options) -> Self {
+        let cpu_number = opts.cpu_number;
+        let cpu_type = opts.cpu_type;
+
+        AssemblyContext {
+            opts,
+            pass: AsmPass::Pass1,
+
+            section: Section::Text,
+            loc_ctr: [0u32; N_SECTIONS],
+            loc_offset: [0u32; N_SECTIONS],
+            loc_top: 0,
+
+            cpu_number,
+            cpu_type,
+
+            num_errors: 0,
+            num_warnings: 0,
+
+            is_asm_end: false,
+            is_obj_out_suppressed: false,
+            max_align: 0,
+            make_rel_sect: false,
+
+            if_nest: 0,
+            if_skip_nest: 0,
+            is_if_skip: false,
+        }
+    }
+
+    // ---- ロケーションカウンタ操作 ----
+
+    /// 現在のセクションのロケーションカウンタを返す
+    pub fn location(&self) -> u32 {
+        self.loc_ctr[self.section as usize - 1]
+    }
+
+    /// 現在のセクションのロケーションカウンタを進める
+    pub fn advance_location(&mut self, bytes: u32) {
+        let idx = self.section as usize - 1;
+        self.loc_ctr[idx] = self.loc_ctr[idx].wrapping_add(bytes);
+    }
+
+    /// セクションを切り替える
+    pub fn set_section(&mut self, sec: Section) {
+        self.section = sec;
+    }
+
+    // ---- CPU 操作 ----
+
+    /// CPU を変更する（.cpu 疑似命令用）
+    pub fn set_cpu(&mut self, cpu_number: u32, cpu_type: u16) {
+        self.cpu_number = cpu_number;
+        self.cpu_type = cpu_type;
+    }
+
+    // ---- エラー処理 ----
+
+    /// エラー数をインクリメントして返す
+    pub fn add_error(&mut self) -> u32 {
+        self.num_errors += 1;
+        self.num_errors
+    }
+
+    /// ワーニング数をインクリメント
+    pub fn add_warning(&mut self) {
+        self.num_warnings += 1;
+    }
+
+    /// アセンブルが成功したか（エラーなし）
+    pub fn is_success(&self) -> bool {
+        self.num_errors == 0
+    }
+
+    // ---- ワーニングレベル ----
+
+    /// 実効ワーニングレベルを返す
+    pub fn effective_warn_level(&self) -> u8 {
+        self.opts.effective_warn_level()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::options::Options;
+
+    fn make_ctx() -> AssemblyContext {
+        AssemblyContext::new(Options::default())
+    }
+
+    #[test]
+    fn test_location_starts_zero() {
+        let ctx = make_ctx();
+        assert_eq!(ctx.location(), 0);
+    }
+
+    #[test]
+    fn test_advance_location() {
+        let mut ctx = make_ctx();
+        ctx.advance_location(4);
+        assert_eq!(ctx.location(), 4);
+        ctx.advance_location(2);
+        assert_eq!(ctx.location(), 6);
+    }
+
+    #[test]
+    fn test_section_switch() {
+        let mut ctx = make_ctx();
+        ctx.advance_location(10);
+        ctx.set_section(Section::Data);
+        assert_eq!(ctx.location(), 0);  // data は別カウンタ
+        ctx.advance_location(4);
+        ctx.set_section(Section::Text);
+        assert_eq!(ctx.location(), 10); // text は保持されている
+    }
+
+    #[test]
+    fn test_error_count() {
+        let mut ctx = make_ctx();
+        assert!(ctx.is_success());
+        ctx.add_error();
+        assert!(!ctx.is_success());
+        assert_eq!(ctx.num_errors, 1);
+    }
+
+    #[test]
+    fn test_cpu_init() {
+        let ctx = make_ctx();
+        assert_eq!(ctx.cpu_number, 68000);
+    }
+}
