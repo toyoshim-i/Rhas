@@ -5,6 +5,7 @@
 
 use crate::addressing::{parse_ea, EffectiveAddress};
 use crate::context::{AssemblyContext, Section};
+use crate::error::SourcePos;
 use crate::expr::{eval_rpn, parse_expr, Rpn};
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;
@@ -50,6 +51,8 @@ struct P1Ctx<'a> {
     is_end:   bool,
     /// ローカルラベルベース（マクロ展開番号用、将来実装）
     local_base: u32,
+    /// 現在処理中のソース位置（エラーメッセージ用）
+    current_pos: SourcePos,
 }
 
 impl<'a> P1Ctx<'a> {
@@ -61,7 +64,17 @@ impl<'a> P1Ctx<'a> {
             is_skip: false,
             is_end: false,
             local_base: 0,
+            current_pos: SourcePos::new(Vec::new(), 0),
         }
+    }
+
+    /// エラーを報告して count を増やす
+    fn error(&mut self, msg: &str) {
+        eprintln!("{:<16} {:6}: Error: {}",
+            String::from_utf8_lossy(&self.current_pos.filename),
+            self.current_pos.line,
+            msg);
+        self.ctx.num_errors += 1;
     }
 
     fn section_id(&self) -> u8 { self.ctx.section as u8 }
@@ -164,6 +177,9 @@ fn parse_line(
 ) {
     let mut pos = 0;
 
+    // 現在のソース位置を更新（エラーメッセージ用）
+    p1.current_pos = source.source_pos();
+
     // 行頭の '*' → コメント行
     if line.first() == Some(&b'*') { return; }
 
@@ -174,7 +190,7 @@ fn parse_line(
     if line.is_empty() { return; }
 
     // ラベル解析（行頭が非空白）
-    let label = if line[0] != b' ' && line[0] != b'\t' {
+    let mut label = if line[0] != b' ' && line[0] != b'\t' {
         parse_label(line, &mut pos)
     } else {
         None
@@ -197,9 +213,37 @@ fn parse_line(
         return;
     }
 
+    // Case 1: 行頭ラベル後の ':=' → SET（例: N:=7）
+    // parse_label が ':' を消費した後、次が '=' の場合
+    if label.is_some() && pos < line.len() && line[pos] == b'=' {
+        if !p1.is_skip {
+            pos += 1; // '=' を消費
+            skip_spaces(line, &mut pos);
+            handle_set_assignment(label.as_ref().unwrap(), line, &mut pos, p1);
+        }
+        return;
+    }
+
     // ニーモニック + サイズ解析
+    let word_start = pos;
     let (mnem, size) = parse_mnemonic(line, &mut pos);
     if mnem.is_empty() { return; }
+
+    // Case 2: インデントされた行での word:=expr パターン（例: \tN:=7）
+    // word: 後に '=' が続く場合のみ処理（generic label: insn は行頭非空白で処理）
+    if label.is_none() && pos < line.len() && line[pos] == b':' {
+        let next = pos + 1;
+        if next < line.len() && line[next] == b'=' {
+            // word:=expr → SET
+            let name = line[word_start..pos].to_vec();
+            pos += 2; // ':=' を消費
+            skip_spaces(line, &mut pos);
+            if !p1.is_skip {
+                handle_set_assignment(&name, line, &mut pos, p1);
+            }
+            return;
+        }
+    }
 
     // スキップ中は .if 系のみ処理
     if p1.is_skip {
@@ -293,7 +337,31 @@ fn parse_line(
         }
         // ---- 未知のニーモニック ----
         Dispatch::Unknown => {
-            p1.ctx.add_error();
+            let msg = format!("命令が解釈できません: {}",
+                String::from_utf8_lossy(&mnem));
+            p1.error(&msg);
+        }
+    }
+}
+
+// ----------------------------------------------------------------
+// ':=' 代入処理（SET の糖衣構文）
+// ----------------------------------------------------------------
+
+/// `name := expr` 形式の代入を処理する（.set と同等）
+fn handle_set_assignment(name: &[u8], line: &[u8], pos: &mut usize, p1: &mut P1Ctx<'_>) {
+    if let Ok(rpn) = parse_expr(line, pos) {
+        if let Some(v) = p1.eval_const(&rpn) {
+            let sym = Symbol::Value {
+                attrib:     DefAttrib::Define,
+                ext_attrib: ExtAttrib::None,
+                section:    v.section,
+                org_num:    0,
+                first:      FirstDef::Other,
+                opt_count:  0,
+                value:      v.value,
+            };
+            p1.sym.define(name.to_vec(), sym);
         }
     }
 }
@@ -462,8 +530,8 @@ fn handle_real_insn(
                 base: opcode, handler, size: sz, ops, byte_size,
             });
         }
-        Err(_) => {
-            p1.ctx.add_error();
+        Err(e) => {
+            p1.error(&format!("命令のエンコードに失敗しました: {:?}", e));
         }
     }
 }
@@ -947,7 +1015,7 @@ fn handle_pseudo(
 
         // ---- .fail ----
         InsnHandler::Fail => {
-            p1.ctx.add_error();
+            p1.error(".fail によるエラー");
         }
 
         // ---- .macro ----
@@ -955,7 +1023,7 @@ fn handle_pseudo(
             // マクロ名はラベルフィールドに書く
             let mac_name = label.clone().unwrap_or_else(Vec::new);
             if mac_name.is_empty() {
-                p1.ctx.add_error();
+                p1.error(".macro にマクロ名がありません");
                 return;
             }
             // 仮引数リストを解析
@@ -1336,7 +1404,8 @@ fn collect_macro_body(
 
 /// 行中の仮引数名を `\xFF <idx_hi> <idx_lo>` マーカーに変換する
 ///
-/// 文字列リテラル内の `&param` も置換する。
+/// `&param` (MASM スタイル) と裸の仮引数名 (HAS060X ネイティブスタイル) の
+/// 両方を置換する。ただし '.' の直後の識別子はサイズサフィックスなので置換しない。
 fn convert_line_params(line: &[u8], params: &[Vec<u8>], local_count: &mut u16) -> Vec<u8> {
     let mut out = Vec::with_capacity(line.len() + 8);
     let mut i = 0;
@@ -1421,6 +1490,31 @@ fn convert_line_params(line: &[u8], params: &[Vec<u8>], local_count: &mut u16) -
             if i < line.len() { out.push(line[i]); i += 1; }
             continue;
         }
+        // 裸の識別子: HAS060X ネイティブスタイルの仮引数参照
+        // '.' の直後 (サイズサフィックス) は置換しない
+        if b.is_ascii_alphabetic() || b == b'_' {
+            let prev = out.last().copied();
+            let start = i;
+            while i < line.len() && (line[i].is_ascii_alphanumeric() || line[i] == b'_') {
+                i += 1;
+            }
+            let name = &line[start..i];
+            // サイズサフィックス ('.' の直後) でなければ仮引数をチェック
+            if prev != Some(b'.') {
+                if let Some(idx) = params.iter().position(|p| {
+                    p.len() == name.len() && p.iter().zip(name.iter()).all(|(a, b2)| {
+                        a.to_ascii_lowercase() == b2.to_ascii_lowercase()
+                    })
+                }) {
+                    out.push(0xFF);
+                    out.push((idx >> 8) as u8);
+                    out.push((idx & 0xFF) as u8);
+                    continue;
+                }
+            }
+            out.extend_from_slice(name);
+            continue;
+        }
         out.push(b);
         i += 1;
     }
@@ -1428,6 +1522,9 @@ fn convert_line_params(line: &[u8], params: &[Vec<u8>], local_count: &mut u16) -
 }
 
 /// マクロテンプレートを実引数で展開し、各行を parse_line に渡す
+///
+/// テンプレート内の .rept/.irp/.irpc は、ファイルソースではなく
+/// テンプレートの残り部分からボディを収集することで正しく処理する。
 fn expand_macro_body(
     template: &[u8],
     params:   &[Vec<u8>],
@@ -1437,7 +1534,6 @@ fn expand_macro_body(
     p1:       &mut P1Ctx<'_>,
     source:   &mut SourceStack,
 ) {
-    // テンプレートを行に分割して処理
     let mut start = 0;
     while start <= template.len() {
         let end = template[start..].iter().position(|&b| b == b'\n')
@@ -1446,22 +1542,189 @@ fn expand_macro_body(
         if end == start && start == template.len() { break; }
 
         let tline = &template[start..end];
-        // 実引数とローカルラベルを展開した行を生成
-        let expanded = expand_line(tline, params, args, local_base);
-        // 展開行を parse_line に渡す
-        parse_line(&expanded, records, p1, source);
+        let next_start = if end < template.len() { end + 1 } else { template.len() };
 
-        start = end + 1;
-        if start > template.len() { break; }
+        // 実引数とローカルラベルを展開した行を生成
+        let expanded = expand_line(tline, params, args, local_base, p1.sym);
+
+        // .rept/.irp/.irpc はテンプレートの残り部分からボディを収集する
+        // (ファイルソースを使わないことで、ネストされた .rept が正しく動作する)
+        let mnem = extract_mnemonic(&expanded);
+        let handler_opt = p1.sym.lookup_cmd(&mnem, p1.cpu_type())
+            .and_then(|s| if let Symbol::Opcode { handler, .. } = s { Some(*handler) } else { None });
+
+        match handler_opt {
+            Some(InsnHandler::Rept) => {
+                // テンプレートの残り部分からボディを収集（ファイルソース不使用）
+                let remaining = &template[next_start..];
+                let (body, _, consumed) = collect_body_from_slice(remaining, p1.sym, p1.ctx);
+                start = next_start + consumed;
+
+                if !p1.is_skip {
+                    let line = &expanded;
+                    let mut pos = 0usize;
+                    skip_spaces(line, &mut pos);
+                    // ニーモニック+サイズをスキップ
+                    while pos < line.len() && !line[pos].is_ascii_whitespace() { pos += 1; }
+                    skip_spaces(line, &mut pos);
+                    let count = if let Ok(rpn) = parse_expr(line, &mut pos) {
+                        p1.eval_const(&rpn).map(|v| v.value as u32).unwrap_or(0)
+                    } else { 0 };
+                    for _ in 0..count {
+                        expand_macro_body(&body, &[], &[], p1.local_base, records, p1, source);
+                        p1.local_base = p1.local_base.wrapping_add(1);
+                    }
+                }
+                continue;
+            }
+            Some(InsnHandler::Irp) => {
+                let remaining = &template[next_start..];
+                let line = &expanded;
+                let mut pos = 0usize;
+                while pos < line.len() && !line[pos].is_ascii_whitespace() { pos += 1; }
+                skip_spaces(line, &mut pos);
+                let param_name = read_ident(line, &mut pos);
+                skip_spaces(line, &mut pos);
+                if pos < line.len() && line[pos] == b',' { pos += 1; }
+                let irp_args = parse_macro_args(line, &mut pos);
+                let irp_params = if param_name.is_empty() { vec![] } else { vec![param_name] };
+                // ボディをパラメータ変換付きで収集
+                let (body, _, consumed) = collect_body_from_slice_with_params(
+                    remaining, p1.sym, p1.ctx, &irp_params
+                );
+                start = next_start + consumed;
+
+                if !p1.is_skip {
+                    for irp_arg in &irp_args {
+                        expand_macro_body(&body, &irp_params,
+                            std::slice::from_ref(irp_arg), p1.local_base, records, p1, source);
+                        p1.local_base = p1.local_base.wrapping_add(1);
+                    }
+                }
+                continue;
+            }
+            Some(InsnHandler::Irpc) => {
+                let remaining = &template[next_start..];
+                let line = &expanded;
+                let mut pos = 0usize;
+                while pos < line.len() && !line[pos].is_ascii_whitespace() { pos += 1; }
+                skip_spaces(line, &mut pos);
+                let param_name = read_ident(line, &mut pos);
+                skip_spaces(line, &mut pos);
+                if pos < line.len() && line[pos] == b',' { pos += 1; }
+                skip_spaces(line, &mut pos);
+                let s = parse_string_or_ident(line, &mut pos);
+                let irpc_params = if param_name.is_empty() { vec![] } else { vec![param_name] };
+                let (body, _, consumed) = collect_body_from_slice_with_params(
+                    remaining, p1.sym, p1.ctx, &irpc_params
+                );
+                start = next_start + consumed;
+
+                if !p1.is_skip {
+                    for &ch in &s {
+                        let arg = vec![ch];
+                        expand_macro_body(&body, &irpc_params,
+                            std::slice::from_ref(&arg), p1.local_base, records, p1, source);
+                        p1.local_base = p1.local_base.wrapping_add(1);
+                    }
+                }
+                continue;
+            }
+            _ => {
+                // 通常の行: parse_line に委譲
+                parse_line(&expanded, records, p1, source);
+            }
+        }
+
+        start = next_start;
     }
 }
 
+/// テンプレートスライスからボディを収集する（ファイルソース不使用版）
+///
+/// .rept/.irp/.irpc のボディを、ファイルソースではなくテンプレートスライスから収集する。
+/// Returns (body_bytes, local_count, bytes_consumed_from_slice)
+fn collect_body_from_slice(
+    slice: &[u8],
+    sym: &SymbolTable,
+    ctx: &AssemblyContext,
+) -> (Vec<u8>, u16, usize) {
+    collect_body_from_slice_impl(slice, sym, ctx, &[], false)
+}
+
+/// パラメータ変換付きのスライスからボディ収集（.irp/.irpc 用）
+fn collect_body_from_slice_with_params(
+    slice: &[u8],
+    sym: &SymbolTable,
+    ctx: &AssemblyContext,
+    params: &[Vec<u8>],
+) -> (Vec<u8>, u16, usize) {
+    collect_body_from_slice_impl(slice, sym, ctx, params, true)
+}
+
+fn collect_body_from_slice_impl(
+    slice: &[u8],
+    sym: &SymbolTable,
+    ctx: &AssemblyContext,
+    params: &[Vec<u8>],
+    do_param_convert: bool,
+) -> (Vec<u8>, u16, usize) {
+    let mut body = Vec::new();
+    let mut local_count = 0u16;
+    let mut nest_depth = 0u32;
+    let mut pos = 0;
+
+    while pos < slice.len() {
+        let end = slice[pos..].iter().position(|&b| b == b'\n')
+            .map(|n| pos + n)
+            .unwrap_or(slice.len());
+        let line = &slice[pos..end];
+        let next_pos = if end < slice.len() { end + 1 } else { slice.len() };
+
+        let mnem = extract_mnemonic(line);
+        let handler = sym.lookup_cmd(&mnem, ctx.cpu_type)
+            .and_then(|s| if let Symbol::Opcode { handler, .. } = s { Some(*handler) } else { None });
+
+        match handler {
+            Some(InsnHandler::MacroDef | InsnHandler::Rept | InsnHandler::Irp | InsnHandler::Irpc) => {
+                nest_depth += 1;
+                body.extend_from_slice(line);
+                body.push(b'\n');
+            }
+            Some(InsnHandler::EndM) => {
+                if nest_depth == 0 {
+                    pos = next_pos; // .endm を消費
+                    break;
+                }
+                nest_depth -= 1;
+                body.extend_from_slice(line);
+                body.push(b'\n');
+            }
+            _ => {
+                if do_param_convert && !params.is_empty() {
+                    let converted = convert_line_params(line, params, &mut local_count);
+                    body.extend_from_slice(&converted);
+                } else {
+                    body.extend_from_slice(line);
+                }
+                body.push(b'\n');
+            }
+        }
+
+        pos = next_pos;
+    }
+
+    (body, local_count, pos)
+}
+
 /// テンプレート行中の `\xFF idx` マーカー・`\xFE idx` マーカーを実引数に展開する
+/// また `%SYMNAME` パターンをシンボルの10進数値に展開する（HAS060X互換）
 fn expand_line(
     tline:      &[u8],
     _params:    &[Vec<u8>],
     args:       &[Vec<u8>],
     local_base: u32,
+    sym:        &SymbolTable,
 ) -> Vec<u8> {
     let mut out = Vec::with_capacity(tline.len() + 16);
     let mut i = 0;
@@ -1479,6 +1742,26 @@ fn expand_line(
             // ローカルラベル: ??{local_base:04X}{lno:04X} 形式
             let label = format!("??{:04X}{:04X}", local_base & 0xFFFF, lno & 0xFFFF);
             out.extend_from_slice(label.as_bytes());
+        } else if b == b'%' {
+            // %SYMNAME → シンボル値を10進文字列に展開（HAS060X互換）
+            // 文字列リテラルや文字定数の中でも展開する（オリジナルと同様）
+            let start = i + 1;
+            let mut end = start;
+            while end < tline.len() && (tline[end].is_ascii_alphanumeric() || tline[end] == b'_') {
+                end += 1;
+            }
+            if end > start {
+                let name = &tline[start..end];
+                if let Some(Symbol::Value { value, .. }) = sym.lookup_sym(name) {
+                    let s = format!("{}", value);
+                    out.extend_from_slice(s.as_bytes());
+                    i = end;
+                    continue;
+                }
+            }
+            // シンボルが見つからない場合は '%' をそのまま出力
+            out.push(b);
+            i += 1;
         } else {
             out.push(b);
             i += 1;
