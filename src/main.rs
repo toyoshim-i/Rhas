@@ -76,14 +76,17 @@ fn main() {
     let mut ctx = context::AssemblyContext::new(opts);
 
     // アセンブル実行
+    // オリジナルと同様、エラー/成功メッセージは標準出力へ（main.s 参照）
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+
     match pass::assemble(&mut ctx) {
         Ok(result) => {
             // オブジェクトファイルを書き出し
             match std::fs::write(&output_path, &result.obj_bytes) {
                 Ok(_) => {
-                    if result.num_warnings > 0 {
-                        let _ = writeln!(err_out, "ワーニング: {} 件", result.num_warnings);
-                    }
+                    // 成功: "エラーはありません"（main.s: no_msg）
+                    let _ = writeln!(out, "エラーはありません");
                     std::process::exit(0);
                 }
                 Err(e) => {
@@ -98,7 +101,8 @@ fn main() {
             std::process::exit(1);
         }
         Err(pass::AssembleError::HasErrors(n)) => {
-            let _ = writeln!(err_out, "エラー: {} 件のエラーが発生しました", n);
+            // オリジナル: "エラーが N 個ありました．アセンブルを中止します"（main.s: fatal_msg1/2）
+            let _ = writeln!(out, "エラーが {} 個ありました．アセンブルを中止します", n);
             std::process::exit(1);
         }
         Err(pass::AssembleError::Io(e)) => {
