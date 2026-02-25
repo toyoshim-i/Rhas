@@ -58,7 +58,7 @@ pub struct ExternalSymbol {
 pub struct ObjectCode {
     /// ソースファイル名（拡張子なし）
     pub source_name: Vec<u8>,
-    /// セクション情報（非空セクションのみ）
+    /// セクション情報（常に4セクション: text/data/bss/stack）
     pub sections: Vec<SectionInfo>,
     /// 外部シンボル
     pub ext_syms: Vec<ExternalSymbol>,
@@ -68,6 +68,8 @@ pub struct ObjectCode {
     pub has_align: bool,
     /// 最大アライン値（2^n の n）
     pub max_align: u8,
+    /// HLK コード本体（20xx セクション切り替え + 10xx コードブロック）
+    pub code_body: Vec<u8>,
 }
 
 impl ObjectCode {
@@ -79,6 +81,7 @@ impl ObjectCode {
             request_files: Vec::new(),
             has_align: false,
             max_align: 0,
+            code_body: Vec::new(),
         }
     }
 }

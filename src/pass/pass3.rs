@@ -44,6 +44,11 @@ struct P3Ctx<'a> {
     ext_syms: Vec<ExternalSymbol>,
     /// エラー数
     num_errors: u32,
+    // ---- HLK コードボディ生成（20xx/10xx 形式）----
+    /// 構築済みコードボディ（20xx セクション切り替え + 10xx ブロック）
+    code_body: Vec<u8>,
+    /// 現在フラッシュ待ちのバイト（次のセクション切り替えか終了時にフラッシュ）
+    code_buf: Vec<u8>,
     // ---- PRNリスト生成 ----
     /// PRN生成が有効か
     prn_enable: bool,
@@ -64,9 +69,31 @@ impl<'a> P3Ctx<'a> {
             loc_top: 0,
             ext_syms: Vec::new(),
             num_errors: 0,
+            code_body: Vec::new(),
+            code_buf: Vec::new(),
             prn_enable,
             prn_pending: None,
             prn_lines: Vec::new(),
+        }
+    }
+
+    /// code_buf を 10xx ブロックとして code_body にフラッシュする
+    fn flush_code_buf(&mut self) {
+        if self.code_buf.is_empty() { return; }
+        let buf = std::mem::take(&mut self.code_buf);
+        let mut i = 0;
+        while i < buf.len() {
+            let chunk = (buf.len() - i).min(256);
+            self.code_body.push(0x10);
+            self.code_body.push((chunk - 1) as u8);
+            // ワード単位で書き出し（奇数バイトは 00 でパディング）
+            let mut j = i;
+            while j < i + chunk {
+                self.code_body.push(buf[j]);
+                self.code_body.push(if j + 1 < i + chunk { buf[j + 1] } else { 0 });
+                j += 2;
+            }
+            i += chunk;
         }
     }
 
@@ -85,13 +112,14 @@ impl<'a> P3Ctx<'a> {
 
     fn emit(&mut self, bytes: &[u8]) {
         let idx = self.sect_idx();
-        // BSS/Stack セクション (id >= 3 かつ サイズのみ) の場合は bytes を格納しない
+        // BSS/Stack セクション (id >= 3) の場合はサイズのみ記録
         let bss_like = self.cur_sect >= 3;
         if bss_like {
             self.sect_bss_size[idx] += bytes.len() as u32;
         } else {
             self.sect_bytes[idx].extend_from_slice(bytes);
-            // PRNバイト追跡（BSS系以外の場合のみ）
+            self.code_buf.extend_from_slice(bytes);
+            // PRNバイト追跡
             if self.prn_enable {
                 if let Some(ref mut pending) = self.prn_pending {
                     pending.5.extend_from_slice(bytes);
@@ -107,7 +135,9 @@ impl<'a> P3Ctx<'a> {
         if bss_like {
             self.sect_bss_size[idx] += count;
         } else {
-            self.sect_bytes[idx].extend(std::iter::repeat(0u8).take(count as usize));
+            let zeros: Vec<u8> = vec![0u8; count as usize];
+            self.sect_bytes[idx].extend_from_slice(&zeros);
+            self.code_buf.extend_from_slice(&zeros);
         }
         self.advance(count);
     }
@@ -236,7 +266,15 @@ pub fn pass3(
             }
 
             TempRecord::SectChange { id } => {
+                // code_buf をフラッシュしてからセクション切り替え
+                ctx.flush_code_buf();
                 ctx.cur_sect = *id;
+                // BSS/Stack 以外（コードを持つセクション）の場合 20xx レコードを出力
+                if *id <= 2 || (*id >= 5 && *id != 6 && *id != 7 && *id != 9 && *id != 10) {
+                    ctx.code_body.push(0x20);
+                    ctx.code_body.push(*id);
+                    ctx.code_body.extend_from_slice(&[0, 0, 0, 0]);
+                }
             }
 
             TempRecord::Org { value } => {
@@ -306,15 +344,34 @@ pub fn pass3(
     if ctx.prn_enable {
         ctx.prn_flush();
     }
+
+    // 残りの code_buf をフラッシュ
+    ctx.flush_code_buf();
+    obj.code_body = std::mem::take(&mut ctx.code_body);
+
     let prn_lines = ctx.prn_lines;
 
-    // セクション情報を構築
-    for sect_id in 1u8..=10 {
+    // セクション情報を構築（常に text/data/bss/stack の4セクションを出力）
+    for sect_id in 1u8..=4 {
         let idx = (sect_id as usize) - 1;
         let bytes = &ctx.sect_bytes[idx];
-        let bss_sz = ctx.sect_bss_size[idx];
         let size = if sect_id >= 3 {
             // BSS 系 = ロケーションカウンタの値
+            ctx.loc_ctr[idx]
+        } else {
+            bytes.len() as u32
+        };
+        obj.sections.push(SectionInfo {
+            id:    sect_id,
+            bytes: if sect_id >= 3 { Vec::new() } else { bytes.clone() },
+            size,
+        });
+    }
+    // 相対セクション（5〜10）は使用時のみ追加
+    for sect_id in 5u8..=10 {
+        let idx = (sect_id as usize) - 1;
+        let bytes = &ctx.sect_bytes[idx];
+        let size = if sect_id == 6 || sect_id == 7 || sect_id == 9 || sect_id == 10 {
             ctx.loc_ctr[idx]
         } else {
             bytes.len() as u32
@@ -322,11 +379,14 @@ pub fn pass3(
         if size > 0 || !bytes.is_empty() {
             obj.sections.push(SectionInfo {
                 id:    sect_id,
-                bytes: if sect_id >= 3 { Vec::new() } else { bytes.clone() },
+                bytes: if sect_id == 6 || sect_id == 7 || sect_id == 9 || sect_id == 10 {
+                    Vec::new()
+                } else {
+                    bytes.clone()
+                },
                 size,
             });
         }
-        let _ = bss_sz;
     }
 
     obj.ext_syms = ctx.ext_syms;
