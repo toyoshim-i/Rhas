@@ -126,14 +126,17 @@ fn test_dc_directives() {
     );
 }
 
-/// .ds.w はゼロ埋め
+/// .ds.w はテキストセクションで予約レコード ($3000) を生成する（実バイトなし）
 #[test]
 fn test_ds_directive() {
     let src = b"\t.ds.w\t3\n";
     let result = assemble_src(src);
     let text = result.obj.sections.iter().find(|s| s.id == 1)
         .expect("text section missing");
-    assert_eq!(text.bytes, [0, 0, 0, 0, 0, 0], ".ds.w 3 = 6 zero bytes");
+    // .ds はテキストセクションでも $3000 予約レコードを使う（HAS互換）
+    // sect_bytes には実バイトは入らないが、size はカウントされる
+    assert_eq!(text.size, 6, ".ds.w 3 = 6 bytes reserved");
+    assert!(text.bytes.is_empty(), ".ds.w in text: no actual bytes in sect_bytes");
 }
 
 /// .if/.endif 条件アセンブル

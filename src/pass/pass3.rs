@@ -145,6 +145,8 @@ impl<'a> P3Ctx<'a> {
         if bss_like {
             self.dsb_pending += bytes.len() as u32;
         } else {
+            // pending の $3000 があればフラッシュしてから code_buf に追記
+            if self.dsb_pending > 0 { self.flush_dsb(); }
             self.sect_bytes[idx].extend_from_slice(bytes);
             self.code_buf.extend_from_slice(bytes);
             // PRNバイト追跡
@@ -163,10 +165,21 @@ impl<'a> P3Ctx<'a> {
         if bss_like {
             self.dsb_pending += count;
         } else {
+            // pending の $3000 があればフラッシュしてから code_buf に追記
+            if self.dsb_pending > 0 { self.flush_dsb(); }
             let zeros: Vec<u8> = vec![0u8; count as usize];
             self.sect_bytes[idx].extend_from_slice(&zeros);
             self.code_buf.extend_from_slice(&zeros);
         }
+        self.advance(count);
+    }
+
+    /// .ds.X ディレクティブ用の予約スペース（全セクション対応）
+    /// code_buf をフラッシュしてから dsb_pending に加算する。
+    /// 次の emit/emit_zeros 呼び出し時に $3000 レコードとして出力される。
+    fn emit_reserve(&mut self, count: u32) {
+        self.flush_code_buf();
+        self.dsb_pending += count;
         self.advance(count);
     }
 
@@ -518,7 +531,7 @@ pub fn pass3(
             }
 
             TempRecord::Ds { byte_count } => {
-                ctx.emit_zeros(*byte_count);
+                ctx.emit_reserve(*byte_count);
             }
 
             TempRecord::Align { n, pad, section } => {

@@ -57,8 +57,8 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
             }
             TempRecord::Branch { req_size, target, .. } => {
                 let loc = loc_ctr[cur_sect];
-                // .w（デフォルト）形式のみ縮小候補
-                if req_size.is_none() || *req_size == Some(SizeCode::Word) {
+                // サイズ未指定（デフォルト）形式のみ縮小候補（明示的 .w は最適化しない）
+                if req_size.is_none() {
                     if try_shrink_branch(sym, target, loc, cur_sect as u8 + 1) {
                         *req_size = Some(SizeCode::Short);
                         changed = true;

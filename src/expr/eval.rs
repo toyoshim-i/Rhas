@@ -74,7 +74,7 @@ pub fn eval_rpn(
 
             // ---- 即値 ----
             RPNToken::ValueByte(v) => stack.push(EvalValue::constant(*v as i32)),
-            RPNToken::ValueWord(v) => stack.push(EvalValue::constant(*v as i16 as i32)),
+            RPNToken::ValueWord(v) => stack.push(EvalValue::constant(*v as i32)),
             RPNToken::Value(v)     => stack.push(EvalValue::constant(*v as i32)),
 
             // ---- シンボル参照 ----

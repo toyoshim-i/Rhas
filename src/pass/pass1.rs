@@ -3,7 +3,7 @@
 /// オリジナルの `main.s` の pass1 ルーチンに対応。
 /// ソーステキストをスキャンし、シンボルを定義しながら TempRecord 列を構築する。
 
-use crate::addressing::{parse_ea, EffectiveAddress};
+use crate::addressing::{parse_ea, parse_reg_list_mask, EffectiveAddress};
 use crate::context::{AssemblyContext, Section};
 use crate::error::SourcePos;
 use crate::expr::{eval_rpn, parse_expr, Rpn};
@@ -47,6 +47,8 @@ struct P1Ctx<'a> {
     skip_nest: u16,
     /// スキップ中（is_if_skip）
     is_skip:  bool,
+    /// 各 if-nesting レベルでマッチ済みブランチがあるか（.elseif/.else の重複実行防止）
+    if_matched: [bool; 65],
     /// .end が来たか
     is_end:   bool,
     /// ローカルラベルベース（マクロ展開番号用、将来実装）
@@ -64,6 +66,7 @@ impl<'a> P1Ctx<'a> {
             if_nest: 0,
             skip_nest: 0,
             is_skip: false,
+            if_matched: [false; 65],
             is_end: false,
             local_base: 0,
             local_anon_count: 0,
@@ -339,17 +342,46 @@ fn parse_line(
         match h {
             Some(InsnHandler::If | InsnHandler::Iff | InsnHandler::Ifdef | InsnHandler::Ifndef) => {
                 p1.if_nest += 1;
+                if (p1.if_nest as usize) < p1.if_matched.len() {
+                    p1.if_matched[p1.if_nest as usize] = false;
+                }
                 // まだスキップ中なのでネストを増やすだけ
             }
-            Some(InsnHandler::Else | InsnHandler::Elseif) => {
+            Some(InsnHandler::Else) => {
                 if p1.skip_nest == p1.if_nest {
-                    // この else は対応する if に対する反転
-                    p1.is_skip = false;
+                    let idx = p1.if_nest as usize;
+                    let already = idx < p1.if_matched.len() && p1.if_matched[idx];
+                    if !already {
+                        // まだマッチしていない → .else ブロックを実行
+                        p1.is_skip = false;
+                        if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+                    }
+                    // already_matched の場合はスキップを継続
+                }
+            }
+            Some(InsnHandler::Elseif) => {
+                if p1.skip_nest == p1.if_nest {
+                    let idx = p1.if_nest as usize;
+                    let already = idx < p1.if_matched.len() && p1.if_matched[idx];
+                    if !already {
+                        // まだマッチしていない → .elseif 条件を評価
+                        skip_spaces(line, &mut pos);
+                        let cond = if let Ok(rpn) = parse_expr(line, &mut pos) {
+                            p1.eval_const(&rpn).map(|v| v.value != 0).unwrap_or(false)
+                        } else { false };
+                        if cond {
+                            p1.is_skip = false;
+                            if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+                        }
+                    }
+                    // already_matched の場合はスキップを継続
                 }
             }
             Some(InsnHandler::Endif) => {
                 if p1.skip_nest == p1.if_nest {
                     p1.is_skip = false;
+                    let idx = p1.if_nest as usize;
+                    if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
                     p1.if_nest -= 1;
                 } else {
                     p1.if_nest -= 1;
@@ -638,18 +670,25 @@ fn handle_real_insn(
             records.push(TempRecord::Const(bytes));
         }
         Err(InsnError::DeferToLinker) => {
-            // シンボル参照あり → まずシンボルテーブルで定数解決して精度の高いサイズ推定を試みる
-            let resolved_for_size: Vec<EffectiveAddress> = ops.iter()
+            // シンボル参照あり → シンボルテーブルで定数解決を試みる
+            let resolved: Vec<EffectiveAddress> = ops.iter()
                 .map(|ea| resolve_ea_const_for_size(ea, p1.sym))
                 .collect();
-            let byte_size = match encode_insn(opcode, handler, sz, &resolved_for_size) {
-                Ok(bytes) => bytes.len() as u32,
-                Err(_) => estimate_insn_size(opcode, handler, sz, &ops),
-            };
-            p1.advance(byte_size);
-            records.push(TempRecord::DeferredInsn {
-                base: opcode, handler, size: sz, ops, byte_size,
-            });
+            match encode_insn(opcode, handler, sz, &resolved) {
+                Ok(bytes) => {
+                    // パス1で全シンボルが解決できた → 定数として確定（.set変数等）
+                    p1.advance(bytes.len() as u32);
+                    records.push(TempRecord::Const(bytes));
+                }
+                Err(_) => {
+                    // 未解決のシンボル残存 → パス3に延期
+                    let byte_size = estimate_insn_size(opcode, handler, sz, &ops);
+                    p1.advance(byte_size);
+                    records.push(TempRecord::DeferredInsn {
+                        base: opcode, handler, size: sz, ops, byte_size,
+                    });
+                }
+            }
         }
         Err(e) => {
             p1.error(&format!("命令のエンコードに失敗しました: {:?}", e));
@@ -1120,64 +1159,86 @@ fn handle_pseudo(
         // ---- .if / .ifdef / .ifndef ----
         InsnHandler::If => {
             p1.if_nest += 1;
+            let idx = p1.if_nest as usize;
+            if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
             skip_spaces(line, pos);
             let cond = if let Ok(rpn) = parse_expr(line, pos) {
                 p1.eval_const(&rpn).map(|v| v.value != 0).unwrap_or(false)
             } else { false };
-            if !cond {
+            if cond {
+                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+            } else {
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
             }
         }
         InsnHandler::Iff => {
             p1.if_nest += 1;
+            let idx = p1.if_nest as usize;
+            if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
             skip_spaces(line, pos);
             let cond = if let Ok(rpn) = parse_expr(line, pos) {
                 p1.eval_const(&rpn).map(|v| v.value != 0).unwrap_or(false)
             } else { false };
             // Iff: condition is ZERO → execute
-            if cond {
+            if !cond {
+                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+            } else {
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
             }
         }
         InsnHandler::Ifdef => {
             p1.if_nest += 1;
+            let idx = p1.if_nest as usize;
+            if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
             skip_spaces(line, pos);
             let name = read_ident(line, pos);
             let defined = !name.is_empty() && p1.sym.lookup_sym(&name).is_some();
-            if !defined {
+            if defined {
+                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+            } else {
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
             }
         }
         InsnHandler::Ifndef => {
             p1.if_nest += 1;
+            let idx = p1.if_nest as usize;
+            if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
             skip_spaces(line, pos);
             let name = read_ident(line, pos);
             let defined = !name.is_empty() && p1.sym.lookup_sym(&name).is_some();
-            if defined {
+            if !defined {
+                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+            } else {
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
             }
         }
         InsnHandler::Else => {
             if p1.if_nest > 0 {
-                // .else の対応する .if ブロックを完了
+                // .else の対応する .if ブロックを完了 → already_matched を true に
+                let idx = p1.if_nest as usize;
+                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
             }
         }
         InsnHandler::Elseif => {
             // .elseif = .else + .if
-            // 既に実行中のブロックは完了
+            // 既に実行中のブロックは完了 → already_matched を true に
             if p1.if_nest > 0 {
+                let idx = p1.if_nest as usize;
+                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
             }
         }
         InsnHandler::Endif => {
             if p1.if_nest > 0 {
+                let idx = p1.if_nest as usize;
+                if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
                 p1.if_nest -= 1;
             }
         }
@@ -1327,46 +1388,58 @@ fn handle_pseudo(
         // ---- .reg ----
         InsnHandler::Reg => {
             // レジスタリスト / エイリアスシンボルの定義
+            // 例: SAVED_REGS reg d3-d7/a2-a6 → レジスタマスク ValueWord として保存
             // 例: CRLF reg CR,LF → {CR の RPN, LF の RPN}
             // 例: abswarn reg abswarn2 → {abswarn2 への SymbolRef の RPN}
             // HAS互換: 単一シンボルエイリアスの場合はターゲットを即座に XREF 登録する
             skip_spaces(line, pos);
             if let Some(ref name) = label {
-                let mut rpns: Vec<Rpn> = Vec::new();
-                loop {
-                    if *pos >= line.len() || line[*pos] == b';' { break; }
-                    match parse_expr(line, pos) {
-                        Ok(rpn) => rpns.push(rpn),
-                        Err(_) => break,
-                    }
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] == b',' {
-                        *pos += 1;
-                        skip_spaces(line, pos);
-                    } else {
-                        break;
-                    }
-                }
-                // 単一シンボルエイリアス: [SymbolRef(target), End] → target を XREF 予約
-                if rpns.len() == 1 {
-                    if let [RPNToken::SymbolRef(target), RPNToken::End] = rpns[0].as_slice() {
-                        let target = target.clone();
-                        // ターゲットが未定義（外部）の場合のみ XREF として登録
-                        if p1.sym.lookup_sym(&target).is_none() {
-                            let sym = Symbol::Value {
-                                attrib:     DefAttrib::Undef,
-                                ext_attrib: ExtAttrib::XRef,
-                                section:    0xFF,
-                                org_num:    0,
-                                first:      FirstDef::Other,
-                                opt_count:  0,
-                                value:      0,
-                            };
-                            p1.sym.define(target.clone(), sym);
+                let saved_pos = *pos;
+                // まずレジスタリスト（MOVEM 用）として解析を試みる
+                let reg_mask = parse_reg_list_mask(line, pos, &p1.sym, p1.ctx.cpu_type);
+                let rpns: Vec<Rpn> = if let Some(mask) = reg_mask {
+                    // レジスタリスト → 定数マスクとして保存
+                    vec![vec![RPNToken::ValueWord(mask), RPNToken::End]]
+                } else {
+                    // レジスタリストでなければ式リスト（カンマ区切り）として解析
+                    *pos = saved_pos;
+                    let mut list: Vec<Rpn> = Vec::new();
+                    loop {
+                        if *pos >= line.len() || line[*pos] == b';' { break; }
+                        match parse_expr(line, pos) {
+                            Ok(rpn) => list.push(rpn),
+                            Err(_) => break,
                         }
-                        records.push(TempRecord::XRef { name: target });
+                        skip_spaces(line, pos);
+                        if *pos < line.len() && line[*pos] == b',' {
+                            *pos += 1;
+                            skip_spaces(line, pos);
+                        } else {
+                            break;
+                        }
                     }
-                }
+                    // 単一シンボルエイリアス: [SymbolRef(target), End] → target を XREF 予約
+                    if list.len() == 1 {
+                        if let [RPNToken::SymbolRef(target), RPNToken::End] = list[0].as_slice() {
+                            let target = target.clone();
+                            // ターゲットが未定義（外部）の場合のみ XREF として登録
+                            if p1.sym.lookup_sym(&target).is_none() {
+                                let sym = Symbol::Value {
+                                    attrib:     DefAttrib::Undef,
+                                    ext_attrib: ExtAttrib::XRef,
+                                    section:    0xFF,
+                                    org_num:    0,
+                                    first:      FirstDef::Other,
+                                    opt_count:  0,
+                                    value:      0,
+                                };
+                                p1.sym.define(target.clone(), sym);
+                            }
+                            records.push(TempRecord::XRef { name: target });
+                        }
+                    }
+                    list
+                };
                 p1.sym.define(name.clone(), Symbol::RegSym { define: rpns });
             }
         }

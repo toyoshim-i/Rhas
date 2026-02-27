@@ -354,7 +354,7 @@ fn encode_movep(size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>
     if d_val < i16::MIN as i32 || d_val > i16::MAX as i32 {
         return Err(InsnError::OutOfRange { value: d_val, min: -32768, max: 32767 });
     }
-    let word = 0x0100u16 | sz_bit | dir_bit | ((dn as u16) << 9) | (an as u16);
+    let word = 0x0108u16 | sz_bit | dir_bit | ((dn as u16) << 9) | (an as u16);
     let mut v = Vec::new();
     push_word(&mut v, word);
     push_word(&mut v, d_val as u16);

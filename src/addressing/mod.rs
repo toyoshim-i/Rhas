@@ -621,6 +621,36 @@ fn try_continue_reglist(
     Some(EffectiveAddress::Immediate(rpn))
 }
 
+/// レジスタリスト（MOVEM 用）を解析してビットマスクを返す。
+///
+/// `d3-d7/a2-a6` のようなレジスタリスト構文を解析し、ビットマスクを返す。
+/// D0=bit0, D7=bit7, A0=bit8, A7=bit15。
+/// レジスタリスト構文でなければ `pos` を変更せず `None` を返す。
+pub fn parse_reg_list_mask(
+    src: &[u8],
+    pos: &mut usize,
+    sym: &SymbolTable,
+    cpu_type: u16,
+) -> Option<u16> {
+    skip_spaces(src, pos);
+    let saved = *pos;
+    let first_regno = try_parse_register(src, pos, sym, cpu_type)?;
+    if first_regno > 0x0F {
+        *pos = saved;
+        return None;
+    }
+    // / または - が続く場合は try_continue_reglist に委譲
+    if let Some(EffectiveAddress::Immediate(rpn)) =
+        try_continue_reglist(src, pos, sym, cpu_type, first_regno)
+    {
+        if let [RPNToken::ValueWord(mask), RPNToken::End] = rpn.as_slice() {
+            return Some(*mask);
+        }
+    }
+    // 単一レジスタのみ
+    Some(1u16 << first_regno)
+}
+
 // ----------------------------------------------------------------
 // 公開 API
 // ----------------------------------------------------------------
@@ -706,6 +736,20 @@ pub fn parse_ea(
 
     // 式（絶対アドレスまたは displacement 前置形式）
     let rpn = parse_expr(src, pos)?;
+
+    // .reg シンボル（RegSym）の場合は Immediate(mask) として返す
+    if let [RPNToken::SymbolRef(sym_name), RPNToken::End] = rpn.as_slice() {
+        if let Some(Symbol::RegSym { define }) = sym.lookup_sym(sym_name) {
+            if let Some(first) = define.first() {
+                if let [RPNToken::ValueWord(mask), RPNToken::End] = first.as_slice() {
+                    return Ok(EffectiveAddress::Immediate(
+                        vec![RPNToken::ValueWord(*mask), RPNToken::End],
+                    ));
+                }
+            }
+        }
+    }
+
     let size = try_parse_disp_size(src, pos);
 
     skip_spaces(src, pos);
