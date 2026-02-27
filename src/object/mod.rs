@@ -33,7 +33,45 @@ impl SectionInfo {
     }
 }
 
-/// 外部シンボル種別
+/// 外部シンボル種別定数（$B2xx レコードの xx 値）
+///
+/// セクション番号（0x00〜0x0A）または特殊種別（0xFA〜0xFF）。
+/// HAS は定義済みシンボルには実際のセクション番号を使用する。
+pub mod sym_kind {
+    /// 絶対（オフセットセクション定義シンボル）
+    pub const ABS:     u8 = 0x00;
+    /// textセクション定義
+    pub const TEXT:    u8 = 0x01;
+    /// dataセクション定義
+    pub const DATA:    u8 = 0x02;
+    /// bssセクション定義
+    pub const BSS:     u8 = 0x03;
+    /// stackセクション定義
+    pub const STACK:   u8 = 0x04;
+    /// グローバル（外部参照/定義）
+    pub const GLOBL:   u8 = 0xFA;
+    /// 外部定義（.xdef）
+    pub const XDEF:    u8 = 0xFB;
+    /// コモンエリア（64KB以上相対）
+    pub const RL_COMM: u8 = 0xFC;
+    /// コモンエリア（64KB以内相対）
+    pub const R_COMM:  u8 = 0xFD;
+    /// コモンエリア
+    pub const COMM:    u8 = 0xFE;
+    /// 外部参照
+    pub const XREF:    u8 = 0xFF;
+}
+
+/// 外部シンボル情報（$B2xx レコード）
+/// kind: 0x00〜0x0A = セクション番号（定義済みシンボル）、0xFA〜0xFF = 特殊種別
+#[derive(Debug, Clone)]
+pub struct ExternalSymbol {
+    pub kind:  u8,
+    pub value: u32,
+    pub name:  Vec<u8>,
+}
+
+/// 旧 SymKind 互換エイリアス（既存テストとの互換性維持）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SymKind {
@@ -45,19 +83,13 @@ pub enum SymKind {
     XRef   = 0xFF,
 }
 
-/// 外部シンボル情報（$B2xx レコード）
-#[derive(Debug, Clone)]
-pub struct ExternalSymbol {
-    pub kind:  SymKind,
-    pub value: u32,
-    pub name:  Vec<u8>,
-}
-
 /// オブジェクトコード（Pass3 の出力）
 #[derive(Debug)]
 pub struct ObjectCode {
-    /// ソースファイル名（拡張子なし）
+    /// ソースファイル名（拡張子なし、$D000 ヘッダ用）
     pub source_name: Vec<u8>,
+    /// ソースファイル名（拡張子あり、$B204 レコード用）
+    pub source_file: Vec<u8>,
     /// セクション情報（常に4セクション: text/data/bss/stack）
     pub sections: Vec<SectionInfo>,
     /// 外部シンボル
@@ -74,8 +106,10 @@ pub struct ObjectCode {
 
 impl ObjectCode {
     pub fn new(source_name: Vec<u8>) -> Self {
+        let source_file = source_name.clone();
         ObjectCode {
             source_name,
+            source_file,
             sections: Vec::new(),
             ext_syms: Vec::new(),
             request_files: Vec::new(),

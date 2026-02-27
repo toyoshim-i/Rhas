@@ -158,6 +158,48 @@ fn encode_move(size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>,
     if operands.len() != 2 {
         return Err(InsnError::OperandCount);
     }
+
+    // 特殊ケース: MOVE <ea>, CCR / MOVE <ea>, SR / MOVE SR, <ea> / MOVE CCR, <ea>
+    match (&operands[0], &operands[1]) {
+        // MOVE <ea>, CCR  (0x44C0 | src_ea)
+        (src, EffectiveAddress::CcrReg) => {
+            let src_enc = enc(src, 1)?;
+            let word = 0x44C0u16 | (src_enc.ea_field as u16);
+            let mut v = Vec::new();
+            push_word(&mut v, word);
+            v.extend_from_slice(&src_enc.ext_bytes);
+            return Ok(v);
+        }
+        // MOVE <ea>, SR  (0x46C0 | src_ea)
+        (src, EffectiveAddress::SrReg) => {
+            let src_enc = enc(src, 1)?;
+            let word = 0x46C0u16 | (src_enc.ea_field as u16);
+            let mut v = Vec::new();
+            push_word(&mut v, word);
+            v.extend_from_slice(&src_enc.ext_bytes);
+            return Ok(v);
+        }
+        // MOVE SR, <ea>  (0x40C0 | dst_ea)
+        (EffectiveAddress::SrReg, dst) => {
+            let dst_enc = enc(dst, 1)?;
+            let word = 0x40C0u16 | (dst_enc.ea_field as u16);
+            let mut v = Vec::new();
+            push_word(&mut v, word);
+            v.extend_from_slice(&dst_enc.ext_bytes);
+            return Ok(v);
+        }
+        // MOVE CCR, <ea>  (0x42C0 | dst_ea) - 68010+
+        (EffectiveAddress::CcrReg, dst) => {
+            let dst_enc = enc(dst, 1)?;
+            let word = 0x42C0u16 | (dst_enc.ea_field as u16);
+            let mut v = Vec::new();
+            push_word(&mut v, word);
+            v.extend_from_slice(&dst_enc.ext_bytes);
+            return Ok(v);
+        }
+        _ => {}
+    }
+
     let size_top = match size {
         SizeCode::Byte => 0x1000u16,
         SizeCode::Word => 0x3000u16,
@@ -374,7 +416,16 @@ fn encode_subadd(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
             let adda_base = if base & 0x4000 != 0 { 0xD0C0u16 } else { 0x90C0u16 };
             encode_sbadcpa(adda_base, size, operands)
         }
-        // #imm, <ea> → ADDI/SUBI
+        // #imm, Dn → 主命令 (ADD/SUB) + 即値EA (HASの挙動: D03C形式)
+        (EffectiveAddress::Immediate(_), EffectiveAddress::DataReg(dn)) => {
+            let imm_enc = enc(&operands[0], op_size)?;
+            let word = base | sz | ((*dn as u16) << 9) | (imm_enc.ea_field as u16);
+            let mut v = Vec::new();
+            push_word(&mut v, word);
+            v.extend_from_slice(&imm_enc.ext_bytes);
+            Ok(v)
+        }
+        // #imm, <other ea> → ADDI/SUBI
         (EffectiveAddress::Immediate(_), dst) => {
             let imm_base = if base & 0x4000 != 0 { 0x0600u16 } else { 0x0400u16 };
             encode_subaddi(imm_base, size, &[operands[0].clone(), dst.clone()])
@@ -509,6 +560,13 @@ fn encode_subaddx(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> R
 fn encode_cmp(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
     if operands.len() != 2 {
         return Err(InsnError::OperandCount);
+    }
+    // #imm, <ea> (non-Dn/An) → CMPI
+    if imm_rpn(&operands[0]).is_some()
+        && data_reg(&operands[1]).is_none()
+        && addr_reg(&operands[1]).is_none()
+    {
+        return encode_cmpi(0x0C00, size, operands);
     }
     // <ea>, An → CMPA
     if addr_reg(&operands[1]).is_some() {
@@ -719,7 +777,16 @@ fn encode_orand(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Res
     let op_size = size_to_op_size(size)?;
 
     match (&operands[0], &operands[1]) {
-        // #imm, <ea> → ANDI/ORI
+        // #imm, Dn → 主命令 (AND/OR) + 即値EA (HASの挙動: C27C形式)
+        (EffectiveAddress::Immediate(_), EffectiveAddress::DataReg(dn)) => {
+            let imm_enc = enc(&operands[0], op_size)?;
+            let word = base | sz | ((*dn as u16) << 9) | (imm_enc.ea_field as u16);
+            let mut v = Vec::new();
+            push_word(&mut v, word);
+            v.extend_from_slice(&imm_enc.ext_bytes);
+            Ok(v)
+        }
+        // #imm, <other ea> → ANDI/ORI
         (EffectiveAddress::Immediate(_), _) => {
             let imm_base = if base & 0x4000 != 0 { 0x0200u16 } else { 0x0000u16 };
             encode_orandeorimm(imm_base, size, operands)
@@ -779,20 +846,36 @@ fn encode_eor(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Resul
 /// base_opcode: ORI=0x0000, ANDI=0x0200, EORI=0x0A00
 /// 特殊: #imm, CCR / #imm, SR → 固定オペコード
 fn encode_orandeorimm(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
-    use crate::symbol::types::reg;
     if operands.len() != 2 {
         return Err(InsnError::OperandCount);
     }
-    let _ = imm_rpn(&operands[0]).ok_or(InsnError::InvalidOperand)?;
+    let rpn = imm_rpn(&operands[0]).ok_or(InsnError::InvalidOperand)?;
 
     // 特殊ケース: #imm, CCR / #imm, SR
-    if let EffectiveAddress::DataReg(r) = &operands[1] {
-        // CCR=0x21, SR=0x22 は DataReg には来ないはず（Register として別処理）
-        // ここでは通常の DataReg として処理
-        let _ = r;
+    // ORI/ANDI/EORI の CCR/SR 向け固定オペコード:
+    //   base=0x0000(ORI):  CCR→0x003C, SR→0x007C
+    //   base=0x0200(ANDI): CCR→0x023C, SR→0x027C
+    //   base=0x0A00(EORI): CCR→0x0A3C, SR→0x0A7C
+    match &operands[1] {
+        EffectiveAddress::CcrReg => {
+            let v = eval_const(rpn).ok_or(InsnError::DeferToLinker)?;
+            let word = base | 0x003C;
+            let mut out = Vec::new();
+            push_word(&mut out, word);
+            push_word(&mut out, v as u16);
+            return Ok(out);
+        }
+        EffectiveAddress::SrReg => {
+            let v = eval_const(rpn).ok_or(InsnError::DeferToLinker)?;
+            let word = base | 0x007C;
+            let mut out = Vec::new();
+            push_word(&mut out, word);
+            push_word(&mut out, v as u16);
+            return Ok(out);
+        }
+        _ => {}
     }
-    // CCR/SR は parse_ea では DataReg ではなく SpecialReg として扱うが
-    // Phase 5 では簡略化: 目的地 EA をそのままエンコード
+
     let sz = size_field(size)?;
     let op_size = size_to_op_size(size)?;
     let imm_enc = enc(&operands[0], op_size)?;
@@ -876,10 +959,13 @@ fn encode_sftrot(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
             return Err(InsnError::InvalidSize);
         }
         let ea_enc = enc(&operands[0], 1)?;
-        // Memory shift opcode: base has direction + type bits, top nibble = 1110
-        // Bits 11-6 for memory form: (direction=1/0, type in 10-9, 11=1 fixed in 8-6)
-        // From base: e.g. ASR=0xE000, memory form top=0xE0C0
-        let word = (base & 0xFF08) | 0x00C0 | (ea_enc.ea_field as u16);
+        // Memory shift opcode: `1110 TTT D 11 ea`
+        // TTT = type bits (from base bits 4-3): AS=000, LS=001, ROX=010, RO=011
+        // D = direction (from base bit 8): 0=right, 1=left
+        // bits 7-6 = 11 (memory form marker)
+        let type_bits = ((base & 0x0018) >> 3) as u16;  // LS=1, AS=0, ROX=2, RO=3
+        let dir_bit   = ((base & 0x0100) >> 8) as u16;  // 1=left, 0=right
+        let word = 0xE000u16 | (type_bits << 9) | (dir_bit << 8) | 0x00C0 | (ea_enc.ea_field as u16);
         let mut v = Vec::new();
         push_word(&mut v, word);
         v.extend_from_slice(&ea_enc.ext_bytes);

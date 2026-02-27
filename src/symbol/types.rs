@@ -389,8 +389,9 @@ pub enum Symbol {
     },
 
     /// .reg シンボル（ST_REGSYM）
+    /// define: コンマ区切りの各要素のRPN式リスト
     RegSym {
-        define: Vec<u16>,
+        define: Vec<Vec<crate::expr::rpn::RPNToken>>,
     },
 
     /// レジスタ名（ST_REGISTER）- 予約済みシンボル

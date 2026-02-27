@@ -70,14 +70,11 @@ loop:\n\
     let text = result.obj.sections.iter().find(|s| s.id == 1)
         .expect("text section missing");
     // nop = 2 bytes (0x4E71)
-    // bra.w = 4 bytes (0x6000 + 2-byte offset)
-    assert_eq!(text.bytes.len(), 6, "nop + bra.w = 6 bytes");
+    // bra loop: offset = 0 - (2+2) = -4 → fits in .s range → pass2 optimizes to bra.s (2 bytes)
+    assert_eq!(text.bytes.len(), 4, "nop + bra.s = 4 bytes");
     assert_eq!(&text.bytes[0..2], &[0x4E, 0x71], "nop");
-    assert_eq!(&text.bytes[2..4], &[0x60, 0x00], "bra.w opcode");
-    // M68000 BRA.W: 変位 = target - (BRA先頭 + 2)
-    // BRA のアドレス = 2, PC = 2+2=4, target loop = 0 → offset = 0 - 4 = -4
-    let offset = i16::from_be_bytes([text.bytes[4], text.bytes[5]]);
-    assert_eq!(offset, -4i16, "bra backward offset");
+    // BRA.S: 0x60xx where xx = displacement byte (-4 = 0xFC)
+    assert_eq!(&text.bytes[2..4], &[0x60, 0xFC], "bra.s loop offset=-4");
 }
 
 /// .equ シンボル参照

@@ -109,6 +109,12 @@ pub struct AssemblyContext {
     /// 相対セクション情報を出力する（MAKERSECT）
     pub make_rel_sect: bool,
 
+    // ---- .offset モード（SECT_ABS, オリジナルの SECTION=0 に対応）----
+    /// .offset モード中か（仮想オフセットセクション）
+    pub is_offset_mode: bool,
+    /// .offset セクションのロケーションカウンタ
+    pub offset_loc: u32,
+
     // ---- 条件アセンブル ----
     /// .if のネスト深度（IFNEST）
     pub if_nest: u16,
@@ -144,6 +150,9 @@ impl AssemblyContext {
             max_align: 0,
             make_rel_sect: false,
 
+            is_offset_mode: false,
+            offset_loc: 0,
+
             if_nest: 0,
             if_skip_nest: 0,
             is_if_skip: false,
@@ -154,18 +163,33 @@ impl AssemblyContext {
 
     /// 現在のセクションのロケーションカウンタを返す
     pub fn location(&self) -> u32 {
-        self.loc_ctr[self.section as usize - 1]
+        if self.is_offset_mode {
+            self.offset_loc
+        } else {
+            self.loc_ctr[self.section as usize - 1]
+        }
     }
 
     /// 現在のセクションのロケーションカウンタを進める
     pub fn advance_location(&mut self, bytes: u32) {
-        let idx = self.section as usize - 1;
-        self.loc_ctr[idx] = self.loc_ctr[idx].wrapping_add(bytes);
+        if self.is_offset_mode {
+            self.offset_loc = self.offset_loc.wrapping_add(bytes);
+        } else {
+            let idx = self.section as usize - 1;
+            self.loc_ctr[idx] = self.loc_ctr[idx].wrapping_add(bytes);
+        }
     }
 
-    /// セクションを切り替える
+    /// セクションを切り替える（.offset モードを解除する）
     pub fn set_section(&mut self, sec: Section) {
+        self.is_offset_mode = false;
         self.section = sec;
+    }
+
+    /// .offset モードに切り替える（SECT_ABS）
+    pub fn set_offset_mode(&mut self, v: u32) {
+        self.is_offset_mode = true;
+        self.offset_loc = v;
     }
 
     // ---- CPU 操作 ----

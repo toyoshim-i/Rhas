@@ -259,8 +259,8 @@ impl<'a> Parser<'a> {
             self.push_value(v);
             return Ok(());
         }
-        // '@' 形式の 8 進数
-        if self.peek() == Some(b'@') {
+        // '@' 形式の 8 進数（次の文字が 0-7 の場合のみ; @@N は識別子として処理）
+        if self.peek() == Some(b'@') && self.peek2().map(|b| b >= b'0' && b <= b'7').unwrap_or(false) {
             self.pos += 1;
             let v = self.parse_octal_digits()?;
             self.push_value(v);
@@ -273,10 +273,11 @@ impl<'a> Parser<'a> {
             self.push_value(v);
             return Ok(());
         }
-        // 文字定数 'A' / 'AB'
-        if self.peek() == Some(b'\'') {
+        // 文字定数 'A' / 'AB' または "A" / "AB"
+        if self.peek() == Some(b'\'') || self.peek() == Some(b'"') {
+            let close = self.peek().unwrap();
             self.pos += 1;
-            let v = self.parse_char_const()?;
+            let v = self.parse_char_const_with_close(close)?;
             self.push_value(v);
             return Ok(());
         }
@@ -329,13 +330,14 @@ impl<'a> Parser<'a> {
 
     fn parse_hex_digits(&mut self) -> Result<u32, ParseError> {
         let start = self.pos;
-        while self.peek().map(|b| b.is_ascii_hexdigit()).unwrap_or(false) {
+        while self.peek().map(|b| b.is_ascii_hexdigit() || b == b'_').unwrap_or(false) {
             self.pos += 1;
         }
         if self.pos == start { return Err(ParseError::InvalidNumber); }
         let s = &self.src[start..self.pos];
         let mut v: u32 = 0;
         for &b in s {
+            if b == b'_' { continue; }  // digit separator
             let d = hex_digit(b);
             v = v.wrapping_mul(16).wrapping_add(d as u32);
         }
@@ -344,13 +346,14 @@ impl<'a> Parser<'a> {
 
     fn parse_octal_digits(&mut self) -> Result<u32, ParseError> {
         let start = self.pos;
-        while self.peek().map(|b| b >= b'0' && b <= b'7').unwrap_or(false) {
+        while self.peek().map(|b| (b >= b'0' && b <= b'7') || b == b'_').unwrap_or(false) {
             self.pos += 1;
         }
         if self.pos == start { return Err(ParseError::InvalidNumber); }
         let s = &self.src[start..self.pos];
         let mut v: u32 = 0;
         for &b in s {
+            if b == b'_' { continue; }  // digit separator
             v = v.wrapping_mul(8).wrapping_add((b - b'0') as u32);
         }
         Ok(v)
@@ -358,13 +361,14 @@ impl<'a> Parser<'a> {
 
     fn parse_binary_digits(&mut self) -> Result<u32, ParseError> {
         let start = self.pos;
-        while self.peek().map(|b| b == b'0' || b == b'1').unwrap_or(false) {
+        while self.peek().map(|b| b == b'0' || b == b'1' || b == b'_').unwrap_or(false) {
             self.pos += 1;
         }
         if self.pos == start { return Err(ParseError::InvalidNumber); }
         let s = &self.src[start..self.pos];
         let mut v: u32 = 0;
         for &b in s {
+            if b == b'_' { continue; }  // digit separator
             v = v.wrapping_mul(2).wrapping_add((b - b'0') as u32);
         }
         Ok(v)
@@ -372,13 +376,14 @@ impl<'a> Parser<'a> {
 
     fn parse_decimal(&mut self) -> Result<u32, ParseError> {
         let start = self.pos;
-        while self.peek().map(|b| b.is_ascii_digit()).unwrap_or(false) {
+        while self.peek().map(|b| b.is_ascii_digit() || b == b'_').unwrap_or(false) {
             self.pos += 1;
         }
         if self.pos == start { return Err(ParseError::InvalidNumber); }
         let s = &self.src[start..self.pos];
         let mut v: u32 = 0;
         for &b in s {
+            if b == b'_' { continue; }  // digit separator
             v = v.wrapping_mul(10).wrapping_add((b - b'0') as u32);
         }
         Ok(v)
@@ -386,12 +391,16 @@ impl<'a> Parser<'a> {
 
     /// 文字定数 'A' / 'AB' / 'ABC' / 'ABCD'（最大 4 文字）
     fn parse_char_const(&mut self) -> Result<u32, ParseError> {
+        self.parse_char_const_with_close(b'\'')
+    }
+
+    fn parse_char_const_with_close(&mut self, close: u8) -> Result<u32, ParseError> {
         let mut v: u32 = 0;
         let mut count = 0;
         loop {
             match self.peek() {
                 None | Some(b'\n') | Some(b'\r') => return Err(ParseError::UnclosedCharConst),
-                Some(b'\'') => {
+                Some(b) if b == close => {
                     self.pos += 1;
                     break;
                 }
@@ -452,7 +461,21 @@ impl<'a> Parser<'a> {
         match self.peek()? {
             b'-' => { self.pos += 1; Some(Op::Neg) }
             b'+' => { self.pos += 1; Some(Op::Pos) }
-            b'~' => { self.pos += 1; Some(Op::Not) }
+            b'~' => {
+                // HAS互換: '~' の後にアルファベット・アンダースコア・'~' が続く場合は
+                // シンボル名の一部（~symbol, ~~label）として扱う
+                // それ以外（数値、'$'等）は NOT 演算子として扱う
+                let next = self.peek2();
+                let is_tilde_sym = next.map(|b| {
+                    b.is_ascii_alphabetic() || b == b'_' || b == b'~' || b == b'?' || b == b'@'
+                }).unwrap_or(false);
+                if is_tilde_sym {
+                    None  // シンボル名として parse_primary に任せる
+                } else {
+                    self.pos += 1;
+                    Some(Op::Not)
+                }
+            }
             b'.' => self.try_keyword_unary(),
             _ => None,
         }
@@ -561,6 +584,7 @@ impl<'a> Parser<'a> {
             (b"shl",  Op::Shl),
             (b"asr",  Op::Asr),
             (b"and",  Op::And),
+            (b"eor",  Op::Xor),  // HAS の .eor. = XOR
             (b"or",   Op::Or),
             (b"xor",  Op::Xor),
             (b"eq",   Op::Eq),
@@ -641,11 +665,11 @@ pub fn parse_expr(src: &[u8], pos: &mut usize) -> Result<Rpn, ParseError> {
 // ----------------------------------------------------------------
 
 fn is_ident_start(b: u8) -> bool {
-    b.is_ascii_alphabetic() || b == b'_' || b == b'.'
+    b.is_ascii_alphabetic() || b == b'_' || b == b'.' || b == b'?' || b == b'@' || b == b'~'
 }
 
 fn is_ident_cont(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'$'
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'$' || b == b'?' || b == b'@' || b == b'~'
 }
 
 fn hex_digit(b: u8) -> u8 {

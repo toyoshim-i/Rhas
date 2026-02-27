@@ -144,6 +144,10 @@ pub fn encode_ea(ea: &EffectiveAddress, op_size: u8) -> Result<EaEncoded, Encode
         // ---- 16ビットディスプレースメント ----
         EffectiveAddress::AddrRegDisp { an, disp } => {
             let v = eval_disp(disp)?;
+            // HAS互換: displacement=0 の場合は (An) 形式に最適化
+            if v == 0 {
+                return Ok(EaEncoded::new(eac::ADR | an));
+            }
             let w = check_word(v)?;
             let mut enc = EaEncoded::new(eac::DSPADR | an);
             enc.push_word(w as u16);
@@ -203,12 +207,17 @@ pub fn encode_ea(ea: &EffectiveAddress, op_size: u8) -> Result<EaEncoded, Encode
             let v = eval_rpn_const(rpn)?;
             let mut enc = EaEncoded::new(eac::IMM);
             match op_size {
-                0 => enc.push_word(v as u8 as u16),  // byte: パディングして word
-                1 => enc.push_word(v as u16),          // word
-                2 => enc.push_long(v as u32),           // long
+                0 => enc.push_word(v as u16),  // byte: 下位16bitをそのまま使用（HAS互換: -2→0xFFFE）
+                1 => enc.push_word(v as u16),  // word
+                2 => enc.push_long(v as u32),  // long
                 _ => return Err(EncodeError::InvalidMode),
             }
             Ok(enc)
+        }
+
+        // CCR/SR は命令固有のエンコードが必要（encode_move/encode_orandeorimm で処理）
+        EffectiveAddress::CcrReg | EffectiveAddress::SrReg => {
+            Err(EncodeError::InvalidMode)
         }
     }
 }

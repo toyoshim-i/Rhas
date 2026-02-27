@@ -5,7 +5,7 @@
 
 pub mod encode;
 
-use crate::expr::{parse_expr, ParseError as ExprParseError, Rpn};
+use crate::expr::{parse_expr, ParseError as ExprParseError, Rpn, RPNToken};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol::types::reg;
 
@@ -165,6 +165,10 @@ pub enum EffectiveAddress {
     PcIdx { disp: Displacement, idx: IndexSpec },
     /// イミディエイト #imm
     Immediate(Rpn),
+    /// CCR (Condition Code Register) - MOVE to/from CCR, ORI/ANDI/EORI #imm,CCR
+    CcrReg,
+    /// SR (Status Register) - MOVE to/from SR, ORI/ANDI/EORI #imm,SR
+    SrReg,
 }
 
 impl EffectiveAddress {
@@ -183,6 +187,8 @@ impl EffectiveAddress {
             Self::PcDisp(_)         => ea::DSPPC,
             Self::PcIdx { .. }      => ea::IDXPC,
             Self::Immediate(_)      => ea::IMM,
+            Self::CcrReg            => 0,
+            Self::SrReg             => 0,
         }
     }
 }
@@ -529,6 +535,93 @@ fn parse_paren_with_expr(
 }
 
 // ----------------------------------------------------------------
+// レジスタリスト解析（MOVEM用）
+// ----------------------------------------------------------------
+
+/// レジスタ番号からマスクビット位置を返す（D0-D7=bit0-7, A0-A7=bit8-15）
+fn regno_to_bit(regno: u8) -> Option<u8> {
+    if regno <= 0x0F { Some(regno) } else { None }
+}
+
+/// MOVEM用レジスタリスト解析。
+/// `first_regno` は既に解析済みの最初のレジスタ番号。
+/// `/` または `-` が続く場合はリスト全体を解析して `Immediate(mask)` を返す。
+/// 続かない場合は None を返し、`pos` は変更しない。
+fn try_continue_reglist(
+    src: &[u8],
+    pos: &mut usize,
+    sym: &SymbolTable,
+    cpu_type: u16,
+    first_regno: u8,
+) -> Option<EffectiveAddress> {
+    let saved = *pos;
+    skip_spaces(src, pos);
+
+    let ch = src.get(*pos).copied();
+    if ch != Some(b'/') && ch != Some(b'-') {
+        *pos = saved;
+        return None;
+    }
+
+    // レジスタリストとして解析する
+    let bit = regno_to_bit(first_regno)?;
+    let mut mask: u16 = 1 << bit;
+    let mut last_regno = first_regno;
+
+    loop {
+        let loop_saved = *pos;
+        skip_spaces(src, pos);
+        match src.get(*pos).copied() {
+            Some(b'/') => {
+                *pos += 1;
+                skip_spaces(src, pos);
+                let reg_saved = *pos;
+                match try_parse_register(src, pos, sym, cpu_type) {
+                    Some(r) if r <= 0x0F => {
+                        mask |= 1 << r;
+                        last_regno = r;
+                    }
+                    _ => {
+                        *pos = loop_saved;
+                        break;
+                    }
+                }
+                let _ = reg_saved;
+            }
+            Some(b'-') => {
+                *pos += 1;
+                skip_spaces(src, pos);
+                let reg_saved = *pos;
+                match try_parse_register(src, pos, sym, cpu_type) {
+                    Some(r) if r <= 0x0F => {
+                        // 範囲: last_regno から r まで
+                        let lo = last_regno.min(r);
+                        let hi = last_regno.max(r);
+                        for b in lo..=hi {
+                            mask |= 1 << b;
+                        }
+                        last_regno = r;
+                    }
+                    _ => {
+                        // '-' の後にレジスタ名がなければ '-' の前に戻す
+                        *pos = loop_saved;
+                        break;
+                    }
+                }
+                let _ = reg_saved;
+            }
+            _ => {
+                *pos = loop_saved;
+                break;
+            }
+        }
+    }
+
+    let rpn = vec![RPNToken::ValueWord(mask), RPNToken::End];
+    Some(EffectiveAddress::Immediate(rpn))
+}
+
+// ----------------------------------------------------------------
 // 公開 API
 // ----------------------------------------------------------------
 
@@ -589,15 +682,26 @@ pub fn parse_ea(
         return parse_paren_with_expr(src, pos, sym, cpu_type);
     }
 
-    // レジスタ直接（Dn / An）
+    // レジスタ直接（Dn / An）、またはレジスタリスト（MOVEM用: d0/a0, d0-d7 等）
     let saved = *pos;
     if let Some(regno) = try_parse_register(src, pos, sym, cpu_type) {
         match regno {
-            0x00..=0x07 => return Ok(EffectiveAddress::DataReg(regno)),
-            0x08..=0x0F => return Ok(EffectiveAddress::AddrReg(regno - 0x08)),
+            0x00..=0x0F => {
+                // レジスタリスト（/ または - が続く場合）
+                if let Some(ea) = try_continue_reglist(src, pos, sym, cpu_type, regno) {
+                    return Ok(ea);
+                }
+                match regno {
+                    0x00..=0x07 => return Ok(EffectiveAddress::DataReg(regno)),
+                    0x08..=0x0F => return Ok(EffectiveAddress::AddrReg(regno - 0x08)),
+                    _ => unreachable!(),
+                }
+            }
+            0x21 => return Ok(EffectiveAddress::CcrReg),
+            0x22 => return Ok(EffectiveAddress::SrReg),
             _ => {}
         }
-        *pos = saved; // Dn/An でなければ戻す
+        *pos = saved; // Dn/An/CCR/SR でなければ戻す
     }
 
     // 式（絶対アドレスまたは displacement 前置形式）

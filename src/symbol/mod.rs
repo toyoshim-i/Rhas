@@ -135,6 +135,12 @@ impl SymbolTable {
         self.cmd_table.insert(key, sym);
     }
 
+    /// シンボルを名前で検索して可変参照を返す（ext_attrib 更新等に使用）
+    pub fn lookup_sym_mut(&mut self, name: &[u8]) -> Option<&mut Symbol> {
+        let key = if self.sym_len8 && name.len() > 8 { &name[..8] } else { name };
+        self.user_syms.get_mut(key)
+    }
+
     /// シンボルが存在するかどうか確認する
     pub fn is_defined(&self, name: &[u8]) -> bool {
         self.lookup_sym(name).is_some()
@@ -302,6 +308,13 @@ const C020_CF53: CpuMask = CpuMask(
     crate::options::cpu::C040 | crate::options::cpu::C060 |
     crate::options::cpu::C530 | crate::options::cpu::C540
 );
+/// 全68k + CF530/CF540（C520を含まない - divu/divs用）
+const M68K_CF53: CpuMask = CpuMask(
+    crate::options::cpu::C000 | crate::options::cpu::C010 |
+    crate::options::cpu::C020 | crate::options::cpu::C030 |
+    crate::options::cpu::C040 | crate::options::cpu::C060 |
+    crate::options::cpu::C530 | crate::options::cpu::C540
+);
 
 /// 全命令・疑似命令テーブル（opname.s の tablebody マクロ展開に対応）
 static OPCODE_TABLE: &[OpcodeEntry] = &[
@@ -337,10 +350,10 @@ static OPCODE_TABLE: &[OpcodeEntry] = &[
     OpcodeEntry::op("tst",   InsnHandler::Tst,     0x4A00, ALL, sz::BWL,  sz::BWL),
     OpcodeEntry::op("swap",  InsnHandler::Swap,    0x4840, ALL, sz::W,    sz::W),
     OpcodeEntry::op("exg",   InsnHandler::Exg,     0xC100, M68K, sz::L,   sz::NONE),
-    OpcodeEntry::op("mulu",  InsnHandler::DivMul,  0xC0C0, C020_CF53, sz::WL, sz::WL),
-    OpcodeEntry::op("muls",  InsnHandler::DivMul,  0xC1C0, C020_CF53, sz::WL, sz::WL),
-    OpcodeEntry::op("divu",  InsnHandler::DivMul,  0x80C0, C020_CF53, sz::WL, sz::WL),
-    OpcodeEntry::op("divs",  InsnHandler::DivMul,  0x81C0, C020_CF53, sz::WL, sz::WL),
+    OpcodeEntry::op("mulu",  InsnHandler::DivMul,  0xC0C0, ALL,       sz::WL, sz::WL),
+    OpcodeEntry::op("muls",  InsnHandler::DivMul,  0xC1C0, ALL,       sz::WL, sz::WL),
+    OpcodeEntry::op("divu",  InsnHandler::DivMul,  0x80C0, M68K_CF53, sz::WL, sz::WL),
+    OpcodeEntry::op("divs",  InsnHandler::DivMul,  0x81C0, M68K_CF53, sz::WL, sz::WL),
     OpcodeEntry::op("chk",   InsnHandler::Chk,     0x4100, M68K, sz::WL,  sz::NONE),
     OpcodeEntry::op("abcd",  InsnHandler::SAbcd,   0xC100, M68K, sz::B,   sz::NONE),
     OpcodeEntry::op("sbcd",  InsnHandler::SAbcd,   0x8100, M68K, sz::B,   sz::NONE),

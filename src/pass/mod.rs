@@ -100,11 +100,16 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     let source_buf = SourceBuf::from_file(source_path.clone())
         .map_err(|_| AssembleError::SourceNotFound(source_path.clone()))?;
 
-    // ソース名（拡張子なし）を取得
+    // ソース名（拡張子なし）を取得（$D000 ヘッダ用）
     let source_name: Vec<u8> = source_path
         .file_stem()
         .map(|s| s.to_string_lossy().as_bytes().to_vec())
         .unwrap_or_else(|| b"unknown".to_vec());
+    // ソースファイル名（拡張子あり）を取得（$B204 レコード用）
+    let source_file: Vec<u8> = source_path
+        .file_name()
+        .map(|s| s.to_string_lossy().as_bytes().to_vec())
+        .unwrap_or_else(|| source_name.clone());
 
     let include_paths = parse_include_paths(ctx.opts.include_paths_cmd.as_ref());
     let mut source = SourceStack::new(source_buf, include_paths);
@@ -121,7 +126,7 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     // ---- Pass 3: コード生成 → ObjectCode ----
     let prn_enable = ctx.opts.make_prn;
     let max_align = ctx.max_align;
-    let (obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), prn_enable, max_align);
+    let (obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file, prn_enable, max_align);
 
     // ---- HLK バイナリ生成 ----
     let obj_bytes = write_hlk(&obj);

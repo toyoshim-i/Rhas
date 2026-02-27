@@ -46,20 +46,20 @@ pub fn write_hlk(obj: &ObjectCode) -> Vec<u8> {
         out.push(0x04);
         let n = obj.max_align as u32;
         out.extend_from_slice(&n.to_be_bytes());
-        // '*' + ソースファイル名 + '*' + null（偶数パディングは行わない）
-        out.push(b'*');
-        out.extend_from_slice(&obj.source_name);
-        out.push(b'*');
-        out.push(0x00);
+        // '*' + ソースファイル名（拡張子あり）+ '*'（偶数バイトパディング付き null 終端）
+        let mut b204_str = Vec::new();
+        b204_str.push(b'*');
+        b204_str.extend_from_slice(&obj.source_file);
+        b204_str.push(b'*');
+        push_str_even(&mut out, &b204_str);
     }
 
     // ---- $B2xx: 外部シンボル ----
     for sym in &obj.ext_syms {
         out.push(0xB2);
-        out.push(sym.kind as u8);
+        out.push(sym.kind);
         out.extend_from_slice(&sym.value.to_be_bytes());
-        out.extend_from_slice(&sym.name);
-        out.push(0x00);
+        push_str_even(&mut out, &sym.name);
     }
 
     // ---- オブジェクトコード本体（20xx + 10xx 形式）----
@@ -83,7 +83,7 @@ pub fn write_hlk(obj: &ObjectCode) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::object::{ExternalSymbol, ObjectCode, SectionInfo, SymKind};
+    use crate::object::{ExternalSymbol, ObjectCode, SectionInfo, sym_kind};
 
     #[test]
     fn test_minimal_hlk() {
@@ -115,7 +115,7 @@ mod tests {
     fn test_xref_symbol() {
         let mut obj = ObjectCode::new(b"src".to_vec());
         obj.ext_syms.push(ExternalSymbol {
-            kind: SymKind::XRef,
+            kind: sym_kind::XREF,
             value: 1,
             name: b"printf".to_vec(),
         });

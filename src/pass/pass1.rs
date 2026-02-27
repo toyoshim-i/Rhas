@@ -51,6 +51,8 @@ struct P1Ctx<'a> {
     is_end:   bool,
     /// ローカルラベルベース（マクロ展開番号用、将来実装）
     local_base: u32,
+    /// 匿名ローカルラベルカウンタ（@@: の通し番号）
+    local_anon_count: u32,
     /// 現在処理中のソース位置（エラーメッセージ用）
     current_pos: SourcePos,
 }
@@ -64,6 +66,7 @@ impl<'a> P1Ctx<'a> {
             is_skip: false,
             is_end: false,
             local_base: 0,
+            local_anon_count: 0,
             current_pos: SourcePos::new(Vec::new(), 0),
         }
     }
@@ -77,7 +80,10 @@ impl<'a> P1Ctx<'a> {
         self.ctx.num_errors += 1;
     }
 
-    fn section_id(&self) -> u8 { self.ctx.section as u8 }
+    fn section_id(&self) -> u8 {
+        if self.ctx.is_offset_mode { 0 } else { self.ctx.section as u8 }
+    }
+    fn is_offset_mode(&self) -> bool { self.ctx.is_offset_mode }
     fn cpu_type(&self)   -> u16 { self.ctx.cpu_type }
     fn location(&self)   -> u32 { self.ctx.location() }
 
@@ -148,8 +154,7 @@ pub fn pass1(
         match source.read_line() {
             ReadResult::Eof => break,
             ReadResult::IncludeEnd => {
-                records.push(TempRecord::SectChange { id: p1.section_id() }); // sentinel
-                // 実際は IncludeEnd はロケーションには影響なし
+                // HAS はインクルード終了時にセクション変更レコードを出力しない
             }
             ReadResult::Line(line) => {
                 if p1.ctx.opts.make_prn {
@@ -169,12 +174,81 @@ pub fn pass1(
 // 行解析
 // ----------------------------------------------------------------
 
+/// 匿名ローカルラベル（@@: / @b / @f）を行内で展開する。
+/// @@: → @@{count}: に展開（is_anon_def=true を返す）
+/// @b → @@{count-1}、@f → @@{count} に展開する。
+/// コメント（;）以降は処理しない。
+fn preprocess_anon_labels(line: &[u8], count: u32) -> (Vec<u8>, bool) {
+    let mut result = Vec::with_capacity(line.len() + 8);
+    let mut i = 0;
+    let mut is_anon_def = false;
+
+    // 行頭 @@: / @@:: の検出
+    if line.starts_with(b"@@") && line.get(2) == Some(&b':') {
+        is_anon_def = true;
+        let label = format!("@@{}", count);
+        result.extend_from_slice(label.as_bytes());
+        // ':' から後ろはそのまま
+        i = 2; // ':' の位置から再開
+    }
+
+    // 残りの行を処理（@b / @f 置換）
+    while i < line.len() {
+        let b = line[i];
+        // コメント → そのまま残す
+        if b == b';' {
+            result.extend_from_slice(&line[i..]);
+            break;
+        }
+        // @b / @f の検出（@@ や @name とは区別する）
+        if b == b'@' && i + 1 < line.len() {
+            let next = line[i + 1];
+            let after = i + 2;
+            let is_end = after >= line.len() || !is_anon_ident_cont(line[after]);
+            if next == b'b' && is_end {
+                // @b → 最後に定義した @@: ラベルの名前
+                let name = if count > 0 {
+                    format!("@@{}", count - 1)
+                } else {
+                    "@@_invalid_@b".to_string()
+                };
+                result.extend_from_slice(name.as_bytes());
+                i += 2;
+                continue;
+            }
+            if next == b'f' && is_end {
+                // @f → 次に定義される @@: ラベルの名前
+                let name = format!("@@{}", count);
+                result.extend_from_slice(name.as_bytes());
+                i += 2;
+                continue;
+            }
+        }
+        result.push(b);
+        i += 1;
+    }
+    (result, is_anon_def)
+}
+
+/// 匿名ラベル置換後の識別子継続文字かどうか
+#[inline]
+fn is_anon_ident_cont(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'$' || b == b'?'
+}
+
 fn parse_line(
     line: &[u8],
     records: &mut Vec<TempRecord>,
     p1: &mut P1Ctx<'_>,
     source: &mut SourceStack,
 ) {
+    // 匿名ローカルラベル（@@: / @b / @f）の事前展開
+    let (processed_buf, is_anon_def) = preprocess_anon_labels(line, p1.local_anon_count);
+    if is_anon_def {
+        p1.local_anon_count += 1;
+    }
+    let line: &[u8] = &processed_buf;
+
     let mut pos = 0;
 
     // 現在のソース位置を更新（エラーメッセージ用）
@@ -190,10 +264,13 @@ fn parse_line(
     if line.is_empty() { return; }
 
     // ラベル解析（行頭が非空白）
-    let mut label = if line[0] != b' ' && line[0] != b'\t' {
-        parse_label(line, &mut pos)
+    let (mut label, mut is_global_label) = if line[0] != b' ' && line[0] != b'\t' {
+        match parse_label(line, &mut pos) {
+            Some((name, is_global)) => (Some(name), is_global),
+            None => (None, false),
+        }
     } else {
-        None
+        (None, false)
     };
 
     // 空白スキップ
@@ -208,6 +285,16 @@ fn parse_line(
                 records.push(TempRecord::LabelDef {
                     name: name.clone(), section: sec, offset: off
                 });
+                // '::' グローバルラベル → export
+                if is_global_label {
+                    records.push(TempRecord::XDef { name: name.clone() });
+                    // ext_attrib を更新（try_register_xdef で早期検出できるように）
+                    if let Some(s) = p1.sym.lookup_sym_mut(name) {
+                        if let Symbol::Value { ext_attrib, .. } = s {
+                            *ext_attrib = ExtAttrib::XDef;
+                        }
+                    }
+                }
             }
         }
         return;
@@ -293,9 +380,10 @@ fn parse_line(
         _ => Dispatch::Unknown,
     };
 
-    let is_equ = matches!(dispatch, Dispatch::Pseudo(InsnHandler::Equ | InsnHandler::Set));
+    let is_equ = matches!(dispatch, Dispatch::Pseudo(InsnHandler::Equ | InsnHandler::Set | InsnHandler::Reg));
 
     // ロケーションラベルを先に登録（.equ/.set 以外）
+    // XDef TempRecord は命令処理後に追加する（HAS互換の順序: XREF → XDEF）
     if !is_equ {
         if let Some(ref name) = label {
             let sec = p1.section_id();
@@ -342,6 +430,19 @@ fn parse_line(
             p1.error(&msg);
         }
     }
+
+    // '::' グローバルラベル → 命令の後に XDEF を追加（HAS互換の順序: 命令XREF → ラベルXDEF）
+    if !is_equ && is_global_label {
+        if let Some(ref name) = label {
+            records.push(TempRecord::XDef { name: name.clone() });
+            // ext_attrib を更新（try_register_xdef で早期検出できるように）
+            if let Some(s) = p1.sym.lookup_sym_mut(name) {
+                if let Symbol::Value { ext_attrib, .. } = s {
+                    *ext_attrib = ExtAttrib::XDef;
+                }
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------------------
@@ -371,8 +472,13 @@ fn handle_set_assignment(name: &[u8], line: &[u8], pos: &mut usize, p1: &mut P1C
 // ----------------------------------------------------------------
 
 /// ラベルを解析して返す（pos を進める）
-fn parse_label(line: &[u8], pos: &mut usize) -> Option<Vec<u8>> {
+/// (name, is_global) を返す
+/// `LABEL:`  → (name, false)
+/// `LABEL::` → (name, true)  ← グローバルラベル（自動 .xdef 相当）
+fn parse_label(line: &[u8], pos: &mut usize) -> Option<(Vec<u8>, bool)> {
     let start = *pos;
+    // '.' で始まる場合は疑似命令 → ラベルではない
+    if line.get(start) == Some(&b'.') { return None; }
     let mut end = start;
     while end < line.len() {
         let b = line[end];
@@ -383,8 +489,16 @@ fn parse_label(line: &[u8], pos: &mut usize) -> Option<Vec<u8>> {
     let name = line[start..end].to_vec();
     *pos = end;
     // ':' があれば消費する
-    if *pos < line.len() && line[*pos] == b':' { *pos += 1; }
-    Some(name)
+    let mut is_global = false;
+    if *pos < line.len() && line[*pos] == b':' {
+        *pos += 1;
+        // '::' (double colon) = グローバルラベル
+        if *pos < line.len() && line[*pos] == b':' {
+            *pos += 1;
+            is_global = true;
+        }
+    }
+    Some((name, is_global))
 }
 
 // ----------------------------------------------------------------
@@ -472,7 +586,8 @@ fn handle_real_insn(
     records:  &mut Vec<TempRecord>,
     p1:       &mut P1Ctx<'_>,
 ) {
-    let sz = size.unwrap_or(SizeCode::None);
+    // HAS のデフォルトサイズはワード（サフィックスなし → .w 相当）
+    let sz = size.unwrap_or(SizeCode::Word);
     let cpu = p1.cpu_type();
 
     // 分岐命令（ターゲットを RPN として保持）
@@ -523,8 +638,14 @@ fn handle_real_insn(
             records.push(TempRecord::Const(bytes));
         }
         Err(InsnError::DeferToLinker) => {
-            // シンボル参照あり → プレースホルダでサイズ推定
-            let byte_size = estimate_insn_size(opcode, handler, sz, &ops);
+            // シンボル参照あり → まずシンボルテーブルで定数解決して精度の高いサイズ推定を試みる
+            let resolved_for_size: Vec<EffectiveAddress> = ops.iter()
+                .map(|ea| resolve_ea_const_for_size(ea, p1.sym))
+                .collect();
+            let byte_size = match encode_insn(opcode, handler, sz, &resolved_for_size) {
+                Ok(bytes) => bytes.len() as u32,
+                Err(_) => estimate_insn_size(opcode, handler, sz, &ops),
+            };
             p1.advance(byte_size);
             records.push(TempRecord::DeferredInsn {
                 base: opcode, handler, size: sz, ops, byte_size,
@@ -592,6 +713,63 @@ fn estimate_insn_size(
     }
 }
 
+/// EA 内の RPN を pass1 シンボルテーブルで解決して定数に置換する（サイズ推定精度向上のため）
+fn resolve_ea_const_for_size(ea: &EffectiveAddress, sym: &SymbolTable) -> EffectiveAddress {
+    use crate::addressing::Displacement;
+    let lookup = |name: &[u8]| -> Option<EvalValue> {
+        sym.lookup_sym(name).and_then(|s| {
+            if let Symbol::Value { value, section, .. } = s {
+                Some(EvalValue { value: *value, section: *section })
+            } else { None }
+        })
+    };
+    match ea {
+        EffectiveAddress::Immediate(rpn) => {
+            if let Ok(v) = eval_rpn(rpn, 0, 0, 0, &lookup) {
+                if v.section == 0 {
+                    return EffectiveAddress::Immediate(
+                        vec![RPNToken::Value(v.value as u32), RPNToken::End]);
+                }
+            }
+            ea.clone()
+        }
+        EffectiveAddress::AbsLong(rpn) => {
+            if let Ok(v) = eval_rpn(rpn, 0, 0, 0, &lookup) {
+                if v.section == 0 {
+                    return EffectiveAddress::AbsShort(
+                        vec![RPNToken::Value(v.value as u32), RPNToken::End]);
+                }
+            }
+            ea.clone()
+        }
+        EffectiveAddress::AbsShort(rpn) => {
+            if let Ok(v) = eval_rpn(rpn, 0, 0, 0, &lookup) {
+                if v.section == 0 {
+                    return EffectiveAddress::AbsShort(
+                        vec![RPNToken::Value(v.value as u32), RPNToken::End]);
+                }
+            }
+            ea.clone()
+        }
+        EffectiveAddress::AddrRegDisp { an, disp } => {
+            if let Ok(v) = eval_rpn(&disp.rpn, 0, 0, 0, &lookup) {
+                if v.section == 0 {
+                    return EffectiveAddress::AddrRegDisp {
+                        an: *an,
+                        disp: Displacement {
+                            rpn: vec![RPNToken::Value(v.value as u32), RPNToken::End],
+                            size: disp.size,
+                            const_val: Some(v.value),
+                        },
+                    };
+                }
+            }
+            ea.clone()
+        }
+        _ => ea.clone(),
+    }
+}
+
 /// EA の拡張ワードバイト数（おおよその見積もり）
 fn ea_ext_words(ea: &EffectiveAddress) -> u32 {
     match ea {
@@ -607,16 +785,33 @@ fn ea_ext_words(ea: &EffectiveAddress) -> u32 {
             2
         }
         EffectiveAddress::AddrRegIdx { .. } | EffectiveAddress::PcIdx { .. } => 2,
+        EffectiveAddress::CcrReg | EffectiveAddress::SrReg => 0,
     }
 }
 
-/// EA 内のシンボル参照を 0 に置換したコピーを返す
+/// EA 内のシンボル参照を定数に置換したコピーを返す（命令バイト数推定用）
 fn placeholder_ea(ea: &EffectiveAddress) -> EffectiveAddress {
+    use crate::addressing::Displacement;
+    // 即値は 1 を使う。0 だと SUBQ/ADDQ の範囲チェック (1-8) に引っかかるため。
+    let one_rpn = || vec![RPNToken::Value(1), RPNToken::End];
     let zero_rpn = || vec![RPNToken::Value(0), RPNToken::End];
     match ea {
-        EffectiveAddress::Immediate(_) => EffectiveAddress::Immediate(zero_rpn()),
+        EffectiveAddress::Immediate(_) => EffectiveAddress::Immediate(one_rpn()),
         EffectiveAddress::AbsShort(_)  => EffectiveAddress::AbsShort(zero_rpn()),
         EffectiveAddress::AbsLong(_)   => EffectiveAddress::AbsLong(zero_rpn()),
+        EffectiveAddress::AddrRegDisp { an, disp } if disp.const_val.is_none() => {
+            // ディスプレースメントが未確定（外部参照など）の場合、非ゼロのプレースホルダーを使用。
+            // ゼロを使うと (0,An)→(An) 最適化が誤って適用されてしまうため。
+            EffectiveAddress::AddrRegDisp {
+                an: *an,
+                disp: Displacement { rpn: one_rpn(), size: disp.size, const_val: Some(1) },
+            }
+        }
+        EffectiveAddress::PcDisp(disp) if disp.const_val.is_none() => {
+            EffectiveAddress::PcDisp(
+                Displacement { rpn: one_rpn(), size: disp.size, const_val: Some(1) }
+            )
+        }
         other => other.clone(),
     }
 }
@@ -682,40 +877,64 @@ fn handle_pseudo(
 
         // ---- .even / .quad / .align ----
         InsnHandler::Even => {
-            let sec = p1.section_id();
-            let pad = if sec == 0x01 { 0x4E71u16 } else { 0u16 };
-            records.push(TempRecord::Align { n: 1, pad, section: sec });
+            if p1.is_offset_mode() {
+                // .offset モードでは実データを出力しない（カウンタを偶数に揃えるだけ）
+                let loc = p1.location();
+                if loc % 2 != 0 { p1.advance(1); }
+            } else {
+                let sec = p1.section_id();
+                let pad = if sec == 0x01 { 0x4E71u16 } else { 0u16 };
+                // .even does NOT set MAKEALIGN in HAS (unlike .align/.quad)
+                records.push(TempRecord::Align { n: 1, pad, section: sec });
+            }
         }
         InsnHandler::Quad => {
-            let sec = p1.section_id();
-            records.push(TempRecord::Align { n: 2, pad: 0, section: sec });
+            if p1.is_offset_mode() {
+                let loc = p1.location();
+                let mask = 4u32 - 1;
+                if loc & mask != 0 { p1.advance(4 - (loc & mask)); }
+            } else {
+                let sec = p1.section_id();
+                if 2 > p1.ctx.max_align { p1.ctx.max_align = 2; }
+                records.push(TempRecord::Align { n: 2, pad: 0, section: sec });
+            }
         }
         InsnHandler::Align => {
             skip_spaces(line, pos);
             let n = parse_align_n(line, pos, p1);
             if let Some(n) = n {
-                let sec = p1.section_id();
-                // パディング値（オプション）
-                let pad = parse_align_pad(line, pos, p1).unwrap_or_else(|| {
-                    if sec == 0x01 { 0x4E71 } else { 0 }
-                });
-                // max_align を更新（B204 レコード用）
-                if n > p1.ctx.max_align {
-                    p1.ctx.max_align = n;
+                if p1.is_offset_mode() {
+                    // .offset モードでは仮想カウンタを整列するだけ
+                    let align = 1u32 << n;
+                    let loc = p1.location();
+                    if loc % align != 0 { p1.advance(align - (loc % align)); }
+                } else {
+                    let sec = p1.section_id();
+                    // パディング値（オプション）
+                    let pad = parse_align_pad(line, pos, p1).unwrap_or_else(|| {
+                        if sec == 0x01 { 0x4E71 } else { 0 }
+                    });
+                    // max_align を更新（B204 レコード用）
+                    if n > p1.ctx.max_align {
+                        p1.ctx.max_align = n;
+                    }
+                    records.push(TempRecord::Align { n, pad, section: sec });
                 }
-                records.push(TempRecord::Align { n, pad, section: sec });
             }
         }
 
         // ---- .dc ----
         InsnHandler::Dc => {
-            let byte_size: u8 = match size {
-                Some(SizeCode::Byte)   => 1,
-                Some(SizeCode::Long)   => 4,
-                None | Some(SizeCode::Word) => 2,
-                _ => 2,
-            };
-            parse_dc(line, pos, byte_size, records, p1);
+            // .offset モードでは .dc は出力しない（通常 .offset ブロック内には .dc は現れないが念のため）
+            if !p1.is_offset_mode() {
+                let byte_size: u8 = match size {
+                    Some(SizeCode::Byte)   => 1,
+                    Some(SizeCode::Long)   => 4,
+                    None | Some(SizeCode::Word) => 2,
+                    _ => 2,
+                };
+                parse_dc(line, pos, byte_size, records, p1);
+            }
         }
 
         // ---- .ds ----
@@ -732,7 +951,10 @@ fn handle_pseudo(
                     let count = v.value as u32;
                     let byte_count = count * item_size;
                     p1.advance(byte_count);
-                    records.push(TempRecord::Ds { byte_count });
+                    // .offset モード（SECT_ABS）では仮想カウンタのみ進め実データは出力しない
+                    if !p1.is_offset_mode() {
+                        records.push(TempRecord::Ds { byte_count });
+                    }
                 }
             }
         }
@@ -884,15 +1106,15 @@ fn handle_pseudo(
 
         // ---- .org ----
         InsnHandler::Offset => {
-            // .offset は .org の変形
+            // .offset は SECT_ABS（仮想オフセットセクション）に切り替える
+            // 実セクションのカウンタは変更せず、仮想オフセットカウンタのみを設定する
             skip_spaces(line, pos);
-            if let Ok(rpn) = parse_expr(line, pos) {
-                if let Some(v) = p1.eval_const(&rpn) {
-                    let org_val = v.value as u32;
-                    p1.set_location(org_val);
-                    records.push(TempRecord::Org { value: org_val });
-                }
-            }
+            let val = if *pos < line.len() {
+                if let Ok(rpn) = parse_expr(line, pos) {
+                    p1.eval_const(&rpn).map(|v| v.value as u32).unwrap_or(0)
+                } else { 0 }
+            } else { 0 };
+            p1.ctx.set_offset_mode(val);
         }
 
         // ---- .if / .ifdef / .ifndef ----
@@ -963,7 +1185,7 @@ fn handle_pseudo(
         // ---- .include ----
         InsnHandler::Include | InsnHandler::Insert => {
             skip_spaces(line, pos);
-            let fname = parse_string_or_ident(line, pos);
+            let fname = parse_filename(line, pos);
             if !fname.is_empty() {
                 let _ = source.push_include(&fname);
             }
@@ -1015,7 +1237,20 @@ fn handle_pseudo(
 
         // ---- .fail ----
         InsnHandler::Fail => {
-            p1.error(".fail によるエラー");
+            // .fail <式> — 式が非0（または式なし）のときアセンブルエラー
+            skip_spaces(line, pos);
+            let should_fail = if *pos < line.len() {
+                if let Ok(rpn) = parse_expr(line, pos) {
+                    p1.eval_const(&rpn).map(|v| v.value != 0).unwrap_or(true)
+                } else {
+                    true
+                }
+            } else {
+                true
+            };
+            if should_fail {
+                p1.error(".fail によるエラー");
+            }
         }
 
         // ---- .macro ----
@@ -1091,7 +1326,49 @@ fn handle_pseudo(
 
         // ---- .reg ----
         InsnHandler::Reg => {
-            // レジスタリストシンボルの定義（Phase 8）
+            // レジスタリスト / エイリアスシンボルの定義
+            // 例: CRLF reg CR,LF → {CR の RPN, LF の RPN}
+            // 例: abswarn reg abswarn2 → {abswarn2 への SymbolRef の RPN}
+            // HAS互換: 単一シンボルエイリアスの場合はターゲットを即座に XREF 登録する
+            skip_spaces(line, pos);
+            if let Some(ref name) = label {
+                let mut rpns: Vec<Rpn> = Vec::new();
+                loop {
+                    if *pos >= line.len() || line[*pos] == b';' { break; }
+                    match parse_expr(line, pos) {
+                        Ok(rpn) => rpns.push(rpn),
+                        Err(_) => break,
+                    }
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] == b',' {
+                        *pos += 1;
+                        skip_spaces(line, pos);
+                    } else {
+                        break;
+                    }
+                }
+                // 単一シンボルエイリアス: [SymbolRef(target), End] → target を XREF 予約
+                if rpns.len() == 1 {
+                    if let [RPNToken::SymbolRef(target), RPNToken::End] = rpns[0].as_slice() {
+                        let target = target.clone();
+                        // ターゲットが未定義（外部）の場合のみ XREF として登録
+                        if p1.sym.lookup_sym(&target).is_none() {
+                            let sym = Symbol::Value {
+                                attrib:     DefAttrib::Undef,
+                                ext_attrib: ExtAttrib::XRef,
+                                section:    0xFF,
+                                org_num:    0,
+                                first:      FirstDef::Other,
+                                opt_count:  0,
+                                value:      0,
+                            };
+                            p1.sym.define(target.clone(), sym);
+                        }
+                        records.push(TempRecord::XRef { name: target });
+                    }
+                }
+                p1.sym.define(name.clone(), Symbol::RegSym { define: rpns });
+            }
         }
 
         // ---- .comm / .rcomm / .rlcomm ----
@@ -1121,6 +1398,97 @@ fn parse_dc(
     skip_spaces(line, pos);
     loop {
         if *pos >= line.len() || line[*pos] == b';' { break; }
+
+        // 単一引用符の文字列リテラル '...' がスタンドアロン（次が , ; EOL）の場合
+        // HAS 互換: .dc.b 'd0' → 全バイトを出力（文字列モード）
+        // .dc.w 'AB' → 2文字を1ワードにパック, .dc.l も同様
+        // 式の一部（'A'+1 等）は式として評価（スタンドアロンでない場合）
+        if line[*pos] == b'\'' {
+            // 文字列を抽出してスタンドアロンか確認
+            let saved_pos = *pos;
+            *pos += 1; // opening '
+            let mut s: Vec<u8> = Vec::new();
+            let mut valid = false;
+            while *pos < line.len() {
+                if line[*pos] == b'\'' {
+                    *pos += 1; // closing '
+                    // 次の文字がスタンドアロン境界か確認（スペース、,、;、EOL）
+                    let mut check = *pos;
+                    while check < line.len() && (line[check] == b' ' || line[check] == b'\t') {
+                        check += 1;
+                    }
+                    if check >= line.len() || line[check] == b',' || line[check] == b';' {
+                        valid = true;
+                    }
+                    break;
+                }
+                // Shift-JIS 2バイト文字の考慮
+                let b = line[*pos];
+                s.push(b);
+                *pos += 1;
+                let is_sjis = (b >= 0x81 && b <= 0x9F) || (b >= 0xE0 && b <= 0xFC);
+                if is_sjis && *pos < line.len() {
+                    s.push(line[*pos]);
+                    *pos += 1;
+                }
+            }
+            if valid && !s.is_empty() {
+                // スタンドアロン文字列として出力
+                match byte_size {
+                    1 => {
+                        // .dc.b: 全バイトをそのまま出力
+                        p1.advance(s.len() as u32);
+                        records.push(TempRecord::Const(s));
+                    }
+                    2 => {
+                        // .dc.w: 2文字ずつワードにパック（奇数バイトは上位ゼロ）
+                        let mut bytes = Vec::new();
+                        let mut i = 0;
+                        while i < s.len() {
+                            if i + 1 < s.len() {
+                                bytes.push(s[i]);
+                                bytes.push(s[i+1]);
+                                i += 2;
+                            } else {
+                                bytes.push(0);
+                                bytes.push(s[i]);
+                                i += 1;
+                            }
+                        }
+                        p1.advance(bytes.len() as u32);
+                        records.push(TempRecord::Const(bytes));
+                    }
+                    4 => {
+                        // .dc.l: 4文字ずつロングにパック
+                        let mut bytes = Vec::new();
+                        let mut i = 0;
+                        while i < s.len() {
+                            let remaining = s.len() - i;
+                            let pad = if remaining < 4 { 4 - remaining } else { 0 };
+                            for _ in 0..pad { bytes.push(0); }
+                            let take = remaining.min(4);
+                            bytes.extend_from_slice(&s[i..i+take]);
+                            i += take;
+                        }
+                        p1.advance(bytes.len() as u32);
+                        records.push(TempRecord::Const(bytes));
+                    }
+                    _ => {}
+                }
+                // カンマ区切りへ続く
+                skip_spaces(line, pos);
+                if *pos < line.len() && line[*pos] == b',' {
+                    *pos += 1;
+                    skip_spaces(line, pos);
+                } else {
+                    break;
+                }
+                continue;
+            } else {
+                // スタンドアロンでない → posをリセットして式として評価
+                *pos = saved_pos;
+            }
+        }
 
         // 文字列リテラル "..." → バイト列として埋め込む
         if line[*pos] == b'"' {
@@ -1156,7 +1524,28 @@ fn parse_dc(
             // 式
             match parse_expr(line, pos) {
                 Ok(rpn) => {
-                    if let Some(v) = p1.eval_const(&rpn) {
+                    // .reg シンボル（RegSym）の展開チェック
+                    // 例: .dc.b CRLF,0 → CRLF が {CR, LF} の RegSym なら各要素を個別に展開
+                    let regsym_elems: Option<Vec<Rpn>> = {
+                        if let [RPNToken::SymbolRef(sym_name), RPNToken::End] = rpn.as_slice() {
+                            match p1.sym.lookup_sym(sym_name) {
+                                Some(Symbol::RegSym { define }) => Some(define.clone()),
+                                _ => None,
+                            }
+                        } else { None }
+                    };
+                    if let Some(elem_rpns) = regsym_elems {
+                        for elem_rpn in &elem_rpns {
+                            if let Some(v) = p1.eval_const(elem_rpn) {
+                                let bytes = val_to_bytes(v.value, byte_size);
+                                p1.advance(bytes.len() as u32);
+                                records.push(TempRecord::Const(bytes));
+                            } else {
+                                p1.advance(byte_size as u32);
+                                records.push(TempRecord::Data { size: byte_size, rpn: elem_rpn.clone() });
+                            }
+                        }
+                    } else if let Some(v) = p1.eval_const(&rpn) {
                         // 定数 → Const
                         let bytes = val_to_bytes(v.value, byte_size);
                         p1.advance(bytes.len() as u32);
@@ -1263,6 +1652,30 @@ fn parse_string_or_ident(line: &[u8], pos: &mut usize) -> Vec<u8> {
     }
 }
 
+/// ファイル名を読む（引用符付きまたは空白/セミコロン区切りのパス）
+/// `/tmp/foo.s` のような絶対パスや相対パスをサポートする
+fn parse_filename(line: &[u8], pos: &mut usize) -> Vec<u8> {
+    if *pos >= line.len() { return Vec::new(); }
+    if line[*pos] == b'"' || line[*pos] == b'\'' {
+        let quote = line[*pos];
+        *pos += 1;
+        let start = *pos;
+        while *pos < line.len() && line[*pos] != quote { *pos += 1; }
+        let s = line[start..*pos].to_vec();
+        if *pos < line.len() { *pos += 1; }
+        s
+    } else {
+        // 空白・セミコロンまで読む
+        let start = *pos;
+        while *pos < line.len() {
+            let b = line[*pos];
+            if b == b' ' || b == b'\t' || b == b';' { break; }
+            *pos += 1;
+        }
+        line[start..*pos].to_vec()
+    }
+}
+
 // ----------------------------------------------------------------
 // マクロ処理ヘルパー
 // ----------------------------------------------------------------
@@ -1355,6 +1768,7 @@ fn collect_macro_body(
     let mut template = Vec::new();
     let mut local_count = 0u16;
     let mut nest_depth = 0u32;
+    let mut name_map: std::collections::HashMap<Vec<u8>, u16> = std::collections::HashMap::new();
 
     loop {
         let line = match source.read_line() {
@@ -1389,7 +1803,7 @@ fn collect_macro_body(
             _ => {
                 // 通常行: 仮引数を `\xFF param_idx` マーカーに変換して保存
                 if nest_depth == 0 && !params.is_empty() {
-                    let converted = convert_line_params(line, params, &mut local_count);
+                    let converted = convert_line_params(line, params, &mut local_count, &mut name_map);
                     template.extend_from_slice(&converted);
                 } else {
                     template.extend_from_slice(line);
@@ -1406,7 +1820,12 @@ fn collect_macro_body(
 ///
 /// `&param` (MASM スタイル) と裸の仮引数名 (HAS060X ネイティブスタイル) の
 /// 両方を置換する。ただし '.' の直後の識別子はサイズサフィックスなので置換しない。
-fn convert_line_params(line: &[u8], params: &[Vec<u8>], local_count: &mut u16) -> Vec<u8> {
+fn convert_line_params(
+    line: &[u8],
+    params: &[Vec<u8>],
+    local_count: &mut u16,
+    name_map: &mut std::collections::HashMap<Vec<u8>, u16>,
+) -> Vec<u8> {
     let mut out = Vec::with_capacity(line.len() + 8);
     let mut i = 0;
     while i < line.len() {
@@ -1443,6 +1862,7 @@ fn convert_line_params(line: &[u8], params: &[Vec<u8>], local_count: &mut u16) -
             continue;
         }
         // '@' → ローカルラベル置換（マクロ定義中）
+        // 同じ名前の @name は常に同じ lno に対応する（name_map で追跡）
         if b == b'@' && i + 1 < line.len() && line[i+1] != b'@' {
             // @name をローカルラベルとして番号付きマーカーに変換
             i += 1;
@@ -1450,9 +1870,15 @@ fn convert_line_params(line: &[u8], params: &[Vec<u8>], local_count: &mut u16) -
             while i < line.len() && (line[i].is_ascii_alphanumeric() || line[i] == b'_') {
                 i += 1;
             }
-            let _name = &line[start..i];
-            let lno = *local_count;
-            *local_count += 1;
+            let name = line[start..i].to_vec();
+            let lno = if let Some(&existing) = name_map.get(&name) {
+                existing
+            } else {
+                let new_lno = *local_count;
+                *local_count += 1;
+                name_map.insert(name, new_lno);
+                new_lno
+            };
             out.push(0xFE);
             out.push((lno >> 8) as u8);
             out.push((lno & 0xFF) as u8);
@@ -1673,6 +2099,7 @@ fn collect_body_from_slice_impl(
     let mut local_count = 0u16;
     let mut nest_depth = 0u32;
     let mut pos = 0;
+    let mut name_map: std::collections::HashMap<Vec<u8>, u16> = std::collections::HashMap::new();
 
     while pos < slice.len() {
         let end = slice[pos..].iter().position(|&b| b == b'\n')
@@ -1702,7 +2129,7 @@ fn collect_body_from_slice_impl(
             }
             _ => {
                 if do_param_convert && !params.is_empty() {
-                    let converted = convert_line_params(line, params, &mut local_count);
+                    let converted = convert_line_params(line, params, &mut local_count, &mut name_map);
                     body.extend_from_slice(&converted);
                 } else {
                     body.extend_from_slice(line);
@@ -1788,22 +2215,7 @@ fn extract_mnemonic(line: &[u8]) -> Vec<u8> {
     line[start..pos].to_ascii_lowercase()
 }
 
-// ----------------------------------------------------------------
-// SymbolTable の可変参照（lookup_sym_mut が必要）
-// ----------------------------------------------------------------
-// SymbolTable に lookup_sym_mut を追加するか、ここで直接アクセスする
-// 現時点では define() で上書き定義する
-trait SymbolTableExt {
-    fn lookup_sym_mut(&mut self, name: &[u8]) -> Option<&mut Symbol>;
-}
-
-impl SymbolTableExt for SymbolTable {
-    fn lookup_sym_mut(&mut self, _name: &[u8]) -> Option<&mut Symbol> {
-        // SymbolTable に内部 HashMap へのアクセスが必要
-        // 現時点では None を返す（ext_attrib 更新を後回し）
-        None
-    }
-}
+// SymbolTable::lookup_sym_mut は symbol/mod.rs に実装済み
 
 // ダミーハンドラ（未実装 If/Ifne/Ifeq エイリアス対応）
 trait InsnHandlerAlias {}
