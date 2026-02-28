@@ -164,13 +164,7 @@ pub fn pass1(
                 // HAS はインクルード終了時にセクション変更レコードを出力しない
             }
             ReadResult::Line(line) => {
-                let list_ctrl = detect_prn_list_control(&line, &p1);
-                let mut emit_line_info = p1.ctx.opts.make_prn && p1.ctx.prn_listing;
-                // `.nlist` は当該行から listing を停止する。
-                if matches!(list_ctrl, Some(false)) {
-                    emit_line_info = false;
-                }
-                if emit_line_info {
+                if should_emit_line_info(&line, &p1, false) {
                     let line_num = source.current().line;
                     records.push(TempRecord::LineInfo { line_num, text: line.clone(), is_macro: false });
                 }
@@ -216,6 +210,21 @@ fn detect_prn_list_control(line: &[u8], p1: &P1Ctx<'_>) -> Option<bool> {
         Some(InsnHandler::Nlist) => Some(false),
         _ => None,
     }
+}
+
+/// 現在の設定で行情報を PRN に出力するかを判定する。
+fn should_emit_line_info(line: &[u8], p1: &P1Ctx<'_>, is_macro: bool) -> bool {
+    if !p1.ctx.opts.make_prn || !p1.ctx.prn_listing {
+        return false;
+    }
+    if is_macro && !p1.ctx.prn_macro_listing {
+        return false;
+    }
+    // `.nlist` は当該行から listing を停止する。
+    if matches!(detect_prn_list_control(line, p1), Some(false)) {
+        return false;
+    }
+    true
 }
 
 // ----------------------------------------------------------------
@@ -1798,8 +1807,13 @@ fn handle_pseudo(
         InsnHandler::Nlist => {
             p1.ctx.prn_listing = false;
         }
-        InsnHandler::Lall | InsnHandler::Sall
-        | InsnHandler::Width | InsnHandler::Page | InsnHandler::Title | InsnHandler::SubTtl => {}
+        InsnHandler::Lall => {
+            p1.ctx.prn_macro_listing = true;
+        }
+        InsnHandler::Sall => {
+            p1.ctx.prn_macro_listing = false;
+        }
+        InsnHandler::Width | InsnHandler::Page | InsnHandler::Title | InsnHandler::SubTtl => {}
 
         // ---- .fail ----
         InsnHandler::Fail => {
@@ -2687,6 +2701,14 @@ fn expand_macro_body(
             }
             _ => {
                 // 通常の行: parse_line に委譲
+                if should_emit_line_info(&expanded, p1, true) {
+                    let line_num = source.current().line;
+                    records.push(TempRecord::LineInfo {
+                        line_num,
+                        text: expanded.clone(),
+                        is_macro: true,
+                    });
+                }
                 parse_line(&expanded, records, p1, source);
             }
         }

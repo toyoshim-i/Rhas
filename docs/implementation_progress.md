@@ -140,7 +140,7 @@
 | 条件 | ✅ 完了 | `.if` `.iff` `.ifdef` `.ifndef` `.else` `.elseif` `.endif` |
 | ファイル | ✅ 完了 | `.include` `.insert` `.request` |
 | 制御 | ✅ 完了 | `.end` `.cpu` `.fail` |
-| リスト制御 | ✅ 完了 | `.list/.nlist` で PRN 行出力を制御（他のリスト系命令は no-op） |
+| リスト制御 | ✅ 完了 | `.list/.nlist` と `.sall/.lall` で PRN 行出力を制御（他のリスト系命令は no-op） |
 
 **参照ファイル**: `external/has060xx/src/pseudo.s`
 
@@ -234,7 +234,7 @@
 - `TempRecord::LineInfo`: パス3でのPRN行追跡用中間レコード
 - `src/pass/mod.rs`: シンボルファイル生成（`format_sym_file`）
 - `ctx.max_align` → `obj.has_align/max_align` 伝播修正（`$B204`レコード用）
-- 28 integration tests（PRN生成 + `.list/.nlist` + `-c4` 最適化 + `.equ/.set`/Pass2回帰 + `-g`検証を含む）通過
+- 29 integration tests（PRN生成 + `.list/.nlist` + `.sall/.lall` + `-c4` 最適化 + `.equ/.set`/Pass2回帰 + `-g`検証を含む）通過
 
 ---
 
@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 28件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 29件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -324,9 +324,13 @@
   - `src/pass/pass1.rs`: `.nlist` 行は当該行から非表示となるよう先読み判定を追加
   - `src/context.rs`: `AssemblyContext::prn_listing` フラグを追加
   - `tests/integration_test.rs`: `test_prn_nlist_and_list` を追加
+- PRN `.sall/.lall` マクロ行制御を実装
+  - `src/context.rs`: `AssemblyContext::prn_macro_listing` フラグを追加
+  - `src/pass/pass1.rs`: `.sall/.lall` でマクロ展開行の `LineInfo` 出力を切替
+  - `tests/integration_test.rs`: `test_prn_lall_shows_macro_expansion_lines` を追加
 - 検証結果
   - `cargo test --test golden_test`: 17/17 通過
-  - `cargo test --test integration_test`: 28/28 通過
+  - `cargo test --test integration_test`: 29/29 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 
 ### 2026-02-24

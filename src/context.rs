@@ -129,6 +129,8 @@ pub struct AssemblyContext {
     // ---- PRN制御 ----
     /// PRNリストへの行出力可否（.list/.nlist で制御）
     pub prn_listing: bool,
+    /// PRNリストでマクロ展開行を出力するか（.lall/.sall で制御）
+    pub prn_macro_listing: bool,
 }
 
 impl AssemblyContext {
@@ -166,6 +168,7 @@ impl AssemblyContext {
 
             request_files: Vec::new(),
             prn_listing: true,
+            prn_macro_listing: false,
         }
     }
 
