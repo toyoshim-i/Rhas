@@ -5,8 +5,8 @@
 
 ## 現在の前提（2026-03-01）
 - `cargo test`: pass
-- `golden_test`: 19/19 pass
-- `integration_test`: 79/79 pass
+- `golden_test`: 20/20 pass
+- `integration_test`: 82/82 pass
 - `error_message_test`: 5/5 pass
 - MS6（FPU/SCD/残互換機能）実装済み
 
@@ -30,11 +30,15 @@
 - 残: `fmovem` のレジスタリスト系、`fbcc`, `fdbcc`, `fsincos` など
 - 方針: 先に HAS060.X 側の最小ケースを確定し、その後実装
 
-2. SCD の追加境界ケース
-- 長名・exname 境界、`.tag` 未解決連鎖、`next` チェイン異常系
+2. SCD の追加境界ケース ✅
+- 長名・exname 境界（14/15）を追加
+- `.tag` 連鎖（未解決指定の後に解決可能タグを再指定）を追加
+- `next` チェイン異常系（孤立 `.eb/.ef`）を追加
 
-3. 実プログラム比較セットの拡張
-- MS5 の 17 ケースに加え、FPU/SCD を含む実ソースを追加
+3. 実プログラム比較セットの拡張 ✅
+- `tests/compare_ms6_extended.sh` を追加
+- MS5 の 17 ケース + `ms6_fpu_real` + `ms6_scd_real` の計 19 ケース比較を追加
+- 実行結果: `RESULT ok=19 diff=0`
 
 ## 進め方
 1. 先に「再現入力（asm）+ HAS期待値」を作る

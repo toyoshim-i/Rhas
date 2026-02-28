@@ -1391,6 +1391,64 @@ fn test_scd_file_entry_moves_short_extension_for_long_filename() {
     assert!(found, ".file entry should exist");
 }
 
+/// HAS互換: `.file` モードではファイル名が14文字までは exname を使わず、
+/// 15文字以上で exname を使う。
+#[test]
+fn test_scd_file_mode_exname_boundary_14_vs_15() {
+    // 14 chars: "1234567890abcd"
+    let mut f14 = NamedTempFile::new().expect("tempfile");
+    f14.write_all(
+        b"\t.file\t\"1234567890abcd\"\n\
+\tnop\n",
+    )
+    .expect("write");
+    let path14 = f14.path().to_str().expect("path").as_bytes().to_vec();
+    let opts14 = rhas::options::Options {
+        source_file: Some(path14),
+        make_sym_deb: false,
+        ..Default::default()
+    };
+    let mut ctx14 = rhas::context::AssemblyContext::new(opts14);
+    let result14 = rhas::pass::assemble(&mut ctx14).expect("assemble");
+    let (p14, line14, scd14, ex14) = find_scd_footer(&result14.obj_bytes);
+    assert_eq!(ex14, 0, "14-char .file should not use exname");
+    let entries14 = scd_entry_offsets(&result14.obj_bytes, p14, line14, scd14);
+    let file_ent14 = entries14
+        .into_iter()
+        .find(|&e| result14.obj_bytes[e..e + 8].starts_with(b".file"))
+        .expect(".file entry");
+    assert_eq!(
+        &result14.obj_bytes[file_ent14 + 18..file_ent14 + 32],
+        b"1234567890abcd"
+    );
+
+    // 15 chars: "1234567890abcde"
+    let mut f15 = NamedTempFile::new().expect("tempfile");
+    f15.write_all(
+        b"\t.file\t\"1234567890abcde\"\n\
+\tnop\n",
+    )
+    .expect("write");
+    let path15 = f15.path().to_str().expect("path").as_bytes().to_vec();
+    let opts15 = rhas::options::Options {
+        source_file: Some(path15),
+        make_sym_deb: false,
+        ..Default::default()
+    };
+    let mut ctx15 = rhas::context::AssemblyContext::new(opts15);
+    let result15 = rhas::pass::assemble(&mut ctx15).expect("assemble");
+    let (p15, line15, scd15, ex15) = find_scd_footer(&result15.obj_bytes);
+    assert!(ex15 >= 4, "15-char .file should use exname");
+    let scd_base15 = p15 + 12 + line15;
+    let scd_end15 = scd_base15 + scd15;
+    let exname15 = &result15.obj_bytes[scd_end15..scd_end15 + ex15];
+    assert_eq!(&exname15[0..2], &[0, 0]);
+    assert!(
+        exname15.windows(b"1234567890abcde".len()).any(|w| w == b"1234567890abcde"),
+        "exname should contain the full .file name"
+    );
+}
+
 /// HAS互換: `.bb` と `.eb` は .bb.next にチェインを形成する。
 #[test]
 fn test_scd_bb_eb_updates_bb_next_chain() {
@@ -1431,6 +1489,88 @@ fn test_scd_bb_eb_updates_bb_next_chain() {
     }
     assert!(bb_idx.is_some() && eb_idx.is_some());
     assert_eq!(bb_next, eb_idx.map(|v| v + 1));
+}
+
+/// HAS互換: `.eb` / `.ef` が単独で現れてもチェイン書き戻しは行わず、
+/// 既存エントリを壊さない。
+#[test]
+fn test_scd_orphan_eb_ef_keep_next_unchanged() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(
+        b"\t.file\t\"main.c\"\n\
+\t.def\t.eb\n\
+\t.endef\n\
+\t.def\t.ef\n\
+\t.endef\n\
+\tnop\n",
+    )
+    .expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: false,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+
+    let (p, line_len, scd_len, _) = find_scd_footer(bytes);
+    let offsets = scd_entry_offsets(bytes, p, line_len, scd_len);
+    let mut eb_next = None;
+    let mut ef_next = None;
+    for e in offsets {
+        let name = &bytes[e..e + 8];
+        if name.starts_with(b".eb") {
+            eb_next = Some(u32::from_be_bytes([bytes[e + 30], bytes[e + 31], bytes[e + 32], bytes[e + 33]]));
+        } else if name.starts_with(b".ef") {
+            ef_next = Some(u32::from_be_bytes([bytes[e + 30], bytes[e + 31], bytes[e + 32], bytes[e + 33]]));
+        }
+    }
+    assert_eq!(eb_next, Some(0));
+    assert_eq!(ef_next, Some(0));
+}
+
+/// HAS互換: `.tag` は最後に指定された名前を採用し、未解決タグ指定の後でも
+/// 解決可能な `.tag` が来れば Endef は出力される。
+#[test]
+fn test_scd_tag_last_wins_after_unresolved_tag() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(
+        b"\t.file\t\"main.c\"\n\
+\t.def\ttagok\n\
+\t.scl\t10\n\
+\t.endef\n\
+\t.def\tvar1\n\
+\t.tag\tmissing\n\
+\t.tag\ttagok\n\
+\t.endef\n\
+\tnop\n",
+    )
+    .expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: false,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+
+    let (p, line_len, scd_len, _) = find_scd_footer(bytes);
+    let offsets = scd_entry_offsets(bytes, p, line_len, scd_len);
+    let mut tagok_idx = None;
+    let mut var_tag = None;
+    for (i, e) in offsets.iter().copied().enumerate() {
+        let name = &bytes[e..e + 8];
+        if name.starts_with(b"tagok") {
+            tagok_idx = Some(i as u32);
+        } else if name.starts_with(b"var1") {
+            var_tag = Some(u32::from_be_bytes([bytes[e + 18], bytes[e + 19], bytes[e + 20], bytes[e + 21]]));
+        }
+    }
+    assert_eq!(var_tag, tagok_idx);
 }
 
 /// HAS互換: `.val` は Pass3 で再評価され、forward 参照でも Endef 値へ反映される。
