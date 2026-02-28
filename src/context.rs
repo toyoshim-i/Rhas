@@ -114,6 +114,8 @@ pub struct AssemblyContext {
     pub is_offset_mode: bool,
     /// .offset セクションのロケーションカウンタ
     pub offset_loc: u32,
+    /// `.offsym <expr>,<sym>` でシンボル指定付きオフセットモード中か
+    pub offsym_with_symbol: bool,
 
     // ---- 条件アセンブル ----
     /// .if のネスト深度（IFNEST）
@@ -165,6 +167,7 @@ impl AssemblyContext {
 
             is_offset_mode: false,
             offset_loc: 0,
+            offsym_with_symbol: false,
 
             if_nest: 0,
             if_skip_nest: 0,
@@ -202,6 +205,7 @@ impl AssemblyContext {
     /// セクションを切り替える（.offset モードを解除する）
     pub fn set_section(&mut self, sec: Section) {
         self.is_offset_mode = false;
+        self.offsym_with_symbol = false;
         self.section = sec;
     }
 

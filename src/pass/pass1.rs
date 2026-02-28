@@ -1396,6 +1396,10 @@ fn handle_pseudo(
 
         // ---- .even / .quad / .align ----
         InsnHandler::Even => {
+            if p1.ctx.offsym_with_symbol {
+                p1.error(".offsym 中に .even は指定できません");
+                return;
+            }
             if p1.is_offset_mode() {
                 // .offset モードでは実データを出力しない（カウンタを偶数に揃えるだけ）
                 let loc = p1.location();
@@ -1408,6 +1412,10 @@ fn handle_pseudo(
             }
         }
         InsnHandler::Quad => {
+            if p1.ctx.offsym_with_symbol {
+                p1.error(".offsym 中に .quad は指定できません");
+                return;
+            }
             if p1.is_offset_mode() {
                 let loc = p1.location();
                 let mask = 4u32 - 1;
@@ -1419,6 +1427,10 @@ fn handle_pseudo(
             }
         }
         InsnHandler::Align => {
+            if p1.ctx.offsym_with_symbol {
+                p1.error(".offsym 中に .align は指定できません");
+                return;
+            }
             skip_spaces(line, pos);
             let n = parse_align_n(line, pos, p1);
             if let Some(n) = n {
@@ -1657,6 +1669,7 @@ fn handle_pseudo(
                     p1.eval_const(&rpn).map(|v| v.value as u32).unwrap_or(0)
                 } else { 0 }
             } else { 0 };
+            p1.ctx.offsym_with_symbol = false;
             p1.ctx.set_offset_mode(val);
         }
 
@@ -2086,6 +2099,7 @@ fn handle_pseudo(
             };
 
             skip_spaces(line, pos);
+            let mut has_symbol = false;
             if *pos < line.len() && line[*pos] == b',' {
                 *pos += 1;
                 skip_spaces(line, pos);
@@ -2123,6 +2137,7 @@ fn handle_pseudo(
                         p1.sym.define(name, sym);
                     }
                 }
+                has_symbol = true;
                 skip_spaces(line, pos);
             }
 
@@ -2130,6 +2145,7 @@ fn handle_pseudo(
                 p1.error(".offsym のオペランドが不正です");
                 return;
             }
+            p1.ctx.offsym_with_symbol = has_symbol;
             p1.ctx.set_offset_mode(init as u32);
         }
 

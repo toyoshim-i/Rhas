@@ -386,6 +386,30 @@ fn test_offsym_with_symbol_sets_symbol_value() {
     assert_eq!(text.bytes, [0x70, 0x20]);
 }
 
+/// `.offsym <expr>,<sym>` 中は `.even/.quad/.align` を許可しない。
+#[test]
+fn test_offsym_with_symbol_rejects_alignment_directives() {
+    for src in [
+        b"\t.offsym\t0,BASE\n\t.even\n".as_slice(),
+        b"\t.offsym\t0,BASE\n\t.quad\n".as_slice(),
+        b"\t.offsym\t0,BASE\n\t.align\t4\n".as_slice(),
+    ] {
+        let mut f = NamedTempFile::new().expect("tempfile");
+        f.write_all(src).expect("write");
+        let path = f.path().to_str().expect("path").as_bytes().to_vec();
+        let opts = rhas::options::Options {
+            source_file: Some(path),
+            ..Default::default()
+        };
+        let mut ctx = rhas::context::AssemblyContext::new(opts);
+        match rhas::pass::assemble(&mut ctx) {
+            Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
+            Err(other) => panic!("unexpected error: {:?}", other),
+            Ok(_) => panic!("assemble should fail"),
+        }
+    }
+}
+
 /// .if/.endif 条件アセンブル
 #[test]
 fn test_conditional_asm() {
