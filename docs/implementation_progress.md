@@ -29,35 +29,11 @@
 - PRN / SYM 出力: 完了
 
 ### MS6 関連（完了済み部分）
-- `.offsym`（制約・上書き挙動含む）
-- `.fpid`（範囲検証・無効化挙動）
-- FPU コア命令
-- `fnop` / `fsave` / `frestore`
-- `fmove` / `fmovecr`
-- `fadd` / `fsub` / `fmul` / `fdiv` / `fcmp` / `ftst`
-- FPU レジスタオペランド（`FPn/FPCR/FPSR/FPIAR`）のパース
-- `.fpid` を FPU 命令エンコードへ反映（CPID）
-- SCD 疑似命令の構文/値検証
-- SCD TempRecord 化と Pass3 収集
-- `$0000` 後の SCD フッタ出力（line/scd/exname）
-- `-g` モードでの `func/.bf/.ef` 自動エントリ
-- `.file` と `B204` の役割分離
-- SCD フッタ `.file` 名のモード分岐
-- `-g`: 入力ソース名を使用
-- `.file` モード（`-g` なし）: `.file` 指定名を使用
-- SCD 疑似命令の有効化条件（`-g` では無効 / `-g` なしで `.file` 必須）
-- `-g` のみ時の SCD デフォルト行エントリ
-- exname 条件を 14文字超へ調整
-- SCD エントリ列の可変長出力（`len` 依存）
-- `.type` のロング判定を HAS 互換（0x20/0x30 のみ）へ修正
-- `.scl 16`（enum メンバ）の section を SCD 出力時に `-2` へ補正
-- `.endef` の attrib 自動決定（function/tag/extern/static）を HAS 互換化
-- `.ln/.line` の値域を HAS 互換化（下位16bitへ丸め）
-- `.scl -1` 時の関数終端位置を保持し、SCD関数エントリ size へ反映
-- `.tag` 参照を SCD `tag` フィールドへ反映
-- `attrib` に応じた `next` チェイン（`.bb/.eb`, `.bf/.ef`, tag begin/end, function end）を反映
-- `.val` を Pass3 で再評価し、forward 参照を SCD `value/section` へ反映
-- 長いソース名時の `.file` エントリ（14バイト領域と `SCDFILENUM` 追記）を HAS 互換化
+- `.offsym` / `.fpid`
+- FPU コア命令（`fnop/fsave/frestore/fmove/fmovecr/fadd/fsub/fmul/fdiv/fcmp/ftst`）
+- FPU レジスタオペランド（`FPn/FPCR/FPSR/FPIAR`）と CPID 反映
+- SCD の HAS 互換2モード（`-g` と `.file` モード）
+- SCD フッタ（可変長エントリ、`.file` 長名/`SCDFILENUM`、`next` チェイン、`.val` 再評価）
 
 ## テスト状況
 | スイート | 状態 |
@@ -67,8 +43,8 @@
 | ゴールデン（17） | ✅ 全通過 |
 | MS5簡易比較（17） | ✅ 全一致 |
 
-## MS6 残タスク
-- なし（MS6 スコープ完了）
+## 検証残タスク
+- 実装タスクは完了。検証の積み残しは [verification_backlog.md](verification_backlog.md) を参照。
 
 ## 直近コミット（ドキュメント時点）
 - `3bb7f62` Align SCD `.file` exname threshold to 14+ chars

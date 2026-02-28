@@ -144,4 +144,5 @@ zsh tests/gen_golden.sh
 | [docs/hlk_object_format.md](docs/hlk_object_format.md) | HLK オブジェクトファイルフォーマット仕様 |
 | [docs/m68000_addressing.md](docs/m68000_addressing.md) | M68000 実効アドレスモード仕様 |
 | [docs/implementation_progress.md](docs/implementation_progress.md) | 実装フェーズ別の詳細進捗 |
-| [docs/testing.md](docs/testing.md) | テスト戦略・テストケース一覧・今後の課題 |
+| [docs/testing.md](docs/testing.md) | テスト戦略・実行手順・現行カバレッジ |
+| [docs/verification_backlog.md](docs/verification_backlog.md) | 積み残し検証項目（優先度付き） |

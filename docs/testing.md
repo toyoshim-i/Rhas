@@ -7,7 +7,7 @@ rhas のテストは以下の 3 層で構成する。
 |---|---|---:|---|
 | ユニットテスト | `src/**` | 多数 | モジュール単体の正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17 | HAS060.X とのバイト一致 |
-| 統合テスト | `tests/integration_test.rs` | 72 | 3パス全体の振る舞い検証 |
+| 統合テスト | `tests/integration_test.rs` | 75 | 3パス全体の振る舞い検証 |
 
 ## 実行コマンド
 ```bash
@@ -56,25 +56,5 @@ SCD まわりで現在固定している仕様:
 3. パス間相互作用やファイル出力仕様は統合テスト
 4. 仕様変更時は docs とテスト名を同時更新
 
-## 直近の追加（要約）
-- `.file` と `B204` の責務分離をテスト固定
-- SCD フッタ `.file` 名のモード分岐（`-g` は入力ソース名 / `.file` モードは `.file` 指定名）を固定
-- 未解決 `.tag` 付き `.endef` の抑止をテスト固定
-- SCD 疑似命令の有効化条件（`.file` 必須）をテスト固定
-- `-g` のみ時の SCD デフォルト行エントリをテスト追加
-- `.type` のロング化条件（0x20/0x30 のみ）をテスト固定
-- `.scl 16` の section=-2 補正をフッタ出力で検証
-- `.endef` の attrib 補完（function/tag/extern/static）をテスト固定
-- `.ln/.line` の 16bit 丸め挙動をテスト固定
-- `.scl -1` による関数 `size` 確定（SCD フッタ）をテスト固定
-- `.tag` の `tag` フィールド反映をテスト固定
-- `.bb/.eb` の `next` チェイン反映をテスト固定
-- forward 参照 `.val` を Pass3 で再評価して SCD 値へ反映
-- `.file` exname 条件を 14 文字超に調整
-- 長いソース名時の `.file` 14バイト領域 + `SCDFILENUM` 書き込みを固定
-- FPU コア命令（`fnop/fsave/frestore/fmove/fmovecr/fadd/fsub/fmul/fdiv/fcmp/ftst`）を統合テストで固定
-- `.fpid` によるコプロセッサID反映を FPU 命令バイト列で検証
-
-## 残課題
-- `-c4` の未カバー最適化フラグ個別ゴールデン追加
-- エラーメッセージ比較用の専用テストファイル整備
+## 検証バックログ
+残タスクは [verification_backlog.md](verification_backlog.md) で優先度付き管理に統一する。
