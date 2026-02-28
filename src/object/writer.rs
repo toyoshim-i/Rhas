@@ -32,6 +32,7 @@ struct ScdEntry {
     dim0: u16,
     dim1: u16,
     next: u32,
+    tail: u16,
 }
 
 fn fill_scd_name(dst: &mut [u8; 8], s: &[u8]) {
@@ -39,14 +40,47 @@ fn fill_scd_name(dst: &mut [u8; 8], s: &[u8]) {
     dst[..n].copy_from_slice(&s[..n]);
 }
 
-fn set_file_bytes(ent: &mut ScdEntry, s: &[u8]) {
-    let mut buf = [0u8; 12];
-    let n = s.len().min(12);
-    buf[..n].copy_from_slice(&s[..n]);
-    ent.tag = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
-    ent.size = u32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]);
-    ent.dim0 = u16::from_be_bytes([buf[8], buf[9]]);
-    ent.dim1 = u16::from_be_bytes([buf[10], buf[11]]);
+fn set_file_bytes(ent: &mut ScdEntry, s: &[u8], scd_file_num: u32) {
+    // HAS互換: .file は SCD_TAG 起点の 14 バイト領域へ書く。
+    let mut buf14 = [0u8; 14];
+    let n = s.len().min(14);
+    buf14[..n].copy_from_slice(&s[..n]);
+
+    // 14バイトを超える場合、拡張子が3文字以下なら末尾へ寄せる。
+    // その場合は SCDFILENUM を (SCD_NEXT+2) へ書き込む。
+    if s.len() > 14 {
+        if let Some(dot_pos) = s.iter().position(|b| *b == b'.') {
+            let ext_len = s.len().saturating_sub(dot_pos + 1);
+            if ext_len <= 3 {
+                let mut out_idx = 14usize;
+                let mut src_idx = s.len();
+                while src_idx > 0 && out_idx > 0 {
+                    src_idx -= 1;
+                    out_idx -= 1;
+                    let ch = s[src_idx];
+                    buf14[out_idx] = ch;
+                    if ch == b'.' {
+                        break;
+                    }
+                }
+
+                let sc = scd_file_num.to_be_bytes();
+                let mut next = [buf14[12], buf14[13], 0, 0];
+                next[2] = sc[0];
+                next[3] = sc[1];
+                ent.next = u32::from_be_bytes(next);
+                ent.tail = u16::from_be_bytes([sc[2], sc[3]]);
+            }
+        }
+    }
+
+    ent.tag = u32::from_be_bytes([buf14[0], buf14[1], buf14[2], buf14[3]]);
+    ent.size = u32::from_be_bytes([buf14[4], buf14[5], buf14[6], buf14[7]]);
+    ent.dim0 = u16::from_be_bytes([buf14[8], buf14[9]]);
+    ent.dim1 = u16::from_be_bytes([buf14[10], buf14[11]]);
+    if ent.next == 0 {
+        ent.next = u32::from_be_bytes([buf14[12], buf14[13], 0, 0]);
+    }
 }
 
 fn push_scd_entry(out: &mut Vec<u8>, e: &ScdEntry) {
@@ -61,7 +95,7 @@ fn push_scd_entry(out: &mut Vec<u8>, e: &ScdEntry) {
     out.extend_from_slice(&e.dim0.to_be_bytes());
     out.extend_from_slice(&e.dim1.to_be_bytes());
     out.extend_from_slice(&e.next.to_be_bytes());
-    out.extend_from_slice(&0u16.to_be_bytes()); // 未使用
+    out.extend_from_slice(&e.tail.to_be_bytes()); // 未使用
 }
 
 fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
@@ -73,7 +107,16 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     let mut entries: Vec<ScdEntry> = Vec::new();
     let text_size = obj.sections.first().map(|s| s.size).unwrap_or(0);
     let mut exname_data: Vec<u8> = Vec::new();
-    if obj.scd_file.len() > 14 {
+    // HAS互換: `.file` 使用時は 14文字超で exname を使う。
+    // `.file` 未使用（-gのみ）では入力ソース名を exname 側へ常に出力する。
+    let use_exname = if obj.scd_enabled {
+        obj.scd_file.len() > 14
+    } else {
+        true
+    };
+    if use_exname {
+        // HAS互換: exname 領域は先頭ワードを 0 で始める。
+        exname_data.extend_from_slice(&[0, 0]);
         exname_data.extend_from_slice(&obj.scd_file);
         exname_data.push(0);
         if (exname_data.len() & 1) != 0 {
@@ -90,7 +133,8 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
         ..Default::default()
     };
     fill_scd_name(&mut file_ent.name, b".file");
-    set_file_bytes(&mut file_ent, &obj.scd_file);
+    let scd_file_num = if exname_data.is_empty() { 0 } else { 2 };
+    set_file_bytes(&mut file_ent, &obj.scd_file, scd_file_num);
     entries.push(file_ent);
 
     // HAS の scdout0 相当: 関数/.bf/.ef の雛形を追加する。
@@ -104,7 +148,12 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
         next: 8,
         ..Default::default()
     };
-    fill_scd_name(&mut func_ent.name, &obj.source_name);
+    if exname_data.is_empty() {
+        fill_scd_name(&mut func_ent.name, &obj.source_name);
+    } else {
+        // HAS互換: 関数名は exname へのオフセット参照（先頭エントリ=2）。
+        func_ent.name[4..8].copy_from_slice(&2u32.to_be_bytes());
+    }
     entries.push(func_ent);
 
     let mut bf_ent = ScdEntry {
@@ -112,7 +161,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
         section: 1,
         scl: 0x65,
         len: 1,
-        size: 1,
+        size: 1 << 16,
         next: 6,
         ..Default::default()
     };
@@ -245,13 +294,16 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
             }
         }
     }
-    // HAS 互換: `-g` のみ（`.file` 未使用）では先頭にダミー行番号エントリを持つ。
-    if !obj.scd_enabled && lines.is_empty() {
-        lines.push((2, 0));
+    // HAS 互換: SCD 行番号テーブルは先頭にダミー行番号エントリを持つ。
+    lines.insert(0, (2, 0));
+    // .text の size は行番号データ数。
+    if let Some(text) = entries.iter_mut().find(|e| &e.name[..5] == b".text") {
+        text.size = lines.len() as u32;
     }
-    // .ef の line count 相当を埋める（近似: 最大行番号）
+    // .ef の line count 相当を埋める（move.w 相当: 上位16bit）。
     if let Some(ef) = entries.iter_mut().find(|e| &e.name[..3] == b".ef") {
-        ef.size = lines.iter().map(|(_, l)| *l as u32).max().unwrap_or(0);
+        let max_line = lines.iter().map(|(_, l)| *l as u32).max().unwrap_or(0);
+        ef.size = max_line << 16;
     }
 
     let line_len = (lines.len() as u32) * 6;
@@ -303,7 +355,11 @@ pub fn write_hlk(obj: &ObjectCode) -> Vec<u8> {
     if obj.has_align || obj.has_debug_info {
         out.push(0xB2);
         out.push(0x04);
-        let n = obj.max_align as u32;
+        let n = if obj.has_debug_info {
+            obj.max_align.max(1) as u32
+        } else {
+            obj.max_align as u32
+        };
         out.extend_from_slice(&n.to_be_bytes());
         // '*' + ソースファイル名（拡張子あり）+ '*'（偶数バイトパディング付き null 終端）
         let mut b204_str = Vec::new();

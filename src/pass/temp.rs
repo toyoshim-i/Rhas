@@ -86,6 +86,8 @@ pub enum TempRecord {
 
     /// SCD: `.ln <line>[,<loc>]`
     ScdLn { line: u16, loc: Rpn },
+    /// SCD: `-g` 時の行頭自動行番号（linetop 相当）
+    ScdAutoLn { line: u16, loc: Rpn },
     /// SCD: `.val <expr>`
     ScdVal { rpn: Rpn },
     /// SCD: `.tag <name>`

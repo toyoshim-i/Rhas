@@ -177,6 +177,21 @@ pub fn pass1(
                     let line_num = source.current().line;
                     records.push(TempRecord::LineInfo { line_num, text: line.clone(), is_macro: false });
                 }
+                // HAS互換: -g 時は .text の各ソース行開始で行番号データを記録する。
+                // .include 内・コメント行・空行は除外する。
+                if p1.ctx.opts.make_sym_deb
+                    && source.nest_depth() == 1
+                    && p1.section_id() == 1
+                    && !line.is_empty()
+                    && line.first() != Some(&b'*')
+                    && line.first() != Some(&b';')
+                {
+                    let line_u16 = source.current().line as u16;
+                    records.push(TempRecord::ScdAutoLn {
+                        line: line_u16,
+                        loc: vec![RPNToken::Location, RPNToken::End],
+                    });
+                }
                 parse_line(&line, &mut records, &mut p1, source);
                 if p1.is_end { break; }
             }

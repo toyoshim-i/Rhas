@@ -655,7 +655,7 @@ fn test_g_option_emits_b204_record() {
     assert!(found, "B204 record should exist when -g is enabled");
 }
 
-/// HAS互換: `-g` のみ（`.file` 未使用）では SCD 行番号テーブルにダミー1件を持つ。
+/// HAS互換: `-g` のみ（`.file` 未使用）ではダミー + 自動行番号の2件を持つ。
 #[test]
 fn test_g_only_emits_default_scd_line_entry() {
     let mut f = NamedTempFile::new().expect("tempfile");
@@ -684,12 +684,16 @@ fn test_g_only_emits_default_scd_line_entry() {
         .expect("0000 terminator");
     let p = end_pos + 2;
     let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]);
-    assert_eq!(line_len, 6);
+    assert_eq!(line_len, 12);
     let q = p + 12;
-    let loc = u32::from_be_bytes([bytes[q], bytes[q + 1], bytes[q + 2], bytes[q + 3]]);
-    let line = u16::from_be_bytes([bytes[q + 4], bytes[q + 5]]);
-    assert_eq!(loc, 2);
-    assert_eq!(line, 0);
+    let loc0 = u32::from_be_bytes([bytes[q], bytes[q + 1], bytes[q + 2], bytes[q + 3]]);
+    let line0 = u16::from_be_bytes([bytes[q + 4], bytes[q + 5]]);
+    let loc1 = u32::from_be_bytes([bytes[q + 6], bytes[q + 7], bytes[q + 8], bytes[q + 9]]);
+    let line1 = u16::from_be_bytes([bytes[q + 10], bytes[q + 11]]);
+    assert_eq!(loc0, 2);
+    assert_eq!(line0, 0);
+    assert_eq!(loc1, 0);
+    assert_eq!(line1, 1);
 }
 
 /// SCD有効時（-g）に `.ln` は行番号を保持し、2番目オペランド式も受理する。
@@ -1262,6 +1266,62 @@ fn test_scd_unresolved_tag_suppresses_endef_entry() {
         !result.obj_bytes.windows(5).any(|w| w == b"var1\0"),
         "unresolved tag should suppress var1 SCD entry"
     );
+}
+
+/// HAS互換: 長いソース名の `.file` は14バイト領域末尾へ拡張子を寄せ、
+/// 追記領域へ SCDFILENUM(=2) を書く。
+#[test]
+fn test_scd_file_entry_moves_short_extension_for_long_filename() {
+    let mut f = Builder::new()
+        .prefix("case_tag_missing_longname_")
+        .suffix(".s")
+        .tempfile()
+        .expect("tempfile");
+    f.write_all(
+        b"\t.file\t\"main.c\"\n\
+\tnop\n",
+    )
+    .expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+
+    let end_pos = (0..bytes.len().saturating_sub(14))
+        .find(|&i| {
+            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
+                return false;
+            }
+            let p = i + 2;
+            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
+            p + 12 + line_len + scd_len + exname_len == bytes.len()
+        })
+        .expect("0000 terminator");
+    let p = end_pos + 2;
+    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+    let scd_base = p + 12 + line_len;
+    let scd_count = scd_len / 36;
+
+    let mut found = false;
+    for i in 0..scd_count {
+        let e = scd_base + i * 36;
+        if bytes[e..e + 8].starts_with(b".file") {
+            let file14 = &bytes[e + 18..e + 32];
+            assert_eq!(&file14[12..14], b".s");
+            assert_eq!(&bytes[e + 32..e + 36], &[0x00, 0x00, 0x00, 0x02]);
+            found = true;
+            break;
+        }
+    }
+    assert!(found, ".file entry should exist");
 }
 
 /// HAS互換: `.bb` と `.eb` は .bb.next にチェインを形成する。

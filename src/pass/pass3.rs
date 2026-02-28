@@ -735,6 +735,13 @@ pub fn pass3(
                 };
                 obj.scd_events.push(ScdEvent::Ln { line: *line, location, section });
             }
+            TempRecord::ScdAutoLn { line, loc } => {
+                let (location, section) = match ctx.eval(loc) {
+                    Ok(v) => (v.value as u32, if v.section == 0 { ctx.cur_sect } else { v.section }),
+                    Err(_) => (ctx.location(), ctx.cur_sect),
+                };
+                obj.scd_events.push(ScdEvent::Ln { line: *line, location, section });
+            }
             TempRecord::ScdVal { rpn } => {
                 // HAS互換: .val はオブジェクト生成段階で式評価した値を保持する。
                 let (value, section) = match ctx.eval(rpn) {

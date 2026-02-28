@@ -7,7 +7,7 @@ rhas のテストは以下の 3 層で構成する。
 |---|---|---:|---|
 | ユニットテスト | `src/**` | 多数 | モジュール単体の正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17 | HAS060.X とのバイト一致 |
-| 統合テスト | `tests/integration_test.rs` | 71 | 3パス全体の振る舞い検証 |
+| 統合テスト | `tests/integration_test.rs` | 72 | 3パス全体の振る舞い検証 |
 
 ## 実行コマンド
 ```bash
@@ -44,7 +44,7 @@ SCD まわりで現在固定している仕様:
 - `.file` の exname は 14 文字超で使用
 
 ## 現在の結果（2026-03-01）
-- `cargo test --test integration_test --quiet`: 71/71 pass
+- `cargo test --test integration_test --quiet`: 72/72 pass
 - `cargo test --test golden_test --quiet`: 17/17 pass
 - `./tests/compare_ms5_simple.sh`: 17/17 一致
 
@@ -69,6 +69,7 @@ SCD まわりで現在固定している仕様:
 - `.bb/.eb` の `next` チェイン反映をテスト固定
 - forward 参照 `.val` を Pass3 で再評価して SCD 値へ反映
 - `.file` exname 条件を 14 文字超に調整
+- 長いソース名時の `.file` 14バイト領域 + `SCDFILENUM` 書き込みを固定
 
 ## 残課題
 - FPU 命令（68881/68882）のゴールデン/統合テスト追加

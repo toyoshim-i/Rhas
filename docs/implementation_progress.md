@@ -48,12 +48,13 @@
 - `.tag` 参照を SCD `tag` フィールドへ反映
 - `attrib` に応じた `next` チェイン（`.bb/.eb`, `.bf/.ef`, tag begin/end, function end）を反映
 - `.val` を Pass3 で再評価し、forward 参照を SCD `value/section` へ反映
+- 長いソース名時の `.file` エントリ（14バイト領域と `SCDFILENUM` 追記）を HAS 互換化
 
 ## テスト状況
 | スイート | 状態 |
 |---|---|
 | ユニット | ✅ 全通過 |
-| 統合（71） | ✅ 全通過 |
+| 統合（72） | ✅ 全通過 |
 | ゴールデン（17） | ✅ 全通過 |
 | MS5簡易比較（17） | ✅ 全一致 |
 
