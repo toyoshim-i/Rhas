@@ -63,6 +63,23 @@ SCD まわりで現在固定している仕様:
 - `./tests/compare_ms5_simple.sh`: 17/17 一致
 - `./tests/compare_ms6_extended.sh`: 19/19 一致
 
+## リグレッション利用チェック
+クリーンアップ系変更では、以下を「互換性リグレッションセット」として扱う。
+
+1. 常時実行可能（ローカルのみで完結）
+- `cargo test --test integration_test --quiet`
+- `cargo test --test golden_test --quiet`
+- `cargo test --test error_message_test --quiet`
+
+2. 外部ツール前提（HAS060.X + run68 が必要）
+- `./tests/compare_ms5_simple.sh`
+- `./tests/compare_ms6_extended.sh`
+
+3. 判定ルール
+- 1 の全通過を必須ゲートとする
+- 2 は実行可能環境では必須、未実行時は未実行理由を記録する
+- 互換性変更を含む場合は 1+2 を両方実行して結果をドキュメント反映する
+
 ## テスト追加ルール
 1. 単体ロジックはユニットテストを優先
 2. HAS 互換性を確認するものはゴールデンテスト
