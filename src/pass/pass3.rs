@@ -728,6 +728,13 @@ pub fn pass3(
             TempRecord::LineInfo { line_num, text, is_macro } => {
                 ctx.prn_start(*line_num, text.clone(), *is_macro);
             }
+            TempRecord::ScdLn { .. }
+            | TempRecord::ScdVal { .. }
+            | TempRecord::ScdTag { .. }
+            | TempRecord::ScdEndef { .. }
+            | TempRecord::ScdFuncEnd => {
+                // MS6段階: SCDレコードはPass1で保持し、出力本体は後続ステップで実装する。
+            }
         }
     }
 

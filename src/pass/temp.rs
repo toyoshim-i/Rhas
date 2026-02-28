@@ -83,6 +83,25 @@ pub enum TempRecord {
 
     /// PRNリストファイル用ソース行情報（-p オプション有効時のみ挿入）
     LineInfo { line_num: u32, text: Vec<u8>, is_macro: bool },
+
+    /// SCD: `.ln <line>[,<loc>]`
+    ScdLn { line: u16, loc: Rpn },
+    /// SCD: `.val <expr>`
+    ScdVal { rpn: Rpn },
+    /// SCD: `.tag <name>`
+    ScdTag { name: Vec<u8> },
+    /// SCD: `.endef`（SCDTEMP スナップショット）
+    ScdEndef {
+        name: Vec<u8>,
+        attrib: u8,
+        scl: u8,
+        type_code: u16,
+        size: u32,
+        dim: [u16; 4],
+        is_long: bool,
+    },
+    /// SCD: `.scl -1`（関数定義終了）
+    ScdFuncEnd,
 }
 
 impl TempRecord {

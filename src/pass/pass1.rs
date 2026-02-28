@@ -2010,6 +2010,15 @@ fn handle_pseudo(
                         p1.error(".endef にオペランドは指定できません");
                         return;
                     }
+                    records.push(TempRecord::ScdEndef {
+                        name: p1.ctx.scd_temp.name.clone(),
+                        attrib: p1.ctx.scd_temp.attrib,
+                        scl: p1.ctx.scd_temp.scl,
+                        type_code: p1.ctx.scd_temp.type_code,
+                        size: p1.ctx.scd_temp.size,
+                        dim: p1.ctx.scd_temp.dim,
+                        is_long: p1.ctx.scd_temp.is_long,
+                    });
                     p1.ctx.scd_temp = crate::context::ScdTemp::default();
                 }
                 InsnHandler::Val => {
@@ -2018,15 +2027,36 @@ fn handle_pseudo(
                         p1.error(".val の式がありません");
                         return;
                     }
-                    if parse_expr(line, pos).is_err() {
-                        p1.error(".val の式が不正です");
-                        return;
-                    }
+                    let rpn = if line[*pos] == b'.' {
+                        let mut p = *pos + 1;
+                        skip_spaces(line, &mut p);
+                        if p >= line.len() || line[p] == b';' {
+                            *pos = p;
+                            vec![RPNToken::Location, RPNToken::End]
+                        } else {
+                            match parse_expr(line, pos) {
+                                Ok(rpn) => rpn,
+                                Err(_) => {
+                                    p1.error(".val の式が不正です");
+                                    return;
+                                }
+                            }
+                        }
+                    } else {
+                        match parse_expr(line, pos) {
+                            Ok(rpn) => rpn,
+                            Err(_) => {
+                                p1.error(".val の式が不正です");
+                                return;
+                            }
+                        }
+                    };
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] != b';' {
                         p1.error(".val のオペランドが不正です");
                         return;
                     }
+                    records.push(TempRecord::ScdVal { rpn });
                 }
                 InsnHandler::Scl => {
                     skip_spaces(line, pos);
@@ -2044,6 +2074,7 @@ fn handle_pseudo(
                     }
                     if value == -1 {
                         p1.ctx.scd_temp.attrib = 0x2F;
+                        records.push(TempRecord::ScdFuncEnd);
                     } else if (0..=255).contains(&value) {
                         p1.ctx.scd_temp.scl = value as u8;
                     } else {
@@ -2085,6 +2116,7 @@ fn handle_pseudo(
                         p1.error(".tag のオペランドが不正です");
                         return;
                     }
+                    records.push(TempRecord::ScdTag { name: tag_name });
                     p1.ctx.scd_temp.is_long = true;
                 }
                 InsnHandler::Ln => {
@@ -2100,20 +2132,25 @@ fn handle_pseudo(
                         p1.error(".ln の行番号は 0..65535 で指定してください");
                         return;
                     }
+                    let mut loc_rpn = vec![RPNToken::Location, RPNToken::End];
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] == b',' {
                         *pos += 1;
                         skip_spaces(line, pos);
-                        if parse_expr(line, pos).is_err() {
-                            p1.error(".ln のロケーション式が不正です");
-                            return;
-                        }
+                        loc_rpn = match parse_expr(line, pos) {
+                            Ok(rpn) => rpn,
+                            Err(_) => {
+                                p1.error(".ln のロケーション式が不正です");
+                                return;
+                            }
+                        };
                         skip_spaces(line, pos);
                     }
                     if *pos < line.len() && line[*pos] != b';' {
                         p1.error(".ln のオペランドが不正です");
                         return;
                     }
+                    records.push(TempRecord::ScdLn { line: line_no as u16, loc: loc_rpn });
                     p1.ctx.scd_ln = line_no as u16;
                 }
                 InsnHandler::Line => {

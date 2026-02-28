@@ -3,6 +3,7 @@
 /// アセンブラの 3 パスパイプライン全体を検証する。
 
 use std::io::Write;
+use std::path::PathBuf;
 use tempfile::NamedTempFile;
 
 // ─── ヘルパー ────────────────────────────────────────────────────────────────
@@ -45,6 +46,19 @@ fn assemble_src_c4(src: &[u8]) -> rhas::pass::AssembleResult {
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     rhas::pass::assemble(&mut ctx).expect("assemble")
+}
+
+/// ソーステキストを Pass1 のみ実行し、生成された TempRecord を返す。
+fn pass1_records(src: &[u8], make_sym_deb: bool) -> Vec<rhas::pass::temp::TempRecord> {
+    let buf = rhas::source::SourceBuf::from_bytes(src.to_vec(), PathBuf::from("inline.s"));
+    let mut source = rhas::source::SourceStack::new(buf, vec![]);
+    let opts = rhas::options::Options {
+        make_sym_deb,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let mut sym = rhas::symbol::SymbolTable::new(false);
+    rhas::pass::pass1::pass1(&mut source, &mut ctx, &mut sym)
 }
 
 // ─── MS1: 最小アセンブル ─────────────────────────────────────────────────────
@@ -748,6 +762,21 @@ fn test_scd_file_reflects_b204_filename() {
         result.obj_bytes.windows(pat.len()).any(|w| w == pat),
         "B204 payload should contain *main.c*"
     );
+}
+
+/// SCD疑似命令は Pass1 で専用 TempRecord に変換される。
+#[test]
+fn test_scd_records_are_emitted_in_pass1() {
+    let records = pass1_records(
+        b"\t.file\t\"main.c\"\n\t.ln\t12,*\n\t.def\tfoo\n\t.val\t.\n\t.tag\tbar\n\t.scl\t-1\n\t.endef\n",
+        true,
+    );
+    assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdLn { line, .. } if *line == 12)));
+    assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdVal { rpn }
+        if matches!(rpn.as_slice(), [rhas::expr::RPNToken::Location, rhas::expr::RPNToken::End]))));
+    assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdTag { name } if name.as_slice() == b"bar")));
+    assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdFuncEnd)));
+    assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { name, .. } if name.as_slice() == b"foo")));
 }
 
 /// `.request` は `$E001` レコードとして出力される。
