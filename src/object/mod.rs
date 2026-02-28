@@ -122,6 +122,8 @@ pub struct ObjectCode {
     pub has_align: bool,
     /// SCDデバッグ情報出力フラグ（-g）
     pub has_debug_info: bool,
+    /// SCD疑似命令が有効化されたか（`.file` 検出後）
+    pub scd_enabled: bool,
     /// 最大アライン値（2^n の n）
     pub max_align: u8,
     /// HLK コード本体（20xx セクション切り替え + 10xx コードブロック）
@@ -143,6 +145,7 @@ impl ObjectCode {
             request_files: Vec::new(),
             has_align: false,
             has_debug_info: false,
+            scd_enabled: false,
             max_align: 0,
             code_body: Vec::new(),
             scd_events: Vec::new(),

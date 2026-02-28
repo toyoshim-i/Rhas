@@ -171,6 +171,10 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
             _ => {}
         }
     }
+    // HAS 互換: `-g` のみ（`.file` 未使用）では先頭にダミー行番号エントリを持つ。
+    if !obj.scd_enabled && lines.is_empty() {
+        lines.push((2, 0));
+    }
     // .ef の line count 相当を埋める（近似: 最大行番号）
     if let Some(ef) = entries.iter_mut().find(|e| &e.name[..3] == b".ef") {
         ef.size = lines.iter().map(|(_, l)| *l as u32).max().unwrap_or(0);

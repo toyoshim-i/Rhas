@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 59件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 60件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -315,6 +315,11 @@
   - `src/context.rs`: `scd_enabled` フラグを追加（`.file` 検出で有効化）
   - `src/pass/pass1.rs`: `-g` 指定だけでは SCD疑似命令を無視し、`.file` 後のみ処理
   - `tests/integration_test.rs`: `test_scd_directives_require_file_directive` を追加
+- `-g` のみ時の SCD 行番号デフォルトを実装
+  - `src/object/mod.rs`: `ObjectCode.scd_enabled` を追加
+  - `src/pass/mod.rs`: `ctx.scd_enabled` を `obj.scd_enabled` へ伝搬
+  - `src/object/writer.rs`: `.file` 未使用で行番号が空の場合、`(loc=2,line=0)` を補完
+  - `tests/integration_test.rs`: `test_g_only_emits_default_scd_line_entry` を追加
 - `-g` 出力の `.file`/`B204` 役割分離を実装
   - `src/pass/mod.rs`: `ObjectCode.source_file`（B204）と `ObjectCode.scd_file`（SCD）を分離
   - `src/object/writer.rs`: SCD `.file` エントリと exname は `scd_file` を参照
@@ -346,7 +351,7 @@
   - `src/object/writer.rs`: `.file` が8文字超の場合に `EXNAMELEN` と末尾 exname データを出力
   - `tests/integration_test.rs`: `test_g_option_scd_footer_emits_exname_for_long_filename` を追加
 - 検証結果（最新）
-  - `cargo test --test integration_test`: 59/59 通過
+  - `cargo test --test integration_test`: 60/60 通過
   - `cargo test --test golden_test`: 17/17 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 

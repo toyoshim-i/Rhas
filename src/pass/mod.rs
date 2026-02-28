@@ -131,6 +131,7 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     let max_align = ctx.max_align;
     let (mut obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file.clone(), prn_enable, max_align);
     obj.has_debug_info = ctx.opts.make_sym_deb;
+    obj.scd_enabled = ctx.scd_enabled;
     obj.scd_file = if ctx.opts.make_sym_deb && !ctx.scd_file.is_empty() {
         ctx.scd_file.clone()
     } else {

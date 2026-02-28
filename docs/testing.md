@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 59件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 60件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイートを実行
@@ -186,6 +186,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_irpc` | `.irpc param, str` の各文字展開 |
 | `test_prn_list_file` | `-p` オプションで PRN リストファイルが生成される |
 | `test_g_option_emits_b204_record` | `-g` オプションで `$B204` レコードが出力される |
+| `test_g_only_emits_default_scd_line_entry` | `-g` のみ（`.file` 未使用）で SCD 行番号テーブルにデフォルト1件が出力されること |
 | `test_request_emits_e001_record` | `.request` が `$E001` レコードとして出力される |
 | `test_prn_nlist_and_list` | `.nlist` 区間がPRN非表示になり、`.list` で再開される |
 | `test_prn_lall_shows_macro_expansion_lines` | `.lall` でマクロ展開行が `*` 付きでPRNに出力される |
@@ -297,6 +298,7 @@ diff $ORIG_O $RHAS_O
 | 2026-03-01 | SCD疑似命令 `.file` を実装（SCD用ファイル名ワーク更新） | 回帰なし（golden 17/17, integration 51/51, MS5比較 17一致/0差分） |
 | 2026-03-01 | `-g` 時の `.file` と B204 の役割分離（B204は入力ソース名を維持） | 回帰なし（golden 17/17, integration 58/58, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD疑似命令を `.file` 有効化後のみ処理（HAS `checksymdeb` 相当） | 回帰なし（golden 17/17, integration 59/59, MS5比較 17一致/0差分） |
+| 2026-03-01 | `-g` のみ時に SCD 行番号テーブルへデフォルト `(loc=2,line=0)` を出力 | 回帰なし（golden 17/17, integration 60/60, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD疑似命令の `TempRecord` 化（`.ln/.val/.tag/.endef/.scl -1`）を実装 | 回帰なし（golden 17/17, integration 53/53, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCDイベントを `ObjectCode.scd_events` に収集（Pass3） | 回帰なし（golden 17/17, integration 54/54, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD `.val` の値/セクションを `.endef` スナップショットへ伝播 | 回帰なし（golden 17/17, integration 55/55, MS5比較 17一致/0差分） |

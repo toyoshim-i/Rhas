@@ -655,6 +655,43 @@ fn test_g_option_emits_b204_record() {
     assert!(found, "B204 record should exist when -g is enabled");
 }
 
+/// HAS互換: `-g` のみ（`.file` 未使用）では SCD 行番号テーブルにダミー1件を持つ。
+#[test]
+fn test_g_only_emits_default_scd_line_entry() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\tnop\n").expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+    let end_pos = (0..bytes.len().saturating_sub(14))
+        .find(|&i| {
+            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
+                return false;
+            }
+            let p = i + 2;
+            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
+            p + 12 + line_len + scd_len + exname_len == bytes.len()
+        })
+        .expect("0000 terminator");
+    let p = end_pos + 2;
+    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]);
+    assert_eq!(line_len, 6);
+    let q = p + 12;
+    let loc = u32::from_be_bytes([bytes[q], bytes[q + 1], bytes[q + 2], bytes[q + 3]]);
+    let line = u16::from_be_bytes([bytes[q + 4], bytes[q + 5]]);
+    assert_eq!(loc, 2);
+    assert_eq!(line, 0);
+}
+
 /// SCD有効時（-g）に `.ln` は行番号を保持し、2番目オペランド式も受理する。
 #[test]
 fn test_scd_ln_alias_updates_line_state() {
