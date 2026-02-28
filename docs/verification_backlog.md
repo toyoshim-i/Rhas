@@ -27,8 +27,8 @@
 ## 優先度B（継続的に追加）
 1. FPU 命令の未実装群の仕様確定とテスト化（着手中）
 - 第1段: `fmovem` 制御レジスタ転送（`fpcr/fpsr/fpiar` ↔ メモリ）を実装・固定化済み
-- 第2段: `fbcc` / `fdbcc` の基本バリアント（`fbeq/fbne/fbra/fbt/fbf`, `fdbeq/fdbne/fdbra/fdbt/fdbf`）を実装・固定化済み
-- 残: `fmovem` のレジスタリスト系、`fsincos`、`fbcc/fdbcc` の残条件バリアント
+- 第2段: `fbcc` / `fdbcc` 全条件バリアントを実装・固定化済み
+- 残: `fmovem` のレジスタリスト系、`fsincos`
 - 方針: 先に HAS060.X 側の最小ケースを確定し、その後実装
 
 2. SCD の追加境界ケース ✅

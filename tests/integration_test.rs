@@ -619,6 +619,14 @@ target_l:\n\
 \tnop\n\
 target_d:\n\
 \tnop\n\
+\tfbgt.w\ttarget_g\n\
+\tnop\n\
+target_g:\n\
+\tnop\n\
+\tfdbgt\td0,target_g2\n\
+\tnop\n\
+target_g2:\n\
+\tnop\n\
 ";
     let result = assemble_src(src);
     let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
@@ -634,6 +642,12 @@ target_d:\n\
             0xF6, 0x48, 0x00, 0x0E, 0x00, 0x04, // fdbne d0,target_d
             0x4E, 0x71,             // nop
             0x4E, 0x71,             // target_d: nop
+            0xF6, 0x92, 0x00, 0x04, // fbgt.w target_g
+            0x4E, 0x71,             // nop
+            0x4E, 0x71,             // target_g: nop
+            0xF6, 0x48, 0x00, 0x12, 0x00, 0x04, // fdbgt d0,target_g2
+            0x4E, 0x71,             // nop
+            0x4E, 0x71,             // target_g2: nop
         ]
     );
 }

@@ -669,6 +669,42 @@ static OPCODE_TABLE: &[OpcodeEntry] = &[
     OpcodeEntry::op("fbeq",     InsnHandler::FBcc,     0xF081, CpuMask(
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
     ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbogt",    InsnHandler::FBcc,     0xF082, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fboge",    InsnHandler::FBcc,     0xF083, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbolt",    InsnHandler::FBcc,     0xF084, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbole",    InsnHandler::FBcc,     0xF085, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbogl",    InsnHandler::FBcc,     0xF086, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbor",     InsnHandler::FBcc,     0xF087, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbun",     InsnHandler::FBcc,     0xF088, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbueq",    InsnHandler::FBcc,     0xF089, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbugt",    InsnHandler::FBcc,     0xF08A, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbuge",    InsnHandler::FBcc,     0xF08B, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbult",    InsnHandler::FBcc,     0xF08C, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbule",    InsnHandler::FBcc,     0xF08D, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
     OpcodeEntry::op("fbne",     InsnHandler::FBcc,     0xF08E, CpuMask(
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
     ), sz::WL, sz::NONE),
@@ -676,6 +712,54 @@ static OPCODE_TABLE: &[OpcodeEntry] = &[
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
     ), sz::WL, sz::NONE),
     OpcodeEntry::op("fbra",     InsnHandler::FBcc,     0xF08F, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbsf",     InsnHandler::FBcc,     0xF090, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbseq",    InsnHandler::FBcc,     0xF091, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbgt",     InsnHandler::FBcc,     0xF092, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbge",     InsnHandler::FBcc,     0xF093, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fblt",     InsnHandler::FBcc,     0xF094, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fble",     InsnHandler::FBcc,     0xF095, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbgl",     InsnHandler::FBcc,     0xF096, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbgle",    InsnHandler::FBcc,     0xF097, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbngle",   InsnHandler::FBcc,     0xF098, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbngl",    InsnHandler::FBcc,     0xF099, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbnle",    InsnHandler::FBcc,     0xF09A, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbnlt",    InsnHandler::FBcc,     0xF09B, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbnge",    InsnHandler::FBcc,     0xF09C, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbngt",    InsnHandler::FBcc,     0xF09D, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbsne",    InsnHandler::FBcc,     0xF09E, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbst",     InsnHandler::FBcc,     0xF09F, CpuMask(
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
     ), sz::WL, sz::NONE),
     // FDBcc
@@ -688,10 +772,94 @@ static OPCODE_TABLE: &[OpcodeEntry] = &[
     OpcodeEntry::op("fdbeq",    InsnHandler::FDBcc,    0x0001, CpuMask(
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
     ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbogt",   InsnHandler::FDBcc,    0x0002, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdboge",   InsnHandler::FDBcc,    0x0003, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbolt",   InsnHandler::FDBcc,    0x0004, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbole",   InsnHandler::FDBcc,    0x0005, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbogl",   InsnHandler::FDBcc,    0x0006, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbor",    InsnHandler::FDBcc,    0x0007, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbun",    InsnHandler::FDBcc,    0x0008, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbueq",   InsnHandler::FDBcc,    0x0009, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbugt",   InsnHandler::FDBcc,    0x000A, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbuge",   InsnHandler::FDBcc,    0x000B, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbult",   InsnHandler::FDBcc,    0x000C, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbule",   InsnHandler::FDBcc,    0x000D, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
     OpcodeEntry::op("fdbne",    InsnHandler::FDBcc,    0x000E, CpuMask(
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
     ), sz::NONE, sz::NONE),
     OpcodeEntry::op("fdbt",     InsnHandler::FDBcc,    0x000F, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbsf",    InsnHandler::FDBcc,    0x0010, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbseq",   InsnHandler::FDBcc,    0x0011, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbgt",    InsnHandler::FDBcc,    0x0012, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbge",    InsnHandler::FDBcc,    0x0013, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdblt",    InsnHandler::FDBcc,    0x0014, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdble",    InsnHandler::FDBcc,    0x0015, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbgl",    InsnHandler::FDBcc,    0x0016, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbgle",   InsnHandler::FDBcc,    0x0017, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbngle",  InsnHandler::FDBcc,    0x0018, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbngl",   InsnHandler::FDBcc,    0x0019, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbnle",   InsnHandler::FDBcc,    0x001A, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbnlt",   InsnHandler::FDBcc,    0x001B, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbnge",   InsnHandler::FDBcc,    0x001C, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbngt",   InsnHandler::FDBcc,    0x001D, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbsne",   InsnHandler::FDBcc,    0x001E, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbst",    InsnHandler::FDBcc,    0x001F, CpuMask(
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
     ), sz::NONE, sz::NONE),
     // 無操作命令（no-operand）はoptbln相当

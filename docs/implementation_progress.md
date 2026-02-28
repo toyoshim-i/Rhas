@@ -47,7 +47,7 @@
 | MS6拡張比較（19） | ✅ 全一致 |
 
 ## 検証残タスク
-- 優先度Bの残りは FPU 未実装群（`fmovem` レジスタリスト、`fsincos`、`fbcc/fdbcc` の未追加条件バリアント）の仕様確定と互換テスト化。
+- 優先度Bの残りは FPU 未実装群（`fmovem` レジスタリスト、`fsincos`）の仕様確定と互換テスト化。
 
 ## 直近コミット（ドキュメント時点）
 - `3bb7f62` Align SCD `.file` exname threshold to 14+ chars
