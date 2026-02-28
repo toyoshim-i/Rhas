@@ -134,7 +134,7 @@
 
 | 疑似命令グループ | 状態 | 説明 |
 |---|---|---|
-| セクション | ✅ 完了 | `.text` `.data` `.bss` `.stack` `.org` `.offset` `.offsym` |
+| セクション | ⚠️ 一部未完 | `.text` `.data` `.bss` `.stack` `.org` `.offset`（`.offsym` は暫定/厳密互換未実装） |
 | データ | ✅ 完了 | `.dc` `.ds` `.dcb` `.align` `.even` `.quad` |
 | シンボル | ✅ 完了 | `.equ` `.set` `.reg` `.xdef` `.xref` `.globl` `.comm` `.rcomm` `.rlcomm` |
 | 条件 | ✅ 完了 | `.if` `.iff` `.ifdef` `.ifndef` `.else` `.elseif` `.endif` |
@@ -287,6 +287,10 @@
 - `.sym` 出力で `.comm` 系シンボルの表示を改善
   - `src/pass/mod.rs`: `.comm/.rcomm/.rlcomm` を `UNDEF` ではなくサイズ付きで出力（`COMM/RCOM/RLCM`）
   - `tests/integration_test.rs`: `test_comm_symbol_is_visible_in_sym_file` を追加
+- 検証結果（最新）
+  - `cargo test --test integration_test`: 40/40 通過
+  - `cargo test --test golden_test`: 17/17 通過
+  - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 
 ### 2026-02-28
 

@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 37件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 40件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイートを実行
@@ -156,7 +156,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 
 ---
 
-## 3. 統合テスト（27件）
+## 3. 統合テスト（40件）
 
 `tests/integration_test.rs` — 3パス全体を通した end-to-end 検証。
 
@@ -201,6 +201,9 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_c4_cmpi0_to_tst` | `-c4` で `CMPI #0,Dn` が `TST Dn` に最適化されること |
 | `test_c4_movea_l_imm_to_w` | `-c4` で `MOVEA.L #d16,An` が `MOVEA.W` へ縮小されること |
 | `test_c4_asl_imm1_to_add` | `-c4` で `ASL #1,Dn` が `ADD Dn,Dn` に最適化されること |
+| `test_common_symbol_directives_emit_ext_symbols` | `.comm/.rcomm/.rlcomm` が `$B2FE/$B2FD/$B2FC` 外部シンボルとして出力されること |
+| `test_comm_rejects_non_positive_size` | `.comm` のサイズが 0 以下だとエラーになること |
+| `test_comm_symbol_is_visible_in_sym_file` | `.comm` シンボルが `.sym` に `COMM + サイズ値` として出力されること |
 
 ---
 
@@ -266,6 +269,7 @@ diff $ORIG_O $RHAS_O
 | 2026-02-28 | `prn_page_lines` による自動改ページを実装（行数到達時に FF） | 回帰なし（golden 17/17, integration 34/34, MS5比較 17一致/0差分） |
 | 2026-02-28 | `.page -1` と `.page +` の境界挙動をテスト追加で固定 | 回帰なし（golden 17/17, integration 36/36, MS5比較 17一致/0差分） |
 | 2026-02-28 | `prn_no_page_ff` の全改ページ抑制（明示/自動）をテスト追加で固定 | 回帰なし（golden 17/17, integration 37/37, MS5比較 17一致/0差分） |
+| 2026-03-01 | `.comm/.rcomm/.rlcomm` 本実装 + `.sym` 表示改善の統合テストを追加 | 回帰なし（golden 17/17, integration 40/40, MS5比較 17一致/0差分） |
 
 ---
 
