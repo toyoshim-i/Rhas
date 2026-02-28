@@ -216,7 +216,8 @@ pub fn encode_ea(ea: &EffectiveAddress, op_size: u8) -> Result<EaEncoded, Encode
         }
 
         // CCR/SR は命令固有のエンコードが必要（encode_move/encode_orandeorimm で処理）
-        EffectiveAddress::CcrReg | EffectiveAddress::SrReg => {
+        EffectiveAddress::CcrReg | EffectiveAddress::SrReg
+        | EffectiveAddress::FpReg(_) | EffectiveAddress::FpCtrlReg(_) => {
             Err(EncodeError::InvalidMode)
         }
     }

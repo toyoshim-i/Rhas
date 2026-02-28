@@ -625,6 +625,40 @@ static OPCODE_TABLE: &[OpcodeEntry] = &[
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::C520|
         crate::options::cpu::C530|crate::options::cpu::C540
     ), sz::NONE, sz::NONE),
+    // ---- FPU (68881/68882) ----
+    OpcodeEntry::op("fmove",    InsnHandler::FMove,    0xF200, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), SizeFlags(sz::B.0|sz::W.0|sz::L.0|sz::S.0|sz::D.0|sz::X.0|sz::P.0), sz::NONE),
+    OpcodeEntry::op("fadd",     InsnHandler::FArith,   0x0022, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), SizeFlags(sz::B.0|sz::W.0|sz::L.0|sz::S.0|sz::D.0|sz::X.0|sz::P.0), sz::NONE),
+    OpcodeEntry::op("fsub",     InsnHandler::FArith,   0x0028, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), SizeFlags(sz::B.0|sz::W.0|sz::L.0|sz::S.0|sz::D.0|sz::X.0|sz::P.0), sz::NONE),
+    OpcodeEntry::op("fmul",     InsnHandler::FArith,   0x0023, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), SizeFlags(sz::B.0|sz::W.0|sz::L.0|sz::S.0|sz::D.0|sz::X.0|sz::P.0), sz::NONE),
+    OpcodeEntry::op("fdiv",     InsnHandler::FArith,   0x0020, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), SizeFlags(sz::B.0|sz::W.0|sz::L.0|sz::S.0|sz::D.0|sz::X.0|sz::P.0), sz::NONE),
+    OpcodeEntry::op("fcmp",     InsnHandler::FCmp,     0x0038, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), SizeFlags(sz::B.0|sz::W.0|sz::L.0|sz::S.0|sz::D.0|sz::X.0|sz::P.0), sz::NONE),
+    OpcodeEntry::op("ftst",     InsnHandler::FTst,     0x003A, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), SizeFlags(sz::B.0|sz::W.0|sz::L.0|sz::S.0|sz::D.0|sz::X.0|sz::P.0), sz::NONE),
+    OpcodeEntry::op("fmovecr",  InsnHandler::FMoveCr,  0x5C00, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::X, sz::NONE),
+    OpcodeEntry::op("fsave",    InsnHandler::FSave,    0xF300, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("frestore", InsnHandler::FRestore, 0xF340, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::noop("fnop",   InsnHandler::FNop,     0xF080, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    )),
     // 無操作命令（no-operand）はoptbln相当
     OpcodeEntry::noop("nop",     InsnHandler::Bcc,  0x4E71, ALL),
     OpcodeEntry::noop("rts",     InsnHandler::Bcc,  0x4E75, ALL),

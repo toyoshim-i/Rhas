@@ -1121,7 +1121,8 @@ fn ea_ext_size(ea: &EffectiveAddress) -> u32 {
         EffectiveAddress::AbsLong(_) => 4,
         EffectiveAddress::Immediate(_) => 2,
         EffectiveAddress::AddrRegIdx { .. } | EffectiveAddress::PcIdx { .. } => 2,
-        EffectiveAddress::CcrReg | EffectiveAddress::SrReg => 0,
+        EffectiveAddress::CcrReg | EffectiveAddress::SrReg
+        | EffectiveAddress::FpReg(_) | EffectiveAddress::FpCtrlReg(_) => 0,
     }
 }
 

@@ -166,7 +166,7 @@ impl AssemblyContext {
 
             cpu_number,
             cpu_type,
-            fpid: 0,
+            fpid: 1,
 
             num_errors: 0,
             num_warnings: 0,

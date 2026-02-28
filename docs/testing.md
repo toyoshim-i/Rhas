@@ -46,7 +46,7 @@ SCD まわりで現在固定している仕様:
 - SCD フッタの SCD エントリ列は `len` 依存の可変長
 
 ## 現在の結果（2026-03-01）
-- `cargo test --test integration_test --quiet`: 72/72 pass
+- `cargo test --test integration_test --quiet`: 75/75 pass
 - `cargo test --test golden_test --quiet`: 17/17 pass
 - `./tests/compare_ms5_simple.sh`: 17/17 一致
 
@@ -72,8 +72,9 @@ SCD まわりで現在固定している仕様:
 - forward 参照 `.val` を Pass3 で再評価して SCD 値へ反映
 - `.file` exname 条件を 14 文字超に調整
 - 長いソース名時の `.file` 14バイト領域 + `SCDFILENUM` 書き込みを固定
+- FPU コア命令（`fnop/fsave/frestore/fmove/fmovecr/fadd/fsub/fmul/fdiv/fcmp/ftst`）を統合テストで固定
+- `.fpid` によるコプロセッサID反映を FPU 命令バイト列で検証
 
 ## 残課題
-- FPU 命令（68881/68882）のゴールデン/統合テスト追加
 - `-c4` の未カバー最適化フラグ個別ゴールデン追加
 - エラーメッセージ比較用の専用テストファイル整備

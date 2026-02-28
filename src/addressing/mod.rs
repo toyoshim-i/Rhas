@@ -169,6 +169,10 @@ pub enum EffectiveAddress {
     CcrReg,
     /// SR (Status Register) - MOVE to/from SR, ORI/ANDI/EORI #imm,SR
     SrReg,
+    /// 浮動小数点データレジスタ直接 FPn（n: 0-7）
+    FpReg(u8),
+    /// 浮動小数点制御レジスタ（FPCR/FPSR/FPIAR）
+    FpCtrlReg(u8),
 }
 
 impl EffectiveAddress {
@@ -189,6 +193,8 @@ impl EffectiveAddress {
             Self::Immediate(_)      => ea::IMM,
             Self::CcrReg            => 0,
             Self::SrReg             => 0,
+            Self::FpReg(_)          => 0,
+            Self::FpCtrlReg(_)      => 0,
         }
     }
 }

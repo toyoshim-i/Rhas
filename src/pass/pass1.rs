@@ -13,7 +13,7 @@ use crate::instructions::{encode_insn, InsnError};
 use crate::options::cpu as cpuconst;
 use crate::source::{ReadResult, SourceStack};
 use crate::symbol::{Symbol, SymbolTable};
-use crate::symbol::types::{DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeCode};
+use crate::symbol::types::{reg, DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeCode};
 use std::collections::HashMap;
 use super::temp::TempRecord;
 
@@ -923,6 +923,19 @@ fn handle_real_insn(
     // 命令最適化（-c4）
     let mut handler = handler;
     let mut opcode = opcode;
+    if matches!(
+        handler,
+        InsnHandler::FMove
+            | InsnHandler::FMoveCr
+            | InsnHandler::FArith
+            | InsnHandler::FCmp
+            | InsnHandler::FTst
+            | InsnHandler::FNop
+            | InsnHandler::FSave
+            | InsnHandler::FRestore
+    ) {
+        opcode = (opcode & !0x0E00) | ((u16::from(p1.ctx.fpid & 0x07)) << 9);
+    }
 
     // MOVE.l #imm,Dn → MOVEQ #imm,Dn（#-128..255）
     // MOVE.b/.w #0,Dn → CLR.b/.w Dn
@@ -1188,12 +1201,54 @@ fn parse_operands(
     sym:      &SymbolTable,
     cpu_type: u16,
 ) -> Vec<EffectiveAddress> {
+    fn parse_fp_register_token(
+        line: &[u8],
+        pos: &mut usize,
+        sym: &SymbolTable,
+        cpu_type: u16,
+    ) -> Option<EffectiveAddress> {
+        let start = *pos;
+        if start >= line.len() {
+            return None;
+        }
+        let c = line[start];
+        if !c.is_ascii_alphabetic() && c != b'_' {
+            return None;
+        }
+        let mut end = start + 1;
+        while end < line.len() {
+            let b = line[end];
+            if b.is_ascii_alphanumeric() || b == b'_' {
+                end += 1;
+            } else {
+                break;
+            }
+        }
+        let name = &line[start..end];
+        let regno = match sym.lookup_reg(name, cpu_type) {
+            Some(Symbol::Register { regno, .. }) => *regno,
+            _ => return None,
+        };
+        let ea = match regno {
+            reg::FP0..=reg::FP7 => EffectiveAddress::FpReg(regno - reg::FP0),
+            reg::FPCR => EffectiveAddress::FpCtrlReg(0),
+            reg::FPSR => EffectiveAddress::FpCtrlReg(1),
+            reg::FPIAR => EffectiveAddress::FpCtrlReg(2),
+            _ => return None,
+        };
+        *pos = end;
+        Some(ea)
+    }
+
     let mut ops = Vec::new();
     skip_spaces(line, &mut pos);
 
     loop {
         if pos >= line.len() || line[pos] == b';' { break; }
-        match parse_ea(line, &mut pos, sym, cpu_type) {
+        match parse_fp_register_token(line, &mut pos, sym, cpu_type)
+            .map(Ok)
+            .unwrap_or_else(|| parse_ea(line, &mut pos, sym, cpu_type))
+        {
             Ok(ea) => ops.push(ea),
             Err(_) => break,
         }
@@ -1328,7 +1383,8 @@ fn ea_ext_words(ea: &EffectiveAddress) -> u32 {
             2
         }
         EffectiveAddress::AddrRegIdx { .. } | EffectiveAddress::PcIdx { .. } => 2,
-        EffectiveAddress::CcrReg | EffectiveAddress::SrReg => 0,
+        EffectiveAddress::CcrReg | EffectiveAddress::SrReg
+        | EffectiveAddress::FpReg(_) | EffectiveAddress::FpCtrlReg(_) => 0,
     }
 }
 

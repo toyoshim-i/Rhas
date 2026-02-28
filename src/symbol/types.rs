@@ -334,6 +334,15 @@ pub enum InsnHandler {
     Move16Insn,  // MOVE16 (Ax)+,(Ay)+ 等
     CInvPushLP,  // CINVL/CINVP/CPUSHL/CPUSHP cache_set,(An)
     CInvPushA,   // CINVA/CPUSHA cache_set
+    // FPU (68881/68882)
+    FMove,       // FMOVE
+    FMoveCr,     // FMOVECR
+    FArith,      // FADD/FSUB/FMUL/FDIV
+    FCmp,        // FCMP
+    FTst,        // FTST
+    FNop,        // FNOP
+    FSave,       // FSAVE
+    FRestore,    // FRESTORE
 }
 
 // ----------------------------------------------------------------

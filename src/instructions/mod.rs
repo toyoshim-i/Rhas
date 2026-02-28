@@ -72,6 +72,171 @@ fn size_field(size: SizeCode) -> Result<u16, InsnError> {
     }
 }
 
+fn fpu_size_code(size: SizeCode) -> Result<u16, InsnError> {
+    match size {
+        SizeCode::Byte => Ok(6),
+        SizeCode::Word => Ok(4),
+        SizeCode::Long => Ok(0),
+        SizeCode::Short => Ok(1),  // single
+        SizeCode::Double => Ok(5),
+        SizeCode::Extend => Ok(2),
+        SizeCode::Packed => Ok(3),
+        _ => Err(InsnError::InvalidSize),
+    }
+}
+
+fn eval_immediate_u8(rpn: &Rpn) -> Result<u8, InsnError> {
+    match eval_rpn(rpn, 0, 0, 0, &|_| None) {
+        Ok(v) if v.section == 0 && (0..=255).contains(&v.value) => Ok(v.value as u8),
+        Ok(_) => Err(InsnError::OutOfRange { value: 256, min: 0, max: 255 }),
+        Err(_) => Err(InsnError::DeferToLinker),
+    }
+}
+
+fn encode_fnop(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    if !operands.is_empty() {
+        return Err(InsnError::OperandCount);
+    }
+    let mut out = Vec::new();
+    push_word(&mut out, base);
+    push_word(&mut out, 0x0000);
+    Ok(out)
+}
+
+fn encode_fsave_frestore(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    if operands.len() != 1 {
+        return Err(InsnError::OperandCount);
+    }
+    let ea = encode_ea(&operands[0], 2).map_err(map_enc_err)?;
+    let mut out = Vec::new();
+    push_word(&mut out, base | (ea.ea_field as u16));
+    out.extend_from_slice(&ea.ext_bytes);
+    Ok(out)
+}
+
+fn encode_fmovecr(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    if operands.len() != 2 {
+        return Err(InsnError::OperandCount);
+    }
+    let size = if matches!(size, SizeCode::Word) { SizeCode::None } else { size };
+    if !matches!(size, SizeCode::None | SizeCode::Extend) {
+        return Err(InsnError::InvalidSize);
+    }
+    let k = match &operands[0] {
+        EffectiveAddress::Immediate(rpn) => eval_immediate_u8(rpn)?,
+        _ => return Err(InsnError::InvalidOperand),
+    };
+    let dst = match operands[1] {
+        EffectiveAddress::FpReg(n) => n as u16,
+        _ => return Err(InsnError::InvalidOperand),
+    };
+    if k > 0x7F {
+        return Err(InsnError::OutOfRange { value: k as i32, min: 0, max: 0x7F });
+    }
+    let mut out = Vec::new();
+    push_word(&mut out, 0xF000 | (base & 0x0E00));
+    push_word(&mut out, 0x5C00 | (dst << 7) | k as u16);
+    Ok(out)
+}
+
+fn encode_fop2(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    let size = if matches!(size, SizeCode::Word) { SizeCode::None } else { size };
+    if operands.len() != 2 {
+        return Err(InsnError::OperandCount);
+    }
+    let dst = match operands[1] {
+        EffectiveAddress::FpReg(n) => n as u16,
+        _ => return Err(InsnError::InvalidOperand),
+    };
+    let op = base & 0x00FF;
+    let cpid = base & 0x0E00;
+    let mut w2 = dst << 7 | op;
+    let mut out = Vec::new();
+    match &operands[0] {
+        EffectiveAddress::FpReg(src) => {
+            if !matches!(size, SizeCode::None | SizeCode::Extend) {
+                return Err(InsnError::InvalidSize);
+            }
+            w2 |= (*src as u16) << 10;
+            push_word(&mut out, 0xF000 | cpid);
+            push_word(&mut out, w2);
+        }
+        ea => {
+            let sc = if matches!(size, SizeCode::None) { 2 } else { fpu_size_code(size)? };
+            w2 |= sc << 10;
+            w2 |= 0x4000;
+            let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
+            push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
+            push_word(&mut out, w2);
+            out.extend_from_slice(&enc.ext_bytes);
+        }
+    }
+    Ok(out)
+}
+
+fn encode_ftst(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    let size = if matches!(size, SizeCode::Word) { SizeCode::None } else { size };
+    if operands.len() != 1 {
+        return Err(InsnError::OperandCount);
+    }
+    let op = base & 0x00FF;
+    let cpid = base & 0x0E00;
+    let mut out = Vec::new();
+    match &operands[0] {
+        EffectiveAddress::FpReg(src) => {
+            if !matches!(size, SizeCode::None | SizeCode::Extend) {
+                return Err(InsnError::InvalidSize);
+            }
+            let w2 = ((*src as u16) << 10) | op;
+            push_word(&mut out, 0xF000 | cpid);
+            push_word(&mut out, w2);
+        }
+        ea => {
+            let sc = if matches!(size, SizeCode::None) { 2 } else { fpu_size_code(size)? };
+            let w2 = 0x4000 | (sc << 10) | op;
+            let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
+            push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
+            push_word(&mut out, w2);
+            out.extend_from_slice(&enc.ext_bytes);
+        }
+    }
+    Ok(out)
+}
+
+fn encode_fmove(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    let size = if matches!(size, SizeCode::Word) { SizeCode::None } else { size };
+    if operands.len() != 2 {
+        return Err(InsnError::OperandCount);
+    }
+    let cpid = base & 0x0E00;
+    let mut out = Vec::new();
+    match (&operands[0], &operands[1]) {
+        (EffectiveAddress::FpReg(src), EffectiveAddress::FpReg(dst)) => {
+            if !matches!(size, SizeCode::None | SizeCode::Extend) {
+                return Err(InsnError::InvalidSize);
+            }
+            push_word(&mut out, 0xF000 | cpid);
+            push_word(&mut out, ((*src as u16) << 10) | ((*dst as u16) << 7));
+        }
+        (ea, EffectiveAddress::FpReg(dst)) => {
+            let sc = if matches!(size, SizeCode::None) { 2 } else { fpu_size_code(size)? };
+            let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
+            push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
+            push_word(&mut out, 0x4000 | (sc << 10) | ((*dst as u16) << 7));
+            out.extend_from_slice(&enc.ext_bytes);
+        }
+        (EffectiveAddress::FpReg(src), ea) => {
+            let sc = if matches!(size, SizeCode::None) { 2 } else { fpu_size_code(size)? };
+            let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
+            push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
+            push_word(&mut out, 0x6000 | (sc << 10) | ((*src as u16) << 7));
+            out.extend_from_slice(&enc.ext_bytes);
+        }
+        _ => return Err(InsnError::InvalidOperand),
+    }
+    Ok(out)
+}
+
 /// RPN を定数評価する（シンボル参照があれば None）
 fn eval_const(rpn: &Rpn) -> Option<i32> {
     if rpn.is_empty() {
@@ -1552,6 +1717,15 @@ pub fn encode_insn(
         InsnHandler::Move16Insn   => encode_move16(operands),
         InsnHandler::CInvPushLP   => encode_cinvpush_lp(base_opcode, operands),
         InsnHandler::CInvPushA    => encode_cinvpush_a(base_opcode, operands),
+        // ---- FPU ----
+        InsnHandler::FMove        => encode_fmove(base_opcode, size, operands),
+        InsnHandler::FMoveCr      => encode_fmovecr(base_opcode, size, operands),
+        InsnHandler::FArith       => encode_fop2(base_opcode, size, operands),
+        InsnHandler::FCmp         => encode_fop2(base_opcode, size, operands),
+        InsnHandler::FTst         => encode_ftst(base_opcode, size, operands),
+        InsnHandler::FNop         => encode_fnop(base_opcode, operands),
+        InsnHandler::FSave        => encode_fsave_frestore(base_opcode, operands),
+        InsnHandler::FRestore     => encode_fsave_frestore(base_opcode, operands),
         // 疑似命令・その他未実装
         _ => Err(InsnError::DeferToLinker),
     }

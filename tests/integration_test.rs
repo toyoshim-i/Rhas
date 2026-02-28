@@ -522,6 +522,75 @@ fn test_fpid_rejects_out_of_range() {
     }
 }
 
+/// FPU コア命令のエンコード（FNOP/FMOVE/FADD/FCMP/FTST/FMOVECR/FSAVE/FRESTORE）。
+#[test]
+fn test_fpu_core_instruction_encoding() {
+    let src = b"\
+\t.68040\n\
+\t.fpid\t3\n\
+\tfnop\n\
+\tfmove.x\tfp0,fp1\n\
+\tfadd.l\td0,fp1\n\
+\tfcmp.x\tfp2,fp1\n\
+\tftst\t(a0)\n\
+\tfmovecr\t#1,fp2\n\
+\tfsave\t(a0)\n\
+\tfrestore\t(a0)\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text section");
+    assert_eq!(
+        text.bytes,
+        vec![
+            0xF6, 0x80, 0x00, 0x00, // fnop
+            0xF6, 0x00, 0x00, 0x80, // fmove.x fp0,fp1
+            0xF6, 0x00, 0x40, 0xA2, // fadd.l d0,fp1
+            0xF6, 0x00, 0x08, 0xB8, // fcmp.x fp2,fp1
+            0xF6, 0x10, 0x48, 0x3A, // ftst (a0) (default .x)
+            0xF6, 0x00, 0x5D, 0x01, // fmovecr #1,fp2
+            0xF7, 0x10,             // fsave (a0)
+            0xF7, 0x50,             // frestore (a0)
+        ]
+    );
+}
+
+/// FMOVE のデフォルトサイズはメモリ経由で .x になる。
+#[test]
+fn test_fmove_default_size_is_extend_for_memory_forms() {
+    let src = b"\
+\t.68040\n\
+\tfmove\t(a0),fp1\n\
+\tfmove\tfp1,(a0)\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text section");
+    assert_eq!(
+        text.bytes,
+        vec![
+            0xF2, 0x10, 0x48, 0x80,
+            0xF2, 0x10, 0x68, 0x80,
+        ]
+    );
+}
+
+/// FMOVECR は .x 以外のサイズを受け付けない。
+#[test]
+fn test_fmovecr_rejects_non_extend_size() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.68040\n\tfmovecr.l\t#1,fp0\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    match rhas::pass::assemble(&mut ctx) {
+        Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
+        Err(other) => panic!("unexpected error: {:?}", other),
+        Ok(_) => panic!("assemble should fail"),
+    }
+}
+
 /// .if/.endif 条件アセンブル
 #[test]
 fn test_conditional_asm() {
