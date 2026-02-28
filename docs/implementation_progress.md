@@ -255,8 +255,9 @@
 
 | テストスイート | 件数 | 状態 |
 |---|---|---|
-| ユニットテスト（src内 #[cfg(test)]） | 180件 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 21件 | ✅ 全通過 |
+| ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 25件 | ✅ 全通過 |
+| ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
 
