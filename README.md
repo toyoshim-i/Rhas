@@ -140,6 +140,7 @@ zsh tests/gen_golden.sh
 | ドキュメント | 内容 |
 |---|---|
 | [docs/has_architecture.md](docs/has_architecture.md) | HAS の全体構造・3パス方式 |
+| [docs/original_has_optimizations.md](docs/original_has_optimizations.md) | オリジナルHASの最適化仕様とフラグ対応一覧 |
 | [docs/hlk_object_format.md](docs/hlk_object_format.md) | HLK オブジェクトファイルフォーマット仕様 |
 | [docs/m68000_addressing.md](docs/m68000_addressing.md) | M68000 実効アドレスモード仕様 |
 | [docs/implementation_progress.md](docs/implementation_progress.md) | 実装フェーズ別の詳細進捗 |
