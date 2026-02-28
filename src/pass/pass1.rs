@@ -14,6 +14,7 @@ use crate::options::cpu as cpuconst;
 use crate::source::{ReadResult, SourceStack};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol::types::{DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeCode};
+use std::collections::HashMap;
 use super::temp::TempRecord;
 
 // ----------------------------------------------------------------
@@ -55,6 +56,8 @@ struct P1Ctx<'a> {
     local_base: u32,
     /// 匿名ローカルラベルカウンタ（@@: の通し番号）
     local_anon_count: u32,
+    /// 数値ローカルラベル（`1:` / `1f` / `1b`）の定義カウンタ
+    num_local_counts: HashMap<u32, u32>,
     /// 現在処理中のソース位置（エラーメッセージ用）
     current_pos: SourcePos,
 }
@@ -70,6 +73,7 @@ impl<'a> P1Ctx<'a> {
             is_end: false,
             local_base: 0,
             local_anon_count: 0,
+            num_local_counts: HashMap::new(),
             current_pos: SourcePos::new(Vec::new(), 0),
         }
     }
@@ -239,6 +243,93 @@ fn is_anon_ident_cont(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || b == b'$' || b == b'?'
 }
 
+/// 数値ローカルラベル（`1:` / `1f` / `1b`）を一意名へ展開する。
+///
+/// 例:
+/// - `1:`  -> `__n1__0:`
+/// - `1f`  -> `__n1__0` （次の `1:`）
+/// - `1b`  -> `__n1__0` （直前の `1:`）
+fn preprocess_numeric_local_labels(line: &[u8], counts: &mut HashMap<u32, u32>) -> Vec<u8> {
+    let mut result = Vec::with_capacity(line.len() + 16);
+    let mut i = 0usize;
+    let mut def_num: Option<u32> = None;
+
+    // 行頭の `N:` 定義を先に処理
+    let mut j = 0usize;
+    while j < line.len() && line[j].is_ascii_digit() {
+        j += 1;
+    }
+    if j > 0 && line.get(j) == Some(&b':') {
+        if let Ok(num_str) = std::str::from_utf8(&line[..j]) {
+            if let Ok(num) = num_str.parse::<u32>() {
+                let idx = *counts.get(&num).unwrap_or(&0);
+                let label = format!("__n{}__{}", num, idx);
+                result.extend_from_slice(label.as_bytes());
+                i = j; // ':' から後ろを通常処理
+                def_num = Some(num);
+            }
+        }
+    }
+
+    while i < line.len() {
+        let b = line[i];
+        if b == b';' {
+            result.extend_from_slice(&line[i..]);
+            break;
+        }
+
+        if b.is_ascii_digit() {
+            let left_boundary = i == 0 || !is_num_local_ident_cont(line[i - 1]);
+            if left_boundary {
+                let mut k = i;
+                while k < line.len() && line[k].is_ascii_digit() {
+                    k += 1;
+                }
+                if k > i && k + 1 <= line.len() {
+                    let suffix = line.get(k).copied();
+                    if matches!(suffix, Some(b'f' | b'b')) {
+                        let after = k + 1;
+                        let right_boundary = after >= line.len() || !is_num_local_ident_cont(line[after]);
+                        if right_boundary {
+                            if let Ok(num_str) = std::str::from_utf8(&line[i..k]) {
+                                if let Ok(num) = num_str.parse::<u32>() {
+                                    let cnt = *counts.get(&num).unwrap_or(&0);
+                                    let ref_idx = match suffix.unwrap() {
+                                        b'b' => cnt.saturating_sub(1),
+                                        _ => cnt,
+                                    };
+                                    let name = if suffix == Some(b'b') && cnt == 0 {
+                                        format!("__n{}_invalid_b", num)
+                                    } else {
+                                        format!("__n{}__{}", num, ref_idx)
+                                    };
+                                    result.extend_from_slice(name.as_bytes());
+                                    i = after;
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        result.push(b);
+        i += 1;
+    }
+
+    if let Some(num) = def_num {
+        let e = counts.entry(num).or_insert(0);
+        *e += 1;
+    }
+    result
+}
+
+#[inline]
+fn is_num_local_ident_cont(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'$' || b == b'?'
+}
+
 fn parse_line(
     line: &[u8],
     records: &mut Vec<TempRecord>,
@@ -250,6 +341,7 @@ fn parse_line(
     if is_anon_def {
         p1.local_anon_count += 1;
     }
+    let processed_buf = preprocess_numeric_local_labels(&processed_buf, &mut p1.num_local_counts);
     let line: &[u8] = &processed_buf;
 
     let mut pos = 0;

@@ -116,6 +116,33 @@ next:\n\
     assert_eq!(text.bytes, [0x4E, 0x71], "bra next should be removed");
 }
 
+/// 数値ローカルラベル `1f` は直近の前方 `1:` に解決される。
+#[test]
+fn test_numeric_local_label_forward() {
+    let src = b"\
+\tbne\t1f\n\
+\tnop\n\
+1:\n\
+\tnop\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(text.bytes, [0x66, 0x02, 0x4E, 0x71, 0x4E, 0x71]);
+}
+
+/// 数値ローカルラベル `1b` は直近の後方 `1:` に解決される。
+#[test]
+fn test_numeric_local_label_backward() {
+    let src = b"\
+1:\n\
+\tnop\n\
+\tbne\t1b\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(text.bytes, [0x4E, 0x71, 0x66, 0xFC]);
+}
+
 /// Pass2 は DeferredInsn のサイズ変化をラベル値へ反映する。
 /// 反映漏れがあると bra target のオフセットが +4 になってしまう。
 #[test]

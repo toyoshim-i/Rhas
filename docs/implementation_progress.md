@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 180件 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 19件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 21件 | ✅ 全通過 |
 
 ---
 
@@ -288,11 +288,14 @@
   - `src/pass/pass2.rs`: 未解決 EA を Pass2 で再評価し、`DeferredInsn.byte_size` とラベル値再計算に反映
   - `tests/integration_test.rs`: 回帰テスト `test_pass2_updates_labels_after_deferred_size_change` を追加
     - 既知不具合: `bra target` が `6004` になるケースを `6002` に修正
+- 数値ローカルラベル（`1f` / `1b`）の実装
+  - `src/pass/pass1.rs`: `1:` 定義と `1f`/`1b` 参照を一意名へ前処理展開
+  - `tests/integration_test.rs`: 前方/後方参照の回帰テスト 2件を追加
 - 検証結果
   - `cargo test --test golden_test`: 17/17 通過
-  - `cargo test --test integration_test`: 19/19 通過
-  - `tests/compare_ms5_simple.sh`: 14一致 / 3差分（`doasm +168`, `file +6`, `pseudo +52`）
-  - 本修正単体では一致件数に変化なし。次段は `optimize.s` の `dispadr/disppc/dispopc` 系ロジック移植が主対象
+  - `cargo test --test integration_test`: 21/21 通過
+  - `tests/compare_ms5_simple.sh`: 15一致 / 2差分（`doasm +164`, `pseudo +14`）
+  - `file.o` は一致化。残差は `doasm/pseudo` の分岐最適化系。
 
 ### 2026-02-24
 
