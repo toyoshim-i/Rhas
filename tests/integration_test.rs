@@ -1238,6 +1238,32 @@ fn test_scd_tag_links_to_existing_tag_definition() {
     assert_eq!(var_tag, mytag_idx);
 }
 
+/// HAS互換: 未解決 `.tag` が付いた `.endef` は SCD エントリを出力しない。
+#[test]
+fn test_scd_unresolved_tag_suppresses_endef_entry() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(
+        b"\t.file\t\"main.c\"\n\
+\t.def\tvar1\n\
+\t.tag\tmissing\n\
+\t.endef\n\
+\tnop\n",
+    )
+    .expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    assert!(
+        !result.obj_bytes.windows(5).any(|w| w == b"var1\0"),
+        "unresolved tag should suppress var1 SCD entry"
+    );
+}
+
 /// HAS互換: `.bb` と `.eb` は .bb.next にチェインを形成する。
 #[test]
 fn test_scd_bb_eb_updates_bb_next_chain() {

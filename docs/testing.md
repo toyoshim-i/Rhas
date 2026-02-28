@@ -7,7 +7,7 @@ rhas のテストは以下の 3 層で構成する。
 |---|---|---:|---|
 | ユニットテスト | `src/**` | 多数 | モジュール単体の正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17 | HAS060.X とのバイト一致 |
-| 統合テスト | `tests/integration_test.rs` | 70 | 3パス全体の振る舞い検証 |
+| 統合テスト | `tests/integration_test.rs` | 71 | 3パス全体の振る舞い検証 |
 
 ## 実行コマンド
 ```bash
@@ -44,7 +44,7 @@ SCD まわりで現在固定している仕様:
 - `.file` の exname は 14 文字超で使用
 
 ## 現在の結果（2026-03-01）
-- `cargo test --test integration_test --quiet`: 70/70 pass
+- `cargo test --test integration_test --quiet`: 71/71 pass
 - `cargo test --test golden_test --quiet`: 17/17 pass
 - `./tests/compare_ms5_simple.sh`: 17/17 一致
 
@@ -57,6 +57,7 @@ SCD まわりで現在固定している仕様:
 ## 直近の追加（要約）
 - `.file` と `B204` の責務分離をテスト固定
 - `.file` 指定時も SCD フッタ名は入力ソース名を使う挙動をテスト固定
+- 未解決 `.tag` 付き `.endef` の抑止をテスト固定
 - SCD 疑似命令の有効化条件（`.file` 必須）をテスト固定
 - `-g` のみ時の SCD デフォルト行エントリをテスト追加
 - `.type` のロング化条件（0x20/0x30 のみ）をテスト固定

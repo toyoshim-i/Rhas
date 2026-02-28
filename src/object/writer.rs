@@ -170,11 +170,18 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 let (out_value, out_section_raw) = pending_val.unwrap_or((*value, *section));
                 // HAS互換: enumメンバ（scl=16）は存在しないセクション(-2)へ補正する。
                 let out_section = if *scl == 16 { -2 } else { out_section_raw };
-                let tag_ref = pending_tag_name
-                    .as_ref()
-                    .and_then(|n| tag_def_by_name.get(n))
-                    .copied()
-                    .unwrap_or(0);
+                let tag_ref = if let Some(tag_name) = pending_tag_name.as_ref() {
+                    if let Some(tag) = tag_def_by_name.get(tag_name).copied() {
+                        tag
+                    } else {
+                        // HAS互換: 未解決の `.tag` は Endef を出力しない。
+                        pending_tag_name = None;
+                        pending_val = None;
+                        continue;
+                    }
+                } else {
+                    0
+                };
                 let mut ent = ScdEntry {
                     value: out_value,
                     section: out_section,
