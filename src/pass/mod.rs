@@ -35,7 +35,8 @@ fn format_sym_file(sym: &SymbolTable) -> Vec<u8> {
 
         match symbol {
             Symbol::Value { value, section, attrib, ext_attrib, .. } => {
-                if *attrib < DefAttrib::Define {
+                let is_common = matches!(ext_attrib, ExtAttrib::Comm | ExtAttrib::RComm | ExtAttrib::RLComm);
+                if *attrib < DefAttrib::Define && !is_common {
                     out.extend_from_slice(b"UNDEF           \n");
                     continue;
                 }
@@ -43,6 +44,8 @@ fn format_sym_file(sym: &SymbolTable) -> Vec<u8> {
                 let sect_str: &[u8] = match ext_attrib {
                     ExtAttrib::XRef => b"XREF ",
                     ExtAttrib::Comm => b"COMM ",
+                    ExtAttrib::RComm => b"RCOM ",
+                    ExtAttrib::RLComm => b"RLCM ",
                     ExtAttrib::Globl => b"GLOB ",
                     _ => match *section {
                         0x00 => b"ABS  ",

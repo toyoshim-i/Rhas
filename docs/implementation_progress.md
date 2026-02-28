@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 39件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 40件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -284,6 +284,9 @@
   - `src/pass/pass1.rs`: シンボル名 + 正の定数サイズを解析し、`ExtAttrib::{Comm,RComm,RLComm}` とサイズ値をシンボルへ反映
   - `src/pass/pass3.rs`: `TempRecord::Comm` から `$B2FE/$B2FD/$B2FC` 外部シンボルを出力
   - `tests/integration_test.rs`: `test_common_symbol_directives_emit_ext_symbols` / `test_comm_rejects_non_positive_size` を追加
+- `.sym` 出力で `.comm` 系シンボルの表示を改善
+  - `src/pass/mod.rs`: `.comm/.rcomm/.rlcomm` を `UNDEF` ではなくサイズ付きで出力（`COMM/RCOM/RLCM`）
+  - `tests/integration_test.rs`: `test_comm_symbol_is_visible_in_sym_file` を追加
 
 ### 2026-02-28
 

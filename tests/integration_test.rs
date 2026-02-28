@@ -331,6 +331,34 @@ fn test_comm_rejects_non_positive_size() {
     }
 }
 
+/// .comm は .sym 出力で UNDEF ではなくサイズ付きシンボルとして表示される。
+#[test]
+fn test_comm_symbol_is_visible_in_sym_file() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.comm\tbuf,16\n").expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let sym_file = NamedTempFile::new().expect("sym tempfile");
+    let sym_path = sym_file.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_sym: true,
+        sym_file: Some(sym_path.clone()),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx).expect("assemble");
+
+    let sym_content = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&sym_path).unwrap()
+    )).expect("read sym file");
+    let sym_str = String::from_utf8_lossy(&sym_content);
+    assert!(sym_str.contains("buf"), "symbol name should be present");
+    assert!(sym_str.contains("COMM"), "COMM type should be present");
+    assert!(sym_str.contains("00000010"), "size value should be present");
+}
+
 /// .if/.endif 条件アセンブル
 #[test]
 fn test_conditional_asm() {
