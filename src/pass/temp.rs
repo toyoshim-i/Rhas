@@ -5,7 +5,7 @@
 
 use crate::addressing::EffectiveAddress;
 use crate::expr::Rpn;
-use crate::symbol::types::{InsnHandler, SizeCode};
+use crate::symbol::types::{ExtAttrib, InsnHandler, SizeCode};
 
 /// 中間コードレコード
 #[derive(Debug, Clone)]
@@ -71,6 +71,9 @@ pub enum TempRecord {
 
     /// .globl（外部参照/定義）
     Globl { name: Vec<u8> },
+
+    /// .comm/.rcomm/.rlcomm（コモンシンボル）
+    Comm { name: Vec<u8>, ext: ExtAttrib },
 
     /// .end
     End,

@@ -699,6 +699,24 @@ pub fn pass3(
                 }
             }
 
+            TempRecord::Comm { name, ext } => {
+                if !ctx.ext_syms.iter().any(|s| &s.name == name) {
+                    let value = match sym.lookup_sym(name) {
+                        Some(Symbol::Value { value, .. }) => *value as u32,
+                        _ => 0,
+                    };
+                    let kind = match ext {
+                        ExtAttrib::Comm => sym_kind::COMM,
+                        ExtAttrib::RComm => sym_kind::R_COMM,
+                        ExtAttrib::RLComm => sym_kind::RL_COMM,
+                        _ => sym_kind::COMM,
+                    };
+                    ctx.ext_syms.push(ExternalSymbol {
+                        kind, value, name: name.clone()
+                    });
+                }
+            }
+
             TempRecord::End => {
                 break;
             }

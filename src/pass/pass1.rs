@@ -2002,7 +2002,70 @@ fn handle_pseudo(
         }
 
         // ---- .comm / .rcomm / .rlcomm ----
-        InsnHandler::Comm | InsnHandler::Rcomm | InsnHandler::Rlcomm => {}
+        InsnHandler::Comm | InsnHandler::Rcomm | InsnHandler::Rlcomm => {
+            let ext = match handler {
+                InsnHandler::Comm => ExtAttrib::Comm,
+                InsnHandler::Rcomm => ExtAttrib::RComm,
+                InsnHandler::Rlcomm => ExtAttrib::RLComm,
+                _ => ExtAttrib::Comm,
+            };
+            skip_spaces(line, pos);
+            let name = read_ident(line, pos);
+            if name.is_empty() {
+                p1.error(".comm のシンボルがありません");
+                return;
+            }
+            skip_spaces(line, pos);
+            if *pos >= line.len() || line[*pos] != b',' {
+                p1.error(".comm のサイズ式がありません");
+                return;
+            }
+            *pos += 1;
+            skip_spaces(line, pos);
+
+            let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
+                Some(v) if v.section == 0 && v.value > 0 => v.value,
+                _ => {
+                    p1.error(".comm のサイズは正の定数である必要があります");
+                    return;
+                }
+            };
+
+            skip_spaces(line, pos);
+            if *pos < line.len() && line[*pos] != b';' {
+                p1.error(".comm のオペランドが不正です");
+                return;
+            }
+
+            match p1.sym.lookup_sym_mut(&name) {
+                Some(Symbol::Value { attrib, ext_attrib, value: sym_value, .. }) => {
+                    if *attrib != DefAttrib::Undef {
+                        p1.error(".comm シンボルは未定義である必要があります");
+                        return;
+                    }
+                    *ext_attrib = ext;
+                    *sym_value = value;
+                }
+                Some(_) => {
+                    p1.error(".comm シンボル型が不正です");
+                    return;
+                }
+                None => {
+                    let sym = Symbol::Value {
+                        attrib:     DefAttrib::Undef,
+                        ext_attrib: ext,
+                        section:    0,
+                        org_num:    0,
+                        first:      FirstDef::Other,
+                        opt_count:  0,
+                        value,
+                    };
+                    p1.sym.define(name.clone(), sym);
+                }
+            }
+
+            records.push(TempRecord::Comm { name, ext });
+        }
 
         // ---- .offsym ----
         InsnHandler::OffsymPs => {}

@@ -289,6 +289,48 @@ fn test_ds_directive() {
     assert!(text.bytes.is_empty(), ".ds.w in text: no actual bytes in sect_bytes");
 }
 
+/// .comm/.rcomm/.rlcomm は B2FE/B2FD/B2FC 外部シンボルとして出力される。
+#[test]
+fn test_common_symbol_directives_emit_ext_symbols() {
+    let src = b"\
+\t.comm\tcbuf,16\n\
+\t.rcomm\trbuf,8\n\
+\t.rlcomm\tlbuf,4\n\
+";
+    let result = assemble_src(src);
+
+    let cbuf = result.obj.ext_syms.iter().find(|s| s.name.as_slice() == b"cbuf").expect("cbuf");
+    assert_eq!(cbuf.kind, rhas::object::sym_kind::COMM);
+    assert_eq!(cbuf.value, 16);
+
+    let rbuf = result.obj.ext_syms.iter().find(|s| s.name.as_slice() == b"rbuf").expect("rbuf");
+    assert_eq!(rbuf.kind, rhas::object::sym_kind::R_COMM);
+    assert_eq!(rbuf.value, 8);
+
+    let lbuf = result.obj.ext_syms.iter().find(|s| s.name.as_slice() == b"lbuf").expect("lbuf");
+    assert_eq!(lbuf.kind, rhas::object::sym_kind::RL_COMM);
+    assert_eq!(lbuf.value, 4);
+}
+
+/// .comm サイズは正の定数のみ許可される。
+#[test]
+fn test_comm_rejects_non_positive_size() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.comm\tbuf,0\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    match rhas::pass::assemble(&mut ctx) {
+        Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
+        Err(other) => panic!("unexpected error: {:?}", other),
+        Ok(_) => panic!("assemble should fail"),
+    }
+}
+
 /// .if/.endif 条件アセンブル
 #[test]
 fn test_conditional_asm() {
