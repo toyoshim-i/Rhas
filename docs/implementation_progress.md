@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 55件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 56件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -328,8 +328,13 @@
   - `src/pass/pass1.rs`: `.val` で `ScdTemp` を更新し、`.endef` 時に `ScdEndef` へ伝搬
   - `src/pass/temp.rs` / `src/object/mod.rs` / `src/pass/pass3.rs`: `value/section` フィールドを追加
   - `tests/integration_test.rs`: `test_scd_val_constant_is_preserved_in_endef_snapshot` を追加
+- SCD フッタの出力骨格を実装
+  - `src/object/writer.rs`: `$0000` 終端後に SCD フッタ（line/scd/exname 長さ + テーブル）を出力
+  - `src/pass/pass3.rs`: `.ln` を評価して `ScdEvent::Ln { location, section }` として収集
+  - `tests/integration_test.rs`: `test_g_option_emits_scd_footer_after_terminator` を追加
+  - 現状: `.file/.text/.data/.bss` + `.endef` 基本エントリまで出力。`.bf/.ef` 等の完全一致は次段で実装
 - 検証結果（最新）
-  - `cargo test --test integration_test`: 55/55 通過
+  - `cargo test --test integration_test`: 56/56 通過
   - `cargo test --test golden_test`: 17/17 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 

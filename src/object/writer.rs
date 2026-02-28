@@ -7,7 +7,7 @@
 /// - 常に text/data/bss/stack の4セクションヘッダを出力
 /// - コードボディは 20xx セクション切り替え + 10xx コードブロック形式
 
-use super::ObjectCode;
+use super::{ObjectCode, ScdEvent};
 
 /// null 終端文字列を偶数バイトになるようパディングして追加
 fn push_str_even(out: &mut Vec<u8>, s: &[u8]) {
@@ -16,6 +16,126 @@ fn push_str_even(out: &mut Vec<u8>, s: &[u8]) {
     // name + null の長さが奇数なら追加 null でパディング
     if (s.len() + 1) % 2 != 0 {
         out.push(0x00);
+    }
+}
+
+#[derive(Default, Clone)]
+struct ScdEntry {
+    name: [u8; 8],
+    value: u32,
+    section: i16,
+    type_code: u16,
+    scl: u8,
+    len: u8,
+    tag: u32,
+    size: u32,
+    dim0: u16,
+    dim1: u16,
+    next: u32,
+}
+
+fn fill_scd_name(dst: &mut [u8; 8], s: &[u8]) {
+    let n = s.len().min(8);
+    dst[..n].copy_from_slice(&s[..n]);
+}
+
+fn push_scd_entry(out: &mut Vec<u8>, e: &ScdEntry) {
+    out.extend_from_slice(&e.name);
+    out.extend_from_slice(&e.value.to_be_bytes());
+    out.extend_from_slice(&(e.section as u16).to_be_bytes());
+    out.extend_from_slice(&e.type_code.to_be_bytes());
+    out.push(e.scl);
+    out.push(e.len);
+    out.extend_from_slice(&e.tag.to_be_bytes());
+    out.extend_from_slice(&e.size.to_be_bytes());
+    out.extend_from_slice(&e.dim0.to_be_bytes());
+    out.extend_from_slice(&e.dim1.to_be_bytes());
+    out.extend_from_slice(&e.next.to_be_bytes());
+    out.extend_from_slice(&0u16.to_be_bytes()); // 未使用
+}
+
+fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
+    if !obj.has_debug_info {
+        return;
+    }
+
+    let mut lines: Vec<(u32, u16)> = Vec::new();
+    let mut entries: Vec<ScdEntry> = Vec::new();
+
+    // HAS の既定エントリに合わせ、.file/.text/.data/.bss を最小構成で出力する。
+    let mut file_ent = ScdEntry {
+        value: 0,
+        section: -2,
+        scl: 0x67,
+        len: 1,
+        ..Default::default()
+    };
+    fill_scd_name(&mut file_ent.name, b".file");
+    // ".file" の拡張情報としてソース名先頭4バイトを tag に格納（簡易互換）。
+    if !obj.source_file.is_empty() {
+        let mut tag = [0u8; 4];
+        let n = obj.source_file.len().min(4);
+        tag[..n].copy_from_slice(&obj.source_file[..n]);
+        file_ent.tag = u32::from_be_bytes(tag);
+    }
+    entries.push(file_ent);
+
+    let mut offset = 0u32;
+    for (name, sect, idx) in [(b".text".as_slice(), 1i16, 0usize), (b".data".as_slice(), 2, 1), (b".bss".as_slice(), 3, 2)] {
+        let size = obj.sections.get(idx).map(|s| s.size).unwrap_or(0);
+        let mut ent = ScdEntry {
+            value: offset,
+            section: sect,
+            scl: 0x78,
+            len: 1,
+            tag: size,
+            ..Default::default()
+        };
+        fill_scd_name(&mut ent.name, name);
+        entries.push(ent);
+        offset = offset.wrapping_add(size);
+    }
+
+    for ev in &obj.scd_events {
+        match ev {
+            ScdEvent::Ln { line, location, section } => {
+                // HAS 本体は .ln を .text のみに限定している。
+                if *section == 1 {
+                    lines.push((*location, *line));
+                }
+            }
+            ScdEvent::Endef { name, value, section, scl, type_code, size, dim, is_long, .. } => {
+                let mut ent = ScdEntry {
+                    value: *value,
+                    section: *section,
+                    type_code: *type_code,
+                    scl: *scl,
+                    len: if *is_long { 1 } else { 0 },
+                    size: *size,
+                    dim0: dim[0],
+                    dim1: dim[1],
+                    ..Default::default()
+                };
+                fill_scd_name(&mut ent.name, name);
+                entries.push(ent);
+            }
+            _ => {}
+        }
+    }
+
+    let line_len = (lines.len() as u32) * 6;
+    let scd_len = (entries.len() as u32) * 36;
+    let exname_len = 0u32;
+    out.extend_from_slice(&line_len.to_be_bytes());
+    out.extend_from_slice(&scd_len.to_be_bytes());
+    out.extend_from_slice(&exname_len.to_be_bytes());
+
+    for (loc, line) in lines {
+        out.extend_from_slice(&loc.to_be_bytes());
+        out.extend_from_slice(&line.to_be_bytes());
+    }
+    for ent in &entries {
+        push_scd_entry(out, ent);
     }
 }
 
@@ -75,6 +195,9 @@ pub fn write_hlk(obj: &ObjectCode) -> Vec<u8> {
     // ---- $0000: 終端 ----
     out.push(0x00);
     out.push(0x00);
+
+    // ---- SCD デバッグ拡張部（HAS 互換: 0000 の後に続く）----
+    write_scd_footer(&mut out, obj);
 
     // total_size を書き戻す（HAS060.X 互換: ファイル全体のサイズ）
     let total_size = out.len() as u32;

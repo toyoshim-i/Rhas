@@ -74,7 +74,7 @@ pub struct ExternalSymbol {
 /// SCDデバッグイベント（MS6途中段階）
 #[derive(Debug, Clone)]
 pub enum ScdEvent {
-    Ln { line: u16, loc_expr: crate::expr::Rpn },
+    Ln { line: u16, location: u32, section: u8 },
     Val { expr: crate::expr::Rpn },
     Tag { name: Vec<u8> },
     Endef {

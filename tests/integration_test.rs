@@ -806,6 +806,32 @@ fn test_scd_events_are_collected_in_object() {
     )));
 }
 
+/// `-g` 時は `$0000` 終端の後ろに SCD フッタ（長さ3つ）が続く。
+#[test]
+fn test_g_option_emits_scd_footer_after_terminator() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.file\t\"main.c\"\n\t.ln\t7,*\n\t.def\tfoo\n\t.val\t.\n\t.endef\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+    let end_pos = bytes
+        .windows(2)
+        .position(|w| w == [0x00, 0x00])
+        .expect("0000 terminator");
+    assert!(bytes.len() >= end_pos + 2 + 12, "SCD footer header must exist");
+    let p = end_pos + 2;
+    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]);
+    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]);
+    assert!(line_len >= 6, "line table should have at least one entry");
+    assert!(scd_len >= 36, "scd table should have at least one entry");
+}
+
 /// `.val` の定数式は Endef に section=-1 として保持される。
 #[test]
 fn test_scd_val_constant_is_preserved_in_endef_snapshot() {
