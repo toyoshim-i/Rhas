@@ -1,491 +1,66 @@
-# テスト戦略とテストケース一覧
+# テストガイド
 
 ## 概要
-
-rhas のテストは 3 層で構成される。
+rhas のテストは以下の 3 層で構成する。
 
 | スイート | 場所 | 件数 | 目的 |
-|---|---|---|---|
-| ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
-| ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 60件 | 3パス全体のエンドツーエンド |
+|---|---|---:|---|
+| ユニットテスト | `src/**` | 多数 | モジュール単体の正確性 |
+| ゴールデンテスト | `tests/golden_test.rs` | 17 | HAS060.X とのバイト一致 |
+| 統合テスト | `tests/integration_test.rs` | 60 | 3パス全体の振る舞い検証 |
 
-```
-cargo test          # 全スイートを実行
-cargo test --test golden_test        # ゴールデンテストのみ
-cargo test --test integration_test  # 統合テストのみ
-```
-
----
-
-## 1. ユニットテスト（180件）
-
-各モジュールの `#[cfg(test)]` ブロックに配置。
-
-### src/expr/ — RPN・式評価（~70件）
-
-| テスト群 | 内容 |
-|---|---|
-| `parse_expr` | 10進・16進・8進・2進リテラル |
-| 演算子テスト | `+` `-` `*` `/` `.mod.` `>>` `<<` `=` `<>` `&` `^` `\|` |
-| 単項演算子 | `.not.` `.high.` `.low.` `.highw.` `.loww.` `.nul.` |
-| 文字定数 | `'A'` `'AB'` `'ABCD'`（Shift_JIS 2バイト文字含む） |
-| `eval_rpn` | 定数評価・セクション演算・外部参照エラー |
-| `.defined.` | シンボル定義チェック演算子 |
-
-### src/addressing/ — EA解析・エンコード（~50件）
-
-| テスト群 | 内容 |
-|---|---|
-| データレジスタ直接 | `d0`〜`d7` |
-| アドレスレジスタ直接 | `a0`〜`a7`, `sp` |
-| アドレスレジスタ間接 | `(a0)`, `(a0)+`, `-(a0)` |
-| ディスプレースメント | `(4,a0)`, `(-128,a7)` |
-| インデックス | `(2,a0,d1.w)`, `(0,a0,d0.l*4)` |
-| 絶対アドレス | `$1234.w`, `$100000.l` |
-| PC相対 | `(label,pc)`, `(8,pc,d0.w)` |
-| 即値 | `#0`, `#$FFFF`, `#%10101010` |
-
-### src/instructions/ — 命令エンコード（~65件）
-
-| テスト群 | 内容 |
-|---|---|
-| データ転送 | MOVE/MOVEA/MOVEQ/MOVEM/MOVEP/LEA/PEA |
-| 算術 | ADD/ADDA/ADDQ/ADDI/ADDX/SUB/SUBA/SUBQ/SUBI/SUBX/CMP/CMPA/CMPI/CMPM/NEG/NEGX/CLR/TST/EXT/SWAP/EXG |
-| 乗除算 | MULU/MULS/DIVU/DIVS/CHK/ABCD/SBCD |
-| 論理 | AND/OR/EOR/NOT/ANDI/ORI/EORI |
-| ビット操作 | BTST/BSET/BCLR/BCHG（静的・動的両形式） |
-| シフト/ローテート | ASL/ASR/LSL/LSR/ROL/ROR/ROXL/ROXR（メモリ形式含む） |
-| フロー制御 | LINK/UNLK/TRAP/STOP/RTD/BKPT |
-| 68020+ | ビットフィールド命令・PACK/UNPK・CAS/CMP2/CHK2 |
-| TRAPcc | TRAPF/TRAPT/TRABEQ/TRAPNE 等全バリアント |
-| MOVE16 | 68040+ MOVE16 |
-
-### src/symbol/ — シンボルテーブル（~10件）
-
-| テスト群 | 内容 |
-|---|---|
-| 命令ルックアップ | MOVE/NOP/ADD/SUB 等の InsnHandler 解決 |
-| レジスタルックアップ | D0〜D7, A0〜A7, SP, CCR 等 |
-| 大文字小文字無視 | `MOVE` と `move` が同一解決 |
-| CPU フィルタ | 68000 モードで 68020+ 命令が除外される |
-
----
-
-## 2. ゴールデンテスト（17件）
-
-### 仕組み
-
-1. `tests/asm/*.s` を rhas でアセンブルして HLK バイナリを生成する。
-2. `tests/golden/*.o` に保存された HAS060.X の出力とバイト完全一致を検証する。
-3. ゴールデンファイルが存在しない場合はスキップ（`[SKIP]` と表示して `return`）。
-
-### ゴールデンファイルの生成
-
+## 実行コマンド
 ```bash
-# run68 + HAS060.X が必要
-zsh tests/gen_golden.sh
-```
-
-`gen_golden.sh` の動作:
-- `tests/asm/` 内の全 `.s` ファイルを処理する
-- ファイル名が `*_opt` で終わる場合は **`-c4`**（拡張最適化）付きで HAS060.X を実行
-- それ以外は **`-u -w0`**（未定義→外部参照、警告レベル0）で実行
-
-### テスト一覧
-
-#### 68000命令テスト（`golden_test!` マクロ）
-
-| テスト名 | ソース | 内容 |
-|---|---|---|
-| `insn_move` | [tests/asm/insn_move.s](../tests/asm/insn_move.s) | MOVE/MOVEA/MOVEQ/MOVEM/MOVEP/LEA/PEA |
-| `insn_arith` | [tests/asm/insn_arith.s](../tests/asm/insn_arith.s) | ADD/SUB/CMP/NEG/CLR/EXT/SWAP/EXG/MULU/DIVS 等 |
-| `insn_logic` | [tests/asm/insn_logic.s](../tests/asm/insn_logic.s) | AND/OR/EOR/NOT/ANDI/ORI/EORI |
-| `insn_bit` | [tests/asm/insn_bit.s](../tests/asm/insn_bit.s) | BTST/BSET/BCLR/BCHG |
-| `insn_shift` | [tests/asm/insn_shift.s](../tests/asm/insn_shift.s) | ASL/ASR/LSL/LSR/ROL/ROR/ROXL/ROXR |
-| `insn_branch` | [tests/asm/insn_branch.s](../tests/asm/insn_branch.s) | BRA/BSR/Bcc/DBcc/JMP/JSR/RTS/RTE |
-| `insn_scc` | [tests/asm/insn_scc.s](../tests/asm/insn_scc.s) | ST/SF/SEQ/SNE/SCC 等 Scc 全バリアント |
-| `insn_misc` | [tests/asm/insn_misc.s](../tests/asm/insn_misc.s) | NOP/STOP/RESET/TRAP/LINK/UNLK/ILLEGAL 等 |
-
-#### EAモードテスト
-
-| テスト名 | ソース | 内容 |
-|---|---|---|
-| `ea_modes` | [tests/asm/ea_modes.s](../tests/asm/ea_modes.s) | 全 EA モードの組み合わせ（12モード） |
-
-#### 疑似命令テスト
-
-| テスト名 | ソース | 内容 |
-|---|---|---|
-| `pseudo_data` | [tests/asm/pseudo_data.s](../tests/asm/pseudo_data.s) | `.dc` `.ds` `.dcb` `.align` `.even` |
-| `pseudo_sym` | [tests/asm/pseudo_sym.s](../tests/asm/pseudo_sym.s) | `.equ` `.set` `.xdef` `.xref` `.globl` `.reg` |
-| `pseudo_sect` | [tests/asm/pseudo_sect.s](../tests/asm/pseudo_sect.s) | `.text` `.data` `.bss` `.stack` `.org` `.offset` |
-| `pseudo_cond` | [tests/asm/pseudo_cond.s](../tests/asm/pseudo_cond.s) | `.if` `.ifdef` `.ifndef` `.else` `.elseif` `.endif` |
-| `pseudo_macro` | [tests/asm/pseudo_macro.s](../tests/asm/pseudo_macro.s) | `.macro` `.endm` `.rept` `.irp` `.irpc` |
-
-#### 式演算テスト
-
-| テスト名 | ソース | 内容 |
-|---|---|---|
-| `expr_ops` | [tests/asm/expr_ops.s](../tests/asm/expr_ops.s) | `.dc.l` を使った全演算子の式評価 |
-
-#### ROFST・最適化テスト
-
-| テスト名 | ソース | オプション | 内容 |
-|---|---|---|---|
-| `rofst_disp` | [tests/asm/rofst_disp.s](../tests/asm/rofst_disp.s) | デフォルト | `(const+ext, An)` 逆順パターンが ROFST レコードを生成する |
-| `addq_opt` | [tests/asm/addq_opt.s](../tests/asm/addq_opt.s) | `-c4` | `ADD.l #1-8,<ea>` → `ADDQ.l` 変換（`golden_test_opt!`）|
-
-### `golden_test_opt!` マクロ
-
-`-c4`（拡張最適化フラグ全有効）付きでアセンブルするテスト用マクロ。通常の `golden_test!` と区別するため別定義。
-
-```rust
-golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
-```
-
-`assemble_file_c4()` は以下のフラグを有効化する:
-
-| フラグ | 最適化内容 |
-|---|---|
-| `opt_adda_suba` | `ADD/SUB #1-8,<ea>` → `ADDQ/SUBQ` |
-| `opt_cmpa` | `CMPA` の最適化 |
-| `opt_clr` | `CLR` の最適化 |
-| `opt_movea` | `MOVEA` の最適化 |
-| `opt_lea` / `opt_asl` / `opt_cmp0` / `opt_move0` / `opt_cmpi0` / `opt_sub_addi0` / `opt_bsr` / `opt_jmp_jsr` | 各種最適化 |
-
----
-
-## 3. 統合テスト（53件）
-
-`tests/integration_test.rs` — 3パス全体を通した end-to-end 検証。
-
-ソーステキストを直接メモリに渡してアセンブルし、生成された HLK バイナリの内容を検証する。
-
-| テスト名 | 検証内容 |
-|---|---|
-| `test_ms1_move_b_d0_d1` | `move.b d0,d1` が `0x12 0x00` にエンコードされ、HLK 構造が正しい |
-| `test_multiple_instructions` | 複数命令のアセンブル（MOVE + ADD） |
-| `test_label_and_bra` | ラベル定義と BRA 命令の PC 相対オフセット計算 |
-| `test_numeric_local_label_forward` | 数値ローカルラベル `1f` の前方解決 |
-| `test_numeric_local_label_backward` | 数値ローカルラベル `1b` の後方解決 |
-| `test_numeric_local_label_does_not_touch_hex_literal` | 数値ラベル展開が16進リテラルを壊さないこと |
-| `test_pass2_updates_labels_after_deferred_size_change` | Pass2 で DeferredInsn サイズ変化がラベルへ反映されること |
-| `test_equ_symbol` | `.equ` シンボル定義と即値置換 |
-| `test_equ_location_counter_uses_line_top` | `*` を使う `.equ` が行頭ロケーションで評価されること |
-| `test_section_switch` | `.text` → `.data` → `.bss` セクション切り替えと各セクションサイズ |
-| `test_dc_directives` | `.dc.b` `.dc.w` `.dc.l` のバイト出力 |
-| `test_dc_label_diff_recomputed_after_pass2` | `.dc` のラベル差分が最終ラベル値で再評価されること |
-| `test_addq_immediate_from_dynamic_equ_not_frozen_in_pass1` | 動的 `.equ` を含む `ADDQ` 即値が Pass1 で早期固定されないこと |
-| `test_ds_directive` | `.ds.b` のバイトカウント記録 |
-| `test_conditional_asm` | `.ifdef` / `.ifndef` / `.else` / `.endif` の条件分岐 |
-| `test_macro_no_args` | 引数なしマクロ定義・展開 |
-| `test_macro_with_args` | 引数付きマクロ（`&param` 置換） |
-| `test_rept` | `.rept n` / `.endr` の繰り返し展開 |
-| `test_irp` | `.irp param, list` の展開 |
-| `test_irpc` | `.irpc param, str` の各文字展開 |
-| `test_prn_list_file` | `-p` オプションで PRN リストファイルが生成される |
-| `test_g_option_emits_b204_record` | `-g` オプションで `$B204` レコードが出力される |
-| `test_g_only_emits_default_scd_line_entry` | `-g` のみ（`.file` 未使用）で SCD 行番号テーブルにデフォルト1件が出力されること |
-| `test_request_emits_e001_record` | `.request` が `$E001` レコードとして出力される |
-| `test_prn_nlist_and_list` | `.nlist` 区間がPRN非表示になり、`.list` で再開される |
-| `test_prn_lall_shows_macro_expansion_lines` | `.lall` でマクロ展開行が `*` 付きでPRNに出力される |
-| `test_prn_width_directive_limits_line_width` | `.width` 指定が PRN の行幅制限に反映される |
-| `test_prn_title_and_subttl_are_reflected` | `.title/.subttl` が PRN ヘッダに反映される |
-| `test_prn_page_emits_formfeed_unless_disabled` | `.page` でフォームフィード出力、`-f0` 相当で抑制される |
-| `test_prn_page_with_expr_sets_page_lines_without_formfeed` | `.page <expr>` は行数設定のみ更新し、改ページしない |
-| `test_prn_auto_page_break_by_line_limit` | `prn_page_lines` 到達で自動改ページされる |
-| `test_prn_page_minus1_disables_auto_page_break` | `.page -1` で自動改ページが無効化される |
-| `test_prn_page_plus_emits_formfeed` | `.page +` で明示改ページされる |
-| `test_prn_no_page_ff_disables_all_formfeed` | `prn_no_page_ff` が明示/自動改ページの両方を抑制する |
-| `test_bra_to_next_is_suppressed` | 直後ラベルへの `BRA` が pass2 でサプレスされること |
-| `test_c4_cmpi0_to_tst` | `-c4` で `CMPI #0,Dn` が `TST Dn` に最適化されること |
-| `test_c4_movea_l_imm_to_w` | `-c4` で `MOVEA.L #d16,An` が `MOVEA.W` へ縮小されること |
-| `test_c4_asl_imm1_to_add` | `-c4` で `ASL #1,Dn` が `ADD Dn,Dn` に最適化されること |
-| `test_common_symbol_directives_emit_ext_symbols` | `.comm/.rcomm/.rlcomm` が `$B2FE/$B2FD/$B2FC` 外部シンボルとして出力されること |
-| `test_comm_rejects_non_positive_size` | `.comm` のサイズが 0 以下だとエラーになること |
-| `test_comm_symbol_is_visible_in_sym_file` | `.comm` シンボルが `.sym` に `COMM + サイズ値` として出力されること |
-| `test_offsym_without_symbol_behaves_like_offset` | `.offsym <expr>` が `.offset <expr>` と同等に動作すること |
-| `test_offsym_with_symbol_sets_symbol_value` | `.offsym <expr>,<sym>` がシンボルへ初期値を与えること |
-| `test_offsym_with_symbol_rejects_alignment_directives` | `.offsym <expr>,<sym>` 中の `.even/.quad/.align` がエラーになること |
-| `test_offsym_overwrite_warning_and_error_mode` | `.offsym` 上書きが通常は警告、`ow_offsym` 有効時はエラーになること |
-| `test_fpid_sets_id_and_can_disable_fpu` | `.fpid` が 0..7 を受理し、負値で FPU 無効化（CFPPクリア）すること |
-| `test_fpid_rejects_out_of_range` | `.fpid` が範囲外値（8以上）を拒否すること |
-| `test_scd_ln_alias_updates_line_state` | `-g` + `.file` 有効時に `.ln` が行番号を保持し、ロケーション式を受理すること |
-| `test_scd_dim_updates_temp_buffer` | `-g` + `.file` 有効時に `.dim` が一時バッファへ反映されること |
-| `test_scd_scl_rejects_out_of_range` | `-g` + `.file` 有効時に `.scl` が範囲外値を拒否すること |
-| `test_scd_directives_are_ignored_without_g` | `-g` 無効時は SCD 疑似命令を無視すること |
-| `test_scd_file_sets_debug_source_name` | `-g` 有効時に `.file` がSCD用ソースファイル名を更新すること |
-| `test_scd_file_does_not_affect_b204_filename` | `-g` + `.file` 指定時でも B204 は入力ソースファイル名を維持すること |
-| `test_scd_directives_require_file_directive` | HAS互換として `-g` だけでは SCD疑似命令が有効化されないこと |
-| `test_scd_records_are_emitted_in_pass1` | SCD疑似命令が Pass1 で専用 `TempRecord` に変換されること |
-| `test_scd_events_are_collected_in_object` | SCD `TempRecord` が Pass3 で `ObjectCode.scd_events` に収集されること |
-| `test_scd_val_constant_is_preserved_in_endef_snapshot` | `.val` の定数式が `.endef` スナップショットに `section=-1` として保持されること |
-| `test_g_option_emits_scd_footer_after_terminator` | `-g` 時に `$0000` 後ろへ SCD フッタ（長さ3つ + テーブル）が出力されること |
-| `test_g_option_scd_footer_contains_bf_ef_entries` | `-g` 時の SCD フッタに `.bf` / `.ef` エントリが含まれること |
-| `test_g_option_scd_footer_emits_exname_for_long_filename` | 14文字超の `.file` 名が exname 領域へ出力されること |
-
----
-
-## MS5 対比テスト（HAS ソース直接比較）
-
-HAS060X.X 自身のソースを rhas でアセンブルし、HAS060.X（run68 経由）の出力とバイト比較する。
-
-```bash
-# /private/tmp/has_test/compare.sh を参照
-SRC_DIR=has_source/src
-RHAS=target/debug/rhas
-HAS=/private/tmp/has_test/HAS060.X
-
-# -c4 -u フラグで比較
-rhas -c4 -u -w0 -I$SRC_DIR $SRC -o $RHAS_O
-run68 $HAS -c4 -u -w0 $SRC   # → orig/*.o
-diff $ORIG_O $RHAS_O
-```
-
-### 2026-02-28 時点の状況（`-c4 -u` 使用）
-
-| ファイル | 状態 | 差分 | 原因 |
-|---|---|---|---|
-| commitlog.o | ✅ 一致 | 0 | — |
-| doasm.o | ✅ 一致 | 0 | `.equ/.set` 再評価 + マクロローカルラベル修正で解消 |
-| eamode.o | ✅ 一致 | 0 | — |
-| encode.o | ✅ 一致 | 0 | — |
-| error2.o | ✅ 一致 | 0 | — |
-| expr.o | ✅ 一致 | 0 | — |
-| fexpr.o | ✅ 一致 | 0 | — |
-| file.o | ✅ 一致 | 0 | 数値ローカルラベル (`1f/1b`) 実装で解消 |
-| hupair.o | ✅ 一致 | 0 | — |
-| macro.o | ✅ 一致 | 0 | — |
-| objgen.o | ✅ 一致 | 0 | 分岐最適化修正で解消済み |
-| opname.o | ✅ 一致 | 0 | — |
-| optimize.o | ✅ 一致 | 0 | **修正済み**（ROFST逆順パターン対応で解決） |
-| pseudo.o | ✅ 一致 | 0 | Pass3のROFST判定一般化で解消 |
-| regname.o | ✅ 一致 | 0 | — |
-| symbol.o | ✅ 一致 | 0 | — |
-| work.o | ✅ 一致 | 0 | — |
-
-17 ファイル一致、0 ファイル差異（error.o / main.o / misc.o は参照ファイルなし）
-
-### 修正履歴（MS5 改善）
-
-| 日付 | 修正内容 | 改善効果 |
-|---|---|---|
-| 2026-02-28 | `is_external_with_offset` 逆順パターン対応 | optimize.o 完全一致（-192 bytes）、objgen.o -108 bytes、file.o -48 bytes |
-| 2026-02-28 | ADD/SUB #1-8 → ADDQ/SUBQ 最適化実装 | doasm.o -6 bytes |
-| 2026-02-28 | 分岐最適化の内部表現強化（`cur_size`/`suppressed`）+ 直後 `BRA/Bcc` サプレス実装 | ゴールデン/統合テストは通過。MS5比較の一致数は 13/17 のまま |
-| 2026-02-28 | `opt_asl`（`ASL #1,Dn -> ADD Dn,Dn`）実装 + 統合テスト追加 | 回帰なし（golden 17/17, integration 18/18） |
-| 2026-02-28 | Pass2 で DeferredInsn サイズ再評価を追加 | 回帰なし（golden 17/17, integration 19/19）、MS5差分は 14一致/3差分のまま |
-| 2026-02-28 | 数値ローカルラベル `1f/1b` 展開を実装 | 回帰なし（golden 17/17, integration 21/21）、MS5差分は 15一致/2差分へ改善 |
-| 2026-02-28 | 数値ローカルラベル展開をリテラル/文字列に対して安全化 | 回帰なし（golden 17/17, integration 22/22）、MS5差分は 15一致/2差分のまま |
-| 2026-02-28 | Pass3 の外部式判定を一般化（`sym + 16*4` → ROFST） | `pseudo.o` 一致化、MS5差分は 16一致/1差分へ改善 |
-| 2026-02-28 | `.equ/.set` の Pass2 再評価 + マクロ `@name` ローカルラベル展開修正 | `doasm.o` 一致化、MS5差分は 17一致/0差分 |
-| 2026-02-28 | PRN `.nlist/.list` の行制御を実装（`.nlist` 行へのコード吸着を修正） | 回帰なし（golden 17/17, integration 28/28, MS5比較 17一致/0差分） |
-| 2026-02-28 | PRN `.sall/.lall` のマクロ展開行制御を実装 | 回帰なし（golden 17/17, integration 29/29, MS5比較 17一致/0差分） |
-| 2026-02-28 | PRN `.width` 指定と `-f` 幅設定をフォーマッタに反映 | 回帰なし（golden 17/17, integration 30/30, MS5比較 17一致/0差分） |
-| 2026-02-28 | PRN `.title/.subttl` をヘッダ出力へ反映 | 回帰なし（golden 17/17, integration 31/31, MS5比較 17一致/0差分） |
-| 2026-02-28 | PRN `.page` をフォームフィード出力へ反映（`-f0` 抑制対応） | 回帰なし（golden 17/17, integration 32/32, MS5比較 17一致/0差分） |
-| 2026-02-28 | `.page <expr>` をページ行数設定として実装（改ページは `.page`/`.page +` のみ） | 回帰なし（golden 17/17, integration 33/33, MS5比較 17一致/0差分） |
-| 2026-02-28 | `prn_page_lines` による自動改ページを実装（行数到達時に FF） | 回帰なし（golden 17/17, integration 34/34, MS5比較 17一致/0差分） |
-| 2026-02-28 | `.page -1` と `.page +` の境界挙動をテスト追加で固定 | 回帰なし（golden 17/17, integration 36/36, MS5比較 17一致/0差分） |
-| 2026-02-28 | `prn_no_page_ff` の全改ページ抑制（明示/自動）をテスト追加で固定 | 回帰なし（golden 17/17, integration 37/37, MS5比較 17一致/0差分） |
-| 2026-03-01 | `.comm/.rcomm/.rlcomm` 本実装 + `.sym` 表示改善の統合テストを追加 | 回帰なし（golden 17/17, integration 40/40, MS5比較 17一致/0差分） |
-| 2026-03-01 | `.offsym` 基本挙動（`.offset` 同等 + 初期値シンボル）を実装 | 回帰なし（golden 17/17, integration 42/42, MS5比較 17一致/0差分） |
-| 2026-03-01 | `.offsym` シンボル指定中の `.even/.quad/.align` 禁止を実装 | 回帰なし（golden 17/17, integration 43/43, MS5比較 17一致/0差分） |
-| 2026-03-01 | `.offsym` 上書き時の警告/禁止（`ow_offsym`）を実装 | 回帰なし（golden 17/17, integration 44/44, MS5比較 17一致/0差分） |
-| 2026-03-01 | `.fpid` の定数受理・範囲検証・負値時FPU無効化を実装 | 回帰なし（golden 17/17, integration 46/46, MS5比較 17一致/0差分） |
-| 2026-03-01 | SCD疑似命令（`.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim`）の構文/値検証を実装 | 回帰なし（golden 17/17, integration 50/50, MS5比較 17一致/0差分） |
-| 2026-03-01 | SCD疑似命令 `.file` を実装（SCD用ファイル名ワーク更新） | 回帰なし（golden 17/17, integration 51/51, MS5比較 17一致/0差分） |
-| 2026-03-01 | `-g` 時の `.file` と B204 の役割分離（B204は入力ソース名を維持） | 回帰なし（golden 17/17, integration 58/58, MS5比較 17一致/0差分） |
-| 2026-03-01 | SCD疑似命令を `.file` 有効化後のみ処理（HAS `checksymdeb` 相当） | 回帰なし（golden 17/17, integration 59/59, MS5比較 17一致/0差分） |
-| 2026-03-01 | `-g` のみ時に SCD 行番号テーブルへデフォルト `(loc=2,line=0)` を出力 | 回帰なし（golden 17/17, integration 60/60, MS5比較 17一致/0差分） |
-| 2026-03-01 | SCD疑似命令の `TempRecord` 化（`.ln/.val/.tag/.endef/.scl -1`）を実装 | 回帰なし（golden 17/17, integration 53/53, MS5比較 17一致/0差分） |
-| 2026-03-01 | SCDイベントを `ObjectCode.scd_events` に収集（Pass3） | 回帰なし（golden 17/17, integration 54/54, MS5比較 17一致/0差分） |
-| 2026-03-01 | SCD `.val` の値/セクションを `.endef` スナップショットへ伝播 | 回帰なし（golden 17/17, integration 55/55, MS5比較 17一致/0差分） |
-| 2026-03-01 | SCD フッタ出力骨格（`$0000` 後ろの長さ3つ + テーブル）を実装 | 回帰なし（golden 17/17, integration 56/56, MS5比較 17一致/0差分） |
-| 2026-03-01 | SCD フッタへ `func/.bf/.ef` 自動エントリを追加 | 回帰なし（golden 17/17, integration 57/57, MS5比較 17一致/0差分） |
-| 2026-03-01 | SCD フッタの exname 領域出力（長名 `.file`）を追加 | 回帰なし（golden 17/17, integration 58/58, MS5比較 17一致/0差分） |
-| 2026-03-01 | `.file` の exname 条件を 14文字超へ修正（HAS仕様寄せ） | 回帰なし（golden 17/17, integration 60/60, MS5比較 17一致/0差分） |
-
----
-
-## テストファイルの場所
-
-```
-tests/
-├── asm/               # ゴールデンテスト用アセンブラソース（17本）
-│   ├── insn_move.s
-│   ├── insn_arith.s
-│   ├── ...
-│   ├── rofst_disp.s   # ROFST 逆順パターンテスト（2026-02-28追加）
-│   └── addq_opt.s     # ADD→ADDQ 最適化テスト（2026-02-28追加）
-├── golden/            # HAS060.X の参照出力（.o バイナリ）
-│   ├── *.o            # gen_golden.sh で生成
-│   └── addq_opt.o     # -c4 付きで生成（HAS060.X -c4 -u -w0）
-├── gen_golden.sh      # ゴールデンファイル生成スクリプト
-├── golden_test.rs     # ゴールデンテスト実装
-└── integration_test.rs # 統合テスト実装
-```
-
----
-
-## 新規テストの追加方法
-
-### ゴールデンテスト（通常オプション）
-
-1. `tests/asm/my_test.s` にアセンブラソースを作成
-2. `zsh tests/gen_golden.sh` で `tests/golden/my_test.o` を生成
-3. `tests/golden_test.rs` 末尾に `golden_test!(my_test);` を追記
-
-### ゴールデンテスト（`-c4` 付き最適化テスト）
-
-1. `tests/asm/my_feature_opt.s` にアセンブラソースを作成（`_opt` サフィックス必須）
-2. `zsh tests/gen_golden.sh` で `-c4` 付きゴールデンを生成
-3. `tests/golden_test.rs` 末尾に `golden_test_opt!(my_feature_opt);` を追記
-
-### 統合テスト
-
-`tests/integration_test.rs` に `#[test]` 関数を追加し、`assemble_src(b"...")` を使ってソース直書きでテストする。
-
----
-
-## 実行コマンド早見表
-
-```bash
-# 全テスト実行
 cargo test
-
-# ゴールデンファイル再生成（HAS060.X + run68 が必要）
-zsh tests/gen_golden.sh
-
-# HAS ソースとの対比確認（compare.sh）
-zsh /private/tmp/has_test/compare.sh
-
-# 特定テストのみ実行
-cargo test insn_move        # テスト名でフィルタ
-cargo test --test golden_test rofst_disp
+cargo test --test golden_test
+cargo test --test integration_test
+./tests/compare_ms5_simple.sh
 ```
 
----
+## ゴールデンテスト
+- ソース: `tests/asm/*.s`
+- 参照出力: `tests/golden/*.o`
+- 生成: `zsh tests/gen_golden.sh`
+- `_opt.s` は `-c4` 前提 (`golden_test_opt!`)
 
-## 今後の課題
+現在の対象は以下を網羅:
+- 68000 基本命令群
+- EA モード
+- 疑似命令（データ/シンボル/セクション/条件/マクロ）
+- 式演算
+- ROFST と最適化 (`addq_opt`)
 
-### MS5 残差（0ファイル）
+## 統合テストの主対象
+- オブジェクト構造 (`$D000/$C0xx/$B2xx/$E001/$0000`)
+- Pass1/2/3 の再評価と最適化（分岐縮小、`.equ/.set`、DeferredInsn）
+- PRN 出力制御（`.list/.nlist/.sall/.lall/.width/.title/.subttl/.page`）
+- MS6 進行分（`.offsym`, `.fpid`, SCD 疑似命令と SCD フッタ）
 
-`-c4 -u` 指定時の `compare_ms5_simple.sh` は 17/17 一致。
+SCD まわりで現在固定している仕様:
+- `-g` のみで `$B204` は出る
+- SCD 疑似命令は `.file` 検出後のみ有効（HAS互換）
+- B204 のファイル名は入力ソース名を維持
+- `.file` は SCD 側ファイル名として保持
+- `.file` の exname は 14 文字超で使用
 
-### 最適化フラグ別ゴールデンテスト
+## 現在の結果（2026-03-01）
+- `cargo test --test integration_test --quiet`: 60/60 pass
+- `cargo test --test golden_test --quiet`: 17/17 pass
+- `./tests/compare_ms5_simple.sh`: 17/17 一致
 
-`-c4`（`addq_opt`）は `opt_adda_suba` しかカバーしていない。
-残り 11 フラグの動作をテストするゴールデンファイルを整備する。
+## テスト追加ルール
+1. 単体ロジックはユニットテストを優先
+2. HAS 互換性を確認するものはゴールデンテスト
+3. パス間相互作用やファイル出力仕様は統合テスト
+4. 仕様変更時は docs とテスト名を同時更新
 
-各フラグはパス1 でのコード変換であり、生成オブジェクトのバイト列が変わるため
-ゴールデンテスト形式が最適（HAS060.X と rhas の出力を 1:1 比較）。
+## 直近の追加（要約）
+- `.file` と `B204` の責務分離をテスト固定
+- SCD 疑似命令の有効化条件（`.file` 必須）をテスト固定
+- `-g` のみ時の SCD デフォルト行エントリをテスト追加
+- `.file` exname 条件を 14 文字超に調整
 
-| フラグ | 対象変換 | テストファイル案 | 状態 |
-|---|---|---|---|
-| `opt_adda_suba` | `ADD/SUB #1-8, <ea>` → `ADDQ/SUBQ` | `addq_opt.s` ✅ | 実装済・テストあり |
-| `opt_clr` | `CLR <ea>` 最適化（CLR→AND/MOVEQ 等？） | `clr_opt.s` | 未テスト |
-| `opt_movea` | `MOVEA <ea>,An` 最適化（サイズ縮小等） | `movea_opt.s` | 未テスト |
-| `opt_cmpa` | `CMPA <ea>,An` → `CMP <ea>,An`（.l のみ） | `cmpa_opt.s` | 未テスト |
-| `opt_lea` | `LEA (d,An),An` → `ADDA/SUBA #d,An` 等 | `lea_opt.s` | 未テスト |
-| `opt_asl` | `ASL #1,Dn` → `ADD Dn,Dn`（1ビット左シフト） | `asl_opt.s` | 実装済（統合テストあり、ゴールデン未整備） |
-| `opt_cmp0` | `CMP #0, <ea>` → `TST <ea>` | `cmp0_opt.s` | 未テスト |
-| `opt_move0` | `MOVE #0, <ea>` → `CLR <ea>` | `move0_opt.s` | 未テスト |
-| `opt_cmpi0` | `CMPI #0, <ea>` → `TST <ea>` | `cmpi0_opt.s` | 未テスト |
-| `opt_sub_addi0` | `SUB/ADD #0, <ea>` → 削除（NOP相当） | `subaddi0_opt.s` | 未テスト |
-| `opt_bsr` | `BSR label` → `BSR.s label`（短形式）| `bsr_opt.s` | 未テスト |
-| `opt_jmp_jsr` | `JMP/JSR (An)` → `JMP/JSR (An)` 最適化 | `jmpjsr_opt.s` | 未テスト |
-
-各テストファイルは `_opt` サフィックスを付け `golden_test_opt!` マクロで登録する。
-フラグ個別の検証が必要な場合は `assemble_file_c4` を参考に特定フラグのみ有効にした
-ヘルパー関数を `golden_test.rs` に追加する。
-
-### エラーメッセージ比較テスト
-
-オリジナル HAS060.X が出力するエラーメッセージと rhas のエラーメッセージを体系的にテストする。
-
-#### 出力先の違い
-
-| | オリジナル HAS060.X | rhas |
-|---|---|---|
-| エラー出力先 | **標準出力** (stdout) | **標準エラー** (stderr) |
-| 理由 | Human68k の慣習（コンソールは stdout） | Unix 慣習に従う |
-
-テスト実装では **rhas の stderr を検査** する。
-HAS との文字列一致は不要で、rhas 単体で内容が期待通りかを確認する方針。
-
-#### テスト方式
-
-```
-tests/error_test.rs  ← 新規作成予定
-```
-
-- インメモリアセンブル（`assemble_src_expect_err(b"...")`）で `Err` を受け取る
-- `AssemblyError` の `ErrorCode` 種別と、フォーマットされたメッセージ文字列を検証する
-- 標準エラーへの出力は CLI レイヤー（`main.rs`）のテストとして別途検討
-
-#### カバー対象エラーコード一覧（`src/error.rs` の `ErrorCode` 全種）
-
-| カテゴリ | ErrorCode | 発生させ方 |
-|---|---|---|
-| **強制エラー** | `Forced` | `.fail` ディレクティブ |
-| **シンボル再定義** | `Redef` | 同名ラベルを 2 回定義 |
-| | `RedefPredefine` | プレデファインシンボルへの代入 |
-| | `RedefSet` | `.set` 以外で定義済みシンボルを `.set` で上書き |
-| | `RedefOffsym` | `.offsym` 以外で定義済みオフセットシンボルを再定義 |
-| **命令解釈** | `BadOpe` | 存在しない命令名（例: `foo d0,d1`） |
-| | `BadOpeLocal` | ローカルラベルの不正記述（例: `0@`） |
-| | `BadOpeLocalLen` | ローカルラベルが桁数超過 |
-| **シンボル種別** | `IlSymRegsym` | `.equ` でレジスタリストシンボルを参照 |
-| | `IlSymRegister` | レジスタ名を通常シンボルとして参照 |
-| | `IlSymPredefXdef` | プレデファインシンボルを `.xdef` |
-| | `IlSymPredefXref` | プレデファインシンボルを `.xref` |
-| | `IlSymPredefGlobl` | プレデファインシンボルを `.globl` |
-| | `IlSymLookfor` | シンボル定義と参照方法の矛盾 |
-| **式解析** | `Expr` | 構文エラーのある式（例: `1+`） |
-| | `ExprEa` | 実効アドレスとして解釈不能（例: `(1,2,3,4)`） |
-| | `ExprCannotScale` | スケール不可の EA にスケール指定（68000モードで） |
-| | `ExprScaleFactor` | スケールファクタ値不正（例: `d0.l*3`） |
-| | `ExprFullFormat` | フルフォーマット EA（68000モードで） |
-| | `ExprImmediate` | 即値が解釈できない |
-| **レジスタ** | `Reg` | 使用不可レジスタ |
-| | `RegOpc` | `opc` が使えない文脈 |
-| **アドレッシング** | `IlAdr` | 使用不可アドレッシングモード（例: `add.b (a0)+,(a1)+`） |
-| **サイズ** | `IlSizeOp` / `IlSize` 他 | 各命令に不正なサイズサフィックス |
-| | `IlSizeAn` | `move.b d0,a0`（An へのバイトアクセス） |
-| | `IlSizeSftRotMem` | メモリへの `.b`/`.l` シフト |
-| | `IlSizeBitMem` | メモリへのビット操作に `.w`/`.l` |
-| **オペランド** | `IlOpr` | 不正オペランド形式 |
-| | `IlOprTooMany` | オペランド数過多（例: `nop d0`） |
-| | `IlOprDsNegative` | `.ds` の引数が負数 |
-| **未定義シンボル** | `UndefSym` | 未定義シンボルを `-u` なしで使用 |
-| | `UndefSymLocal` | 未定義ローカルラベル参照 |
-| **演算** | `DivZero` | 式評価中の 0 除算 |
-| | `Overflow` | 即値オーバーフロー |
-| | `IlQuickAddSubQ` | `ADDQ/SUBQ` の即値が 1-8 の範囲外 |
-| | `IlQuickMoveQ` | `MOVEQ` の即値が -128〜127 の範囲外 |
-| | `IlQuickSftRot` | シフト数が 1-8 の範囲外 |
-| **CPU機能** | `FeatureCpu` | 現在の `.cpu` 設定で使えない命令 |
-| | `FeatureXref` | `.xref` 不可 CPU モードでの外部参照 |
-| **マクロ** | `NoSymMacro` | `.macro` にシンボル名なし |
-| | `MisMacExitm` | マクロ外の `.exitm` |
-| | `MisMacEndm` | `.macro` なしの `.endm` |
-| | `MisMacEof` | `.endm` 未閉じ |
-| | `MacNest` | マクロ展開のネスト超過 |
-| | `TooManyLocSym` | 1 マクロ内のローカルシンボル数超過 |
-| **条件分岐** | `MisIfElse` | `.if` なしの `.else` |
-| | `MisIfElseif` | `.if` なしの `.elseif` |
-| | `MisIfEndif` | `.if` なしの `.endif` |
-| | `MisIfElseElseif` | `.else` 後の `.elseif` |
-| | `MisIfEof` | `.endif` 未閉じ |
-| **インクルード** | `TooIncld` | `.include` ネスト超過（8段） |
-| | `NoFile` | `.include` 対象ファイルが見つからない |
-| **文字列** | `TermDoubleQuote` | ダブルクォート未閉じ |
-| | `TermSingleQuote` | シングルクォート未閉じ |
-| | `TermBracket` | 括弧未閉じ |
-| **その他** | `IlInt` | 整数リテラル不正 |
-| | `OffsymAlign` | `.offsym` のアラインメント不正 |
-
-現在エラーテスト専用ファイルは存在しない。
-`tests/error_test.rs` を作成してカバー率を上げることを目標とする。
+## 残課題
+- FPU 命令（68881/68882）のゴールデン/統合テスト追加
+- `-c4` の未カバー最適化フラグ個別ゴールデン追加
+- エラーメッセージ比較用の専用テストファイル整備

@@ -1,492 +1,67 @@
 # Rhas 実装進捗
 
-## 現在のバージョン情報
-
+## 現在の状態（2026-03-01）
 - ベース: HAS060X.X v1.2.5 / HAS v3.09+91
-- リポジトリ: https://github.com/kg68k/has060xx
-
----
-
-## フェーズ別進捗
-
-### Phase 1: Foundation（CLIと骨格） ✅ 完了
-
-**目標**: `rhas -h` が動き、ソースファイルを受け取れる
-
-| ファイル | 状態 | 説明 |
-|---|---|---|
-| `src/options.rs` | ✅ 完了 | HAS060X互換CLIオプション |
-| `src/error.rs` | ✅ 完了 | エラーコード + エラー出力 |
-| `src/source.rs` | ✅ 完了 | ソースファイル読み込み（Vec<u8>）|
-| `src/context.rs` | ✅ 完了 | AssemblyContext骨格 |
-| `src/main.rs` | ✅ 完了 | エントリポイント + CLIバインディング |
-
-**参照ファイル**: `external/has060xx/src/main.s`（docmdline, option_*）
-
----
-
-### Phase 2: シンボルテーブル + 命令テーブル ✅ 完了
-
-**目標**: レジスタ名・命令名が検索できる
-
-| ファイル | 状態 | 説明 |
-|---|---|---|
-| `src/symbol/types.rs` | ✅ 完了 | シンボル種別 enum（Symbol, SizeFlags, CpuMask, InsnHandler等） |
-| `src/symbol/mod.rs` | ✅ 完了 | SymbolTable（HashMap）+ レジスタ名テーブル + 命令テーブル |
-
-**実装内容**:
-- `Symbol` enum: Value/Register/Opcode/Macro/Real/RegSym
-- `SizeFlags(u8)`: B/W/L/S/D/X/P/Q ビットセット
-- `CpuMask(u16)`: SYM_ARCH<<8|SYM_ARCH2 (上位=68k, 下位=ColdFire)
-- `InsnHandler` enum: ~80種の命令・疑似命令ハンドラ識別子（Phase 9 拡張分含む）
-- `REGISTER_TABLE`: 70+ エントリ（D0-D7, A0-A7, SP, PC, CCR, SR, FPn, CF専用等）
-- `OPCODE_TABLE`: 290+ エントリ（全68k命令 + Bcc/DBcc/Scc/JBcc全バリアント + 全疑似命令 + Phase 9 拡張命令）
-- 3テーブル構成: `user_syms`（大文字小文字区別）+ `reg_table` + `cmd_table`（区別なし）
-- CPU フィルタリング付きルックアップ
-
-**参照ファイル**: `external/has060xx/src/symbol.s`, `symbol.equ`, `regname.s`, `opname.s`
-
----
-
-### Phase 3: 字句解析 + 式評価 ✅ 完了
-
-**目標**: `1+2*3` や `label+4` を評価できる
-
-| ファイル | 状態 | 説明 |
-|---|---|---|
-| `src/expr/rpn.rs` | ✅ 完了 | RPNトークン型（Operator/RPNToken/Rpn） |
-| `src/expr/mod.rs` | ✅ 完了 | テキスト→RPN変換（シャンティングヤード） |
-| `src/expr/eval.rs` | ✅ 完了 | RPN評価（セクション情報付き） |
-
-**実装内容**:
-- `Operator` enum: 29演算子（OP_NEG〜OP_OR）、優先順位・単項/二項判定
-- `RPNToken` enum: ValueByte/ValueWord/Value/SymbolRef/Location/CurrentLoc/Op/End
-- `parse_expr(src, &mut pos)`: シャンティングヤードで直接テキスト→RPN変換
-  - 10進・16進($/$0x)・8進(@)・2進(%)リテラル
-  - 文字定数 'A'〜'ABCD'（Shift_JIS対応）
-  - シンボル参照（評価時に解決）
-  - 単項演算子: `-` `+` `~` `.not.` `.high.` `.low.` `.highw.` `.loww.` `.nul.`
-  - 二項演算子: `+ - * / .mod. >> << .asr. = <> < <= > >= & ^ |` と全キーワード形式
-  - `.defined.` 演算子（シンボル定義チェック）
-  - 括弧
-- `eval_rpn(rpn, loc, cur_loc, section, lookup)`: スタックベース評価
-  - セクション属性付き加減算（<アドレス>±<定数>）
-  - 同一セクション <アドレス>-<アドレス> → 定数
-  - 異セクション・外部参照 → `DeferToLinker` エラー（Phase 7 で処理）
-
-**参照ファイル**: `external/has060xx/src/expr.s`（convrpn, calcrpn）
-
----
-
-### Phase 4: 実効アドレス解析 ✅ 完了
-
-**目標**: `(d,An)`, `(d,PC,Dn.l*4)` 等を解析・エンコードできる
-
-| ファイル | 状態 | 説明 |
-|---|---|---|
-| `src/addressing/mod.rs` | ✅ 完了 | EA型定義（EffectiveAddress/Displacement/IndexSpec等）+ 68000基本12モード解析 |
-| `src/addressing/encode.rs` | ✅ 完了 | EAエンコード（6ビットEAフィールド + 拡張ワード生成） |
-
-**実装内容**:
-- `EffectiveAddress` enum: DataReg/AddrReg/AddrRegInd/AddrRegPostInc/AddrRegPreDec/AddrRegDisp/AddrRegIdx/AbsShort/AbsLong/PcDisp/PcIdx/Immediate
-- `eac` モジュール: EAフィールド値定数（DN/AN/ADR/INCADR/DECADR/DSPADR/IDXADR/ABSW/ABSL/DSPPC/IDXPC/IMM）
-- `ea` モジュール: EAビットマスク定数（DATA/MEM/ALT/CTRL/ALL）
-- `Displacement`: RPN式 + サイズ指定 + 定数値
-- `IndexSpec`: レジスタ番号 + サイズ(.w/.l) + スケール(*1/*2/*4/*8)
-- `parse_ea()`: メインAPI（#imm/-(An)/(An)/レジスタ直接/式 → EffectiveAddress）
-- `encode_ea()`: EffectiveAddress → EaEncoded（ea_field u8 + ext_bytes Vec<u8>）
-- brief拡張ワード生成（68000モード）
-- 50+ ユニットテスト
-
-**参照ファイル**: `external/has060xx/src/eamode.s`, `eamode.equ`
-
----
-
-### Phase 5: 68000基本命令エンコード ✅ 完了
-
-**目標**: 基本的なアセンブルソースからバイト列を生成できる
-
-| ファイル | 状態 | 説明 |
-|---|---|---|
-| `src/instructions/mod.rs` | ✅ 完了 | 全68000命令エンコーダ（ディスパッチ + 全ハンドラ） |
-
-**実装内容**:
-- `encode_insn(base_opcode, handler, size, operands) -> Result<Vec<u8>, InsnError>`
-- データ転送: MOVE/MOVEA/MOVEQ/MOVEM/MOVEP/LEA/PEA/JMP/JSR
-- 算術: ADD/ADDA/ADDQ/ADDI/ADDX/SUB/SUBA/SUBQ/SUBI/SUBX/CMP/CMPA/CMPI/CMPM/NEG/NEGX/CLR/TST/EXT/SWAP/EXG/MULU/MULS/DIVU/DIVS/CHK/ABCD/SBCD
-- 論理: AND/OR/EOR/NOT/ANDI/ORI/EORI
-- ビット操作: BTST/BSET/BCLR/BCHG（静的・動的両形式）
-- シフト/ローテート: ASL/ASR/LSL/LSR/ROL/ROR/ROXL/ROXR（#imm/Dn/メモリ全形式）
-- 分岐: NOP/RTS/RTE等（no-op）、Bcc/DBcc/Scc → DeferToLinker（Phase 7 で解決）
-- フロー制御: LINK/UNLK/TRAP/STOP/DEC/INC（HAS独自拡張）
-- シンボル参照を含む EA → `InsnError::DeferToLinker`
-- 65 ユニットテスト
-
-**参照ファイル**: `external/has060xx/src/doasm.s`（各命令ハンドラ）
-
----
-
-### Phase 6: 疑似命令（コア） ✅ 完了
-
-**目標**: 実用的なアセンブルソースを処理できる
-
-疑似命令は `src/pass/pass1.rs` に統合実装（別ディレクトリ不使用）
-
-| 疑似命令グループ | 状態 | 説明 |
-|---|---|---|
-| セクション | ⚠️ 一部未完 | `.text` `.data` `.bss` `.stack` `.org` `.offset` `.offsym`（SCD/FPU関連の一部は別途） |
-| データ | ✅ 完了 | `.dc` `.ds` `.dcb` `.align` `.even` `.quad` |
-| シンボル | ✅ 完了 | `.equ` `.set` `.reg` `.xdef` `.xref` `.globl` `.comm` `.rcomm` `.rlcomm` |
-| 条件 | ✅ 完了 | `.if` `.iff` `.ifdef` `.ifndef` `.else` `.elseif` `.endif` |
-| ファイル | ✅ 完了 | `.include` `.insert` `.request` |
-| 制御 | ✅ 完了 | `.end` `.cpu` `.fail` |
-| リスト制御 | ✅ 完了 | `.list/.nlist` と `.sall/.lall` で PRN 行出力を制御、`.width/.title/.subttl/.page` を PRN へ反映（`.page <expr>` と自動改ページ含む） |
-
-**参照ファイル**: `external/has060xx/src/pseudo.s`
-
----
-
-### Phase 7: 3パスシステム + オブジェクト生成 ✅ 完了
-
-**目標**: HLKオブジェクトファイルを正しく出力できる
-
-| ファイル | 状態 | 説明 |
-|---|---|---|
-| `src/pass/mod.rs` | ✅ 完了 | パス制御（assemble エントリポイント） |
-| `src/pass/temp.rs` | ✅ 完了 | TempRecord型（30+ バリアント） + 関連型 |
-| `src/pass/pass1.rs` | ✅ 完了 | ソース→TempRecord（ラベル解析・命令・疑似命令処理） |
-| `src/pass/pass2.rs` | ✅ 完了 | アドレス再計算・分岐最適化 |
-| `src/pass/pass3.rs` | ✅ 完了 | TempRecord→オブジェクト（リロケーション処理） |
-| `src/object/mod.rs` | ✅ 完了 | HLKオブジェクトフォーマット型定義 |
-| `src/object/writer.rs` | ✅ 完了 | HLKバイナリ書き出し |
-
-**実装内容**:
-- TempRecord: 30+ バリアント（Const/Branch/RpnData/Ds/Align/SectionChange/XDef/Org/End 等）
-- Pass1: ラベル定義/参照収集、全命令・疑似命令の中間コード化
-- Pass2: ブランチサイズ縮小、ディスプレースメント縮小、収束ループ
-- Pass3: リロケーションテーブル生成、外部参照解決、セクション配置
-- HLK writer: $D000ヘッダ、$C0xxセクション、$B2xx外部シンボル、$0000終端
-- MS1達成: `move.b d0,d1` → 正しいHLKオブジェクト出力（integration test通過）
-
-**参照ファイル**: `external/has060xx/src/objgen.s`, `docs/hlk_object_format.md`
-
----
-
-### Phase 8: マクロ処理 ✅ 完了
-
-**目標**: `.macro/.endm`, `.rept`, `.irp/.irpc` が動作する
-
-マクロ処理は `src/pass/pass1.rs` に統合実装
-
-| 機能 | 状態 | 説明 |
-|---|---|---|
-| `.macro/.endm` 定義 | ✅ 完了 | 引数名マッピング、ローカルラベル収集、テンプレート保存 |
-| マクロ展開 | ✅ 完了 | 引数置換（`&param`）、ローカルラベル→`??xxxx`形式 |
-| `.rept` | ✅ 完了 | カウント分のボディ繰り返し展開 |
-| `.irp` | ✅ 完了 | パラメータリスト分の繰り返し展開 |
-| `.irpc` | ✅ 完了 | 文字列の各文字分の繰り返し展開 |
-
-**実装内容**:
-- `Symbol::Macro`: `params: Vec<Vec<u8>>` + `local_count: u16` + `template: Vec<u8>`
-- テンプレートコンパイル: `&name` → `\xFF idx_hi idx_lo`、`@name` → `\xFE idx_hi idx_lo`
-- 展開: `\xFF` marker → 実引数、`\xFE` marker → `??{local_base:04X}{lno:04X}`
-- 文字列内の `&param` も置換対応
-- 6 integration tests 通過（macro_no_args, macro_with_args, rept, irp, irpc）
-
-**参照ファイル**: `external/has060xx/src/macro.s`
-
----
-
-### Phase 9: 拡張命令セット ✅ 完了
-
-**目標**: 68010/68020/68030/68040/68060/ColdFire の追加命令をエンコードできる
-
-| 命令グループ | 状態 | 説明 |
-|---|---|---|
-| 68010追加命令 | ✅ 完了 | RTD/BKPT/MOVES/MOVEC/EXTB |
-| ビットフィールド | ✅ 完了 | BFTST/BFCHG/BFCLR/BFSET/BFEXTU/BFEXTS/BFFFO/BFINS（68020+）|
-| PACK/UNPK | ✅ 完了 | PACK/UNPK（68020+）|
-| CAS/CMP2/CHK2 | ✅ 完了 | CAS/CAS2/CMP2/CHK2（68020+）|
-| TRAPcc | ✅ 完了 | TRAPT/TRAPF/TRAPEQ/TRAPNE 等全バリアント |
-| MOVE16 | ✅ 完了 | MOVE16（68040+）|
-| キャッシュ制御 | ✅ 完了 | CINVL/CINVP/CINVA/CPUSHL/CPUSHP/CPUSHA（68040+）|
-| FPU命令 | ⬜ 未着手 | 68881/68882 浮動小数点命令（スコープ外として延期）|
-
-**実装内容**:
-- 14 新規 InsnHandler バリアント追加
-- 15+ 新規エンコーダ関数（encode_extb, encode_bkpt, encode_trapcc, encode_bitfield_*, encode_moves, encode_movec, encode_packunpk, encode_cas, encode_cmpchk2, encode_move16, encode_cinvpush_lp, encode_cinvpush_a）
-- CPUマスクによる命令フィルタリング（68010+/68020+/68040+）
-
----
-
-### Phase 10: 残り機能 ✅ 完了（主要機能）
-
-| 機能 | 状態 | 説明 |
-|---|---|---|
-| PRNリストファイル（`-p`） | ✅ 完了 | ソース行+アドレス+機械語バイトのリストファイル生成 |
-| シンボルファイル（`-x`） | ✅ 完了 | シンボル名・型・値のリスト出力 |
-| `.align` B204レコード | ✅ 完了 | `.align`使用時に `$B204` アラインメント情報レコードを出力 |
-| SCD疑似命令（`-g`） | 🚧 部分実装 | `.file/.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim` の構文/値検証と状態更新を実装、`TempRecord`化を開始、`.file` は SCD 側に反映し `B204` は入力ソース名を維持（デバッグシンボル出力は未実装） |
-| HUPAIR対応 | N/A | ネイティブRust環境では不要（X68k DOS固有機能） |
-
-**実装内容**:
-- `src/pass/prn.rs`: PRN行フォーマッタ（5桁行番号 + 8桁16進アドレス + 機械語バイト + ソーステキスト）
-- `TempRecord::LineInfo`: パス3でのPRN行追跡用中間レコード
-- `src/pass/mod.rs`: シンボルファイル生成（`format_sym_file`）
-- `ctx.max_align` → `obj.has_align/max_align` 伝播修正（`$B204`レコード用）
-- 37 integration tests（PRN生成 + `.list/.nlist` + `.sall/.lall` + `.width/.title/.subttl/.page` + `-c4` 最適化 + `.equ/.set`/Pass2回帰 + `-g`検証を含む）通過
-
----
+- MS5: 達成（比較対象 17/17 一致）
+- MS6: 進行中（SCD は部分実装、FPU 未着手）
 
 ## マイルストーン
-
-| MS | 達成条件 | 状態 |
+| MS | 目標 | 状態 |
 |---|---|---|
-| MS1 | `move.b d0,d1` → 正しいバイト列、最小限のオブジェクトファイル出力 | ✅ 完了 |
-| MS2 | 68000全整数命令エンコード + ラベル・外部参照解決 | ✅ 完了 |
-| MS3 | 疑似命令・最適化込みで `HANOI.S` が通る | ✅ 完了（76866 バイト、エラーなし） |
-| MS4 | マクロ処理込みで `K_MACRO.MAC` が通る | ✅ 完了（エラーなし、構造化マクロライブラリ全定義処理）|
-| MS5 | 実X68000プログラムのビルドがオリジナルと完全一致 | ✅ 完了（17ファイル中17一致） |
-| MS6 | FPU/ColdFire/SCD/PRN全機能 | 🚧 |
+| MS1 | 最小命令とオブジェクト出力 | ✅ |
+| MS2 | 68000 全整数命令 + 参照解決 | ✅ |
+| MS3 | 疑似命令・最適化で `HANOI.S` 通過 | ✅ |
+| MS4 | マクロ処理で `K_MACRO.MAC` 通過 | ✅ |
+| MS5 | 実ソース比較で完全一致 | ✅ |
+| MS6 | FPU/SCD/残互換機能の完了 | 🚧 |
 
----
+## 実装済み（要約）
+### コア
+- CLI/オプション互換
+- 3パス（Pass1/2/3）
+- HLK オブジェクト出力
+- シンボル/式/RPN/EA/命令エンコード
+
+### 命令・疑似命令
+- 68000 基本命令: 完了
+- 68010/020/040 拡張・ColdFire 主要拡張: 完了
+- 疑似命令・条件分岐・マクロ: 完了
+- PRN / SYM 出力: 完了
+
+### MS6 関連（完了済み部分）
+- `.offsym`（制約・上書き挙動含む）
+- `.fpid`（範囲検証・無効化挙動）
+- SCD 疑似命令の構文/値検証
+- SCD TempRecord 化と Pass3 収集
+- `$0000` 後の SCD フッタ出力（line/scd/exname）
+- `func/.bf/.ef` 自動エントリ
+- `.file` と `B204` の役割分離
+- SCD 疑似命令の有効化条件（`.file` 必須）
+- `-g` のみ時の SCD デフォルト行エントリ
+- exname 条件を 14文字超へ調整
 
 ## テスト状況
-
-| テストスイート | 件数 | 状態 |
-|---|---|---|
-| ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 60件 | ✅ 全通過 |
-| ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
-
----
-
-## 設計方針（決定済み）
-
-| 項目 | 決定内容 |
+| スイート | 状態 |
 |---|---|
-| 中間表現 | メモリ上 `Vec<TempRecord>` |
-| 文字コード | バイト列 `Vec<u8>`（変換なし） |
-| CLI | HAS060Xと完全互換 |
-| テスト | エミュレータでオリジナルを動かして `.o` をバイト比較 |
-| シンボルテーブル | `HashMap<Vec<u8>, Symbol>`（大文字小文字区別なし比較） |
-| ハッシュ関数 | オリジナルと揃えなくてよい（内部実装） |
-| 疑似命令・マクロ | 別ディレクトリではなく pass1.rs に統合実装 |
+| ユニット | ✅ 全通過 |
+| 統合（60） | ✅ 全通過 |
+| ゴールデン（17） | ✅ 全通過 |
+| MS5簡易比較（17） | ✅ 全一致 |
 
----
+## MS6 残タスク（優先順）
+1. FPU 命令（68881/68882）実装
+2. SCD 出力の原典比較で未一致点を順次解消
+3. SCD タグ/関数チェインなど高次情報の互換度向上
+4. 追加の互換疑似命令・境界挙動の詰め
 
-## 変更ログ
+## 直近コミット（ドキュメント時点）
+- `3bb7f62` Align SCD `.file` exname threshold to 14+ chars
+- `811d1e4` Emit HAS-style default SCD line entry for `-g` only
+- `7274d6a` Match HAS SCD directive gating behind `.file`
+- `c466dd0` Fix `.file` behavior split between SCD footer and B204
 
-### 2026-03-01
-
-- `.comm/.rcomm/.rlcomm` の本実装を追加
-  - `src/pass/temp.rs`: `TempRecord::Comm { name, ext }` を追加
-  - `src/pass/pass1.rs`: シンボル名 + 正の定数サイズを解析し、`ExtAttrib::{Comm,RComm,RLComm}` とサイズ値をシンボルへ反映
-  - `src/pass/pass3.rs`: `TempRecord::Comm` から `$B2FE/$B2FD/$B2FC` 外部シンボルを出力
-  - `tests/integration_test.rs`: `test_common_symbol_directives_emit_ext_symbols` / `test_comm_rejects_non_positive_size` を追加
-- `.sym` 出力で `.comm` 系シンボルの表示を改善
-  - `src/pass/mod.rs`: `.comm/.rcomm/.rlcomm` を `UNDEF` ではなくサイズ付きで出力（`COMM/RCOM/RLCM`）
-  - `tests/integration_test.rs`: `test_comm_symbol_is_visible_in_sym_file` を追加
-- `.offsym` の基本挙動を実装
-  - `src/pass/pass1.rs`: `.offsym <expr>` を `.offset` 同等として処理、`.offsym <expr>,<sym>` で初期値シンボル定義を追加
-  - `tests/integration_test.rs`: `test_offsym_without_symbol_behaves_like_offset` / `test_offsym_with_symbol_sets_symbol_value` を追加
-- `.offsym` シンボル指定中のアライン制約を実装
-  - `src/context.rs`: `offsym_with_symbol` フラグを追加（セクション切替で自動解除）
-  - `src/pass/pass1.rs`: `.offsym <expr>,<sym>` 中の `.even/.quad/.align` をエラー化
-  - `tests/integration_test.rs`: `test_offsym_with_symbol_rejects_alignment_directives` を追加
-- `.offsym` 上書き時の `ow_offsym` 挙動を実装
-  - `src/pass/pass1.rs`: 上書き禁止モード（`ow_offsym`）ではエラー、通常は警告カウントを加算
-  - `tests/integration_test.rs`: `test_offsym_overwrite_warning_and_error_mode` を追加
-- `.fpid` 疑似命令の基本挙動を実装
-  - `src/context.rs`: `fpid` フィールドを追加（0..7、初期値0）
-  - `src/pass/pass1.rs`: `.fpid` の定数評価、範囲チェック、負値時の `CFPP` クリアを実装
-  - `tests/integration_test.rs`: `test_fpid_sets_id_and_can_disable_fpu` / `test_fpid_rejects_out_of_range` を追加
-- SCD疑似命令（`-g`）の構文/値検証を実装
-  - `src/symbol/mod.rs`: `.ln` を疑似命令テーブルへ追加
-  - `src/context.rs`: `ScdTemp` と `scd_ln` ワーク領域を追加
-  - `src/pass/pass1.rs`: `.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim` の解析と制約チェックを追加（`-g`無効時は無視）
-  - `tests/integration_test.rs`: SCD関連テスト4件を追加
-- SCD疑似命令 `.file` を実装
-  - `src/symbol/mod.rs`: `.file` を疑似命令テーブルへ追加
-  - `src/context.rs`: `scd_file` ワーク領域を追加
-  - `src/pass/pass1.rs`: `.file` のファイル名解析と `scd_file` 反映を実装
-  - `tests/integration_test.rs`: `test_scd_file_sets_debug_source_name` を追加
-- SCD疑似命令の有効化条件を HAS 互換へ修正
-  - `src/context.rs`: `scd_enabled` フラグを追加（`.file` 検出で有効化）
-  - `src/pass/pass1.rs`: `-g` 指定だけでは SCD疑似命令を無視し、`.file` 後のみ処理
-  - `tests/integration_test.rs`: `test_scd_directives_require_file_directive` を追加
-- `-g` のみ時の SCD 行番号デフォルトを実装
-  - `src/object/mod.rs`: `ObjectCode.scd_enabled` を追加
-  - `src/pass/mod.rs`: `ctx.scd_enabled` を `obj.scd_enabled` へ伝搬
-  - `src/object/writer.rs`: `.file` 未使用で行番号が空の場合、`(loc=2,line=0)` を補完
-  - `tests/integration_test.rs`: `test_g_only_emits_default_scd_line_entry` を追加
-- `-g` 出力の `.file`/`B204` 役割分離を実装
-  - `src/pass/mod.rs`: `ObjectCode.source_file`（B204）と `ObjectCode.scd_file`（SCD）を分離
-  - `src/object/writer.rs`: SCD `.file` エントリと exname は `scd_file` を参照
-  - `tests/integration_test.rs`: `test_scd_file_does_not_affect_b204_filename` を追加
-- SCD疑似命令の中間コード化を開始
-  - `src/pass/temp.rs`: `ScdLn/ScdVal/ScdTag/ScdEndef/ScdFuncEnd` を追加
-  - `src/pass/pass1.rs`: `.ln/.val/.tag/.endef/.scl -1` で SCD `TempRecord` を生成
-  - `src/pass/pass3.rs`: 新規 SCD `TempRecord` の受け口を追加（出力は次段で実装）
-  - `tests/integration_test.rs`: `test_scd_records_are_emitted_in_pass1` を追加
-- SCDイベントを `ObjectCode` へ収集する段階を実装
-  - `src/object/mod.rs`: `ScdEvent` と `ObjectCode.scd_events` を追加
-  - `src/pass/pass3.rs`: SCD `TempRecord` を `ScdEvent` として `ObjectCode` に反映
-  - `tests/integration_test.rs`: `test_scd_events_are_collected_in_object` を追加
-- SCD `.val` の値/セクションを `.endef` スナップショットへ反映
-  - `src/context.rs`: `ScdTemp` に `value/section` を追加（既定 `section=-2`）
-  - `src/pass/pass1.rs`: `.val` で `ScdTemp` を更新し、`.endef` 時に `ScdEndef` へ伝搬
-  - `src/pass/temp.rs` / `src/object/mod.rs` / `src/pass/pass3.rs`: `value/section` フィールドを追加
-  - `tests/integration_test.rs`: `test_scd_val_constant_is_preserved_in_endef_snapshot` を追加
-- SCD フッタの出力骨格を実装
-  - `src/object/writer.rs`: `$0000` 終端後に SCD フッタ（line/scd/exname 長さ + テーブル）を出力
-  - `src/pass/pass3.rs`: `.ln` を評価して `ScdEvent::Ln { location, section }` として収集
-  - `tests/integration_test.rs`: `test_g_option_emits_scd_footer_after_terminator` を追加
-  - 現状: `.file/.text/.data/.bss` + `.endef` 基本エントリまで出力。`.bf/.ef` 等の完全一致は次段で実装
-- SCD フッタへ関数雛形（`func/.bf/.ef`）を追加
-  - `src/object/writer.rs`: `-g` 時に関数・`.bf`・`.ef` エントリを自動生成
-  - `tests/integration_test.rs`: `test_g_option_scd_footer_contains_bf_ef_entries` を追加
-  - HAS 直接比較（簡易サンプル）: サイズ差分が `-152` → `-44` へ改善
-- SCD の延長名（exname）領域出力を追加
-  - `src/object/writer.rs`: `.file` が14文字超の場合に `EXNAMELEN` と末尾 exname データを出力
-  - `tests/integration_test.rs`: `test_g_option_scd_footer_emits_exname_for_long_filename` を追加
-- 検証結果（最新）
-  - `cargo test --test integration_test`: 60/60 通過
-  - `cargo test --test golden_test`: 17/17 通過
-  - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
-
-### 2026-02-28
-
-- MS5差分の追加調査と実装見直し
-  - `src/pass/temp.rs`: `TempRecord::Branch` に `cur_size` / `suppressed` を追加
-  - `src/pass/pass2.rs`: 自動分岐のサイズ再判定と直後 `BRA/Bcc` サプレス処理を追加
-  - `src/pass/pass3.rs`: 分岐サプレス状態を反映して出力
-  - `src/pass/pass1.rs`: `opt_asl`（`ASL #1,Dn -> ADD Dn,Dn`）実装、`jmp/jsr` 最適化条件をオリジナル寄りに調整
-  - `tests/integration_test.rs`: 4件追加（直後BRAサプレス + `-c4` 最適化3件）
-- Pass2 の見直し（DeferredInsn のサイズ再評価）
-  - `src/pass/pass2.rs`: 未解決 EA を Pass2 で再評価し、`DeferredInsn.byte_size` とラベル値再計算に反映
-  - `tests/integration_test.rs`: 回帰テスト `test_pass2_updates_labels_after_deferred_size_change` を追加
-    - 既知不具合: `bra target` が `6004` になるケースを `6002` に修正
-- 数値ローカルラベル（`1f` / `1b`）の実装
-  - `src/pass/pass1.rs`: `1:` 定義と `1f`/`1b` 参照を一意名へ前処理展開
-  - `tests/integration_test.rs`: 前方/後方参照の回帰テスト 2件を追加
-- 数値ローカルラベル展開の安全化
-  - `src/pass/pass1.rs`: `$2b` など数値リテラル、およびクォート文字列内を置換対象から除外
-  - `tests/integration_test.rs`: `test_numeric_local_label_does_not_touch_hex_literal` を追加
-- Pass3 外部式判定の一般化（ROFST化）
-  - `src/pass/pass3.rs`: `is_external_with_offset` を定数畳み込み付きに拡張（`sym + (16*4)` などを `xref + offset` として扱う）
-  - `src/pass/pass3.rs` unit test 追加: `test_is_external_with_offset_mul_add_const_fold`
-- `.equ/.set` とマクロローカルラベルの見直し
-  - `src/pass/temp.rs`: `TempRecord::EquDef` を追加
-  - `src/pass/pass2.rs`: `.equ/.set` を反復再評価してラベル再配置後の値に追従
-  - `src/pass/pass1.rs`: 行頭 `*` の評価位置同期、ロケーション依存 `.equ/.set` を `NoDet` 扱い
-  - `src/pass/pass1.rs`: マクロ定義収集時に `@name` ローカルラベル置換を常時実施（引数なしマクロ含む）
-  - `src/pass/pass1.rs`: `.dc` のシンボル/ロケーション依存式は Pass3 で最終評価するよう変更
-  - `tests/integration_test.rs`: 追加
-    - `test_equ_location_counter_uses_line_top`
-    - `test_dc_label_diff_recomputed_after_pass2`
-- 動的 `.equ` を含む命令の早期 `Const` 固定を抑制
-  - `src/pass/pass1.rs`: `DeferToLinker` 再エンコード時、動的参照を含むEAは `DeferredInsn` のまま保持
-  - `tests/integration_test.rs`: `test_addq_immediate_from_dynamic_equ_not_frozen_in_pass1` を追加
-- `-g` 指定時の `$B204` 出力を実装
-  - `src/object/mod.rs`: `ObjectCode::has_debug_info` を追加
-  - `src/pass/mod.rs`: `-g` オプションを `ObjectCode` へ伝播
-  - `src/object/writer.rs`: `.align` 未使用でも `-g` なら `$B204` を出力
-  - `tests/integration_test.rs`: `test_g_option_emits_b204_record` を追加
-- `.request` の `$E001` 出力を実装
-  - `src/pass/pass1.rs`: `.request` ファイル名を収集
-  - `src/pass/mod.rs`: 収集した request ファイル名を `ObjectCode` へ伝播
-  - `src/object/writer.rs`: `$E001` レコードを出力
-  - `tests/integration_test.rs`: `test_request_emits_e001_record` を追加
-- PRN `.list/.nlist` 行制御を修正
-  - `src/pass/pass1.rs`: `.nlist` 行は当該行から非表示となるよう先読み判定を追加
-  - `src/context.rs`: `AssemblyContext::prn_listing` フラグを追加
-  - `tests/integration_test.rs`: `test_prn_nlist_and_list` を追加
-- PRN `.sall/.lall` マクロ行制御を実装
-  - `src/context.rs`: `AssemblyContext::prn_macro_listing` フラグを追加
-  - `src/pass/pass1.rs`: `.sall/.lall` でマクロ展開行の `LineInfo` 出力を切替
-  - `tests/integration_test.rs`: `test_prn_lall_shows_macro_expansion_lines` を追加
-- PRN `.width` と `-f` 設定の反映を実装
-  - `src/pass/pass1.rs`: `.width` の定数評価（80..255, 8刻み丸め）を実装
-  - `src/pass/prn.rs`: `line_width/code_width` を受け取る可変フォーマッタ化
-  - `src/pass/mod.rs`: `Options.prn_width/prn_code_width` を `format_prn` へ伝播
-  - `tests/integration_test.rs`: `test_prn_width_directive_limits_line_width` を追加
-- PRN `.title/.subttl` 反映を実装
-  - `src/pass/pass1.rs`: `.title/.subttl` 文字列を解析して `AssemblyContext` へ保持
-  - `src/pass/prn.rs`: PRN先頭に `TITLE/SUBTTL` ヘッダ行を出力
-  - `src/pass/mod.rs`: `ctx.prn_title/ctx.prn_subttl` を `format_prn` へ伝播
-  - `tests/integration_test.rs`: `test_prn_title_and_subttl_are_reflected` を追加
-- PRN `.page` 反映を実装
-  - `src/pass/prn.rs`: `.page` 行を検出し、ページング有効時にフォームフィード（0x0C）を出力
-  - `src/pass/mod.rs`: `Options.prn_no_page_ff` を `format_prn` へ伝播
-  - `tests/integration_test.rs`: `test_prn_page_emits_formfeed_unless_disabled` を追加
-- `.page <expr>` の行数設定を実装
-  - `src/pass/pass1.rs`: `.page <expr>` を `prn_page_lines` 更新として扱い、`.page`/`.page +` と分離
-  - `src/pass/prn.rs`: 改ページ判定を `.page`/`.page +` のみに限定
-  - `src/pass/mod.rs`: `Options.prn_page_lines` を `format_prn` へ伝播
-  - `tests/integration_test.rs`: `test_prn_page_with_expr_sets_page_lines_without_formfeed` を追加
-- `prn_page_lines` による自動改ページを実装
-  - `src/pass/prn.rs`: 1ページ当たり出力行数を計測し、到達時にフォームフィード（0x0C）を出力
-  - `tests/integration_test.rs`: `test_prn_auto_page_break_by_line_limit` を追加
-- `.page -1` / `.page +` の境界挙動を固定
-  - `tests/integration_test.rs`: `test_prn_page_minus1_disables_auto_page_break` を追加
-  - `tests/integration_test.rs`: `test_prn_page_plus_emits_formfeed` を追加
-- `prn_no_page_ff` の抑制範囲を固定
-  - `tests/integration_test.rs`: `test_prn_no_page_ff_disables_all_formfeed` を追加
-- 検証結果
-  - `cargo test --test golden_test`: 17/17 通過
-  - `cargo test --test integration_test`: 37/37 通過
-  - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
-
-### 2026-02-24
-
-- Phase 10 完了（主要機能）
-  - `src/pass/prn.rs`: PRNリストファイル生成（`format_prn`）
-  - `src/pass/temp.rs`: `TempRecord::LineInfo` 追加
-  - `src/pass/pass3.rs`: PRN行追跡 + シグネチャ更新（prn_enable, max_align）
-  - `src/pass/mod.rs`: PRN + シンボルファイル書き出し + `format_sym_file`
-  - `src/pass/pass1.rs`: `.align`使用時の `ctx.max_align` 更新
-  - 180ユニットテスト + 14統合テスト全通過
-
-- Phase 9 完了
-  - `src/symbol/types.rs`: 14 新規 InsnHandler バリアント追加
-  - `src/symbol/mod.rs`: 60+ 新規 OPCODE_TABLE エントリ（68010-68040+命令）
-  - `src/instructions/mod.rs`: 15+ 新規エンコーダ関数（ビットフィールド・MOVEC・MOVES・CAS・CMP2/CHK2・MOVE16・CINV*/CPUSH*等）
-  - 177ユニットテスト + 13統合テスト全通過
-
-- Phase 8 完了
-  - `src/pass/pass1.rs`: マクロ定義・展開・.rept/.irp/.irpc 実装
-  - `src/symbol/types.rs`: Symbol::Macro に params フィールド追加
-  - 177ユニットテスト + 13統合テスト全通過（マクロ統合テスト6件含む）
-
-- Integration tests 追加
-  - `tests/integration_test.rs`: 13件の統合テスト（MS1含む全パイプライン検証）
-  - `src/lib.rs`: ライブラリクレートとして公開（テスト用）
-  - `Cargo.toml`: lib section + tempfile dev dependency 追加
-
-- Phase 5〜7 完了（前セッションより）
-  - `src/instructions/mod.rs`: 全68000命令エンコーダ
-  - `src/pass/`: 3パスシステム + TempRecord + HLKオブジェクト生成
-  - `src/object/`: HLKフォーマット型定義 + バイナリ書き出し
-  - 177テスト全通過
-
-- Phase 2〜4 完了（前セッションより）
-  - `src/symbol/`: シンボルテーブル、型定義、命令テーブル
-  - `src/expr/`: RPN変換・評価
-  - `src/addressing/`: EAモード解析・エンコード
-
-- Phase 1 完了
-  - `src/options.rs`: HAS060X互換CLIパーサ実装（全スイッチ対応）
-  - `src/error.rs`: エラー型・ワーニング型・エラー出力実装
-  - `src/source.rs`: ソースファイル読み込み実装
-  - `src/context.rs`: AssemblyContext骨格実装
-  - `src/main.rs`: エントリポイント実装
-
----
-
-## 参照ドキュメント
-
+## 参照
+- [README](../README.md)
+- [テストガイド](testing.md)
+- [HLKフォーマット](hlk_object_format.md)
 - [HASアーキテクチャ](has_architecture.md)
-- [Human68kシステムコール](human68k_syscalls.md)
-- [HLKオブジェクトフォーマット](hlk_object_format.md)
-- [M68000アドレッシングモード](m68000_addressing.md)
