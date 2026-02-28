@@ -624,6 +624,32 @@ fn test_prn_page_emits_formfeed_unless_disabled() {
     assert!(!prn_b.contains(&0x0C), "formfeed should be suppressed when no_page_ff");
 }
 
+/// `.page <expr>` は改ページせず、PRNページ行数設定を更新する。
+#[test]
+fn test_prn_page_with_expr_sets_page_lines_without_formfeed() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\tnop\n\t.page\t60\n\tnop\n").expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let prn_file = NamedTempFile::new().expect("prn tempfile");
+    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_prn: true,
+        prn_file: Some(prn_path.clone()),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx).expect("assemble");
+
+    assert_eq!(ctx.opts.prn_page_lines, 60);
+
+    let prn = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&prn_path).unwrap()
+    )).expect("read prn");
+    assert!(!prn.contains(&0x0C), "formfeed should not be emitted for .page <expr>");
+}
+
 // ─── -c4 最適化 ──────────────────────────────────────────────────────────────
 
 #[test]

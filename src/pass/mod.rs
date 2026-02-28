@@ -142,6 +142,7 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
             ctx.opts.prn_width as usize,
             ctx.opts.prn_code_width as usize,
             ctx.opts.prn_no_page_ff,
+            ctx.opts.prn_page_lines as usize,
         );
         let prn_path = if let Some(ref p) = ctx.opts.prn_file {
             PathBuf::from(String::from_utf8_lossy(p).as_ref())

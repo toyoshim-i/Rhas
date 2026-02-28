@@ -1824,7 +1824,28 @@ fn handle_pseudo(
                 }
             }
         }
-        InsnHandler::Page => {}
+        InsnHandler::Page => {
+            // `.page` / `.page +` は改ページ要求、`.page <expr>` は行数設定
+            skip_spaces(line, pos);
+            if *pos >= line.len() || line[*pos] == b';' {
+                // 改ページのみ（値変更なし）
+            } else if line[*pos] == b'+' {
+                // `.page +`（値変更なし）
+            } else {
+                match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn).map(|v| v.value)) {
+                    Some(v) if v < 0 => {
+                        // HAS互換: 負値は -1（自動改ページ無効）として扱う
+                        p1.ctx.opts.prn_page_lines = u16::MAX;
+                    }
+                    Some(v) if (10..=255).contains(&v) => {
+                        p1.ctx.opts.prn_page_lines = v as u16;
+                    }
+                    _ => {
+                        p1.error(".page の値が不正です (10..255 または -1)");
+                    }
+                }
+            }
+        }
         InsnHandler::Title => {
             p1.ctx.prn_title = parse_prn_text(line, pos);
         }

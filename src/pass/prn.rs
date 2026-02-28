@@ -31,6 +31,7 @@ pub fn format_prn(
     line_width: usize,
     code_width: usize,
     no_page_ff: bool,
+    _page_lines: usize,
 ) -> Vec<u8> {
     let mut out = Vec::new();
     let line_width = line_width.max(80);
@@ -38,7 +39,7 @@ pub fn format_prn(
     append_header(&mut out, title, subttl, line_width);
 
     for line in lines {
-        if is_page_directive(&line.text) && !no_page_ff {
+        if is_page_break_directive(&line.text) && !no_page_ff {
             out.push(0x0C);
             out.push(b'\n');
         }
@@ -48,7 +49,7 @@ pub fn format_prn(
     out
 }
 
-fn is_page_directive(text: &[u8]) -> bool {
+fn is_page_break_directive(text: &[u8]) -> bool {
     let mut p = 0usize;
     while p < text.len() && (text[p] == b' ' || text[p] == b'\t') {
         p += 1;
@@ -64,7 +65,18 @@ fn is_page_directive(text: &[u8]) -> bool {
         }
         end += 1;
     }
-    text[p..end].eq_ignore_ascii_case(b".page")
+    if !text[p..end].eq_ignore_ascii_case(b".page") {
+        return false;
+    }
+
+    let mut q = end;
+    while q < text.len() && (text[q] == b' ' || text[q] == b'\t') {
+        q += 1;
+    }
+    if q >= text.len() || text[q] == b';' {
+        return true;
+    }
+    text[q] == b'+'
 }
 
 fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8], line_width: usize, code_width: usize) {
@@ -181,6 +193,7 @@ mod tests {
             DEFAULT_PRN_LINE_WIDTH,
             DEFAULT_PRN_CODE_WIDTH,
             false,
+            58,
         );
         let s = String::from_utf8_lossy(&out);
         // Check structure: "    1 00000000  1200            ..."
@@ -207,6 +220,7 @@ mod tests {
             DEFAULT_PRN_LINE_WIDTH,
             DEFAULT_PRN_CODE_WIDTH,
             false,
+            58,
         );
         let s = String::from_utf8_lossy(&out);
         // Should have 2 lines (first 8 bytes + last 2 bytes)
@@ -230,6 +244,7 @@ mod tests {
             DEFAULT_PRN_LINE_WIDTH,
             DEFAULT_PRN_CODE_WIDTH,
             false,
+            58,
         );
         let s = String::from_utf8_lossy(&out);
         // '*' marker for macro
@@ -245,6 +260,7 @@ mod tests {
             DEFAULT_PRN_LINE_WIDTH,
             DEFAULT_PRN_CODE_WIDTH,
             false,
+            58,
         );
         let s = String::from_utf8_lossy(&out);
         assert!(s.contains("MyTitle"));
@@ -252,10 +268,11 @@ mod tests {
     }
 
     #[test]
-    fn test_page_directive_detection() {
-        assert!(is_page_directive(b"\t.page"));
-        assert!(is_page_directive(b"   .PAGE +"));
-        assert!(!is_page_directive(b"\t.pagex"));
-        assert!(!is_page_directive(b";.page"));
+    fn test_page_break_directive_detection() {
+        assert!(is_page_break_directive(b"\t.page"));
+        assert!(is_page_break_directive(b"   .PAGE +"));
+        assert!(!is_page_break_directive(b"\t.page\t60"));
+        assert!(!is_page_break_directive(b"\t.pagex"));
+        assert!(!is_page_break_directive(b";.page"));
     }
 }

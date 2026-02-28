@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 32件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 33件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイートを実行
@@ -192,6 +192,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_prn_width_directive_limits_line_width` | `.width` 指定が PRN の行幅制限に反映される |
 | `test_prn_title_and_subttl_are_reflected` | `.title/.subttl` が PRN ヘッダに反映される |
 | `test_prn_page_emits_formfeed_unless_disabled` | `.page` でフォームフィード出力、`-f0` 相当で抑制される |
+| `test_prn_page_with_expr_sets_page_lines_without_formfeed` | `.page <expr>` は行数設定のみ更新し、改ページしない |
 | `test_bra_to_next_is_suppressed` | 直後ラベルへの `BRA` が pass2 でサプレスされること |
 | `test_c4_cmpi0_to_tst` | `-c4` で `CMPI #0,Dn` が `TST Dn` に最適化されること |
 | `test_c4_movea_l_imm_to_w` | `-c4` で `MOVEA.L #d16,An` が `MOVEA.W` へ縮小されること |
@@ -257,6 +258,7 @@ diff $ORIG_O $RHAS_O
 | 2026-02-28 | PRN `.width` 指定と `-f` 幅設定をフォーマッタに反映 | 回帰なし（golden 17/17, integration 30/30, MS5比較 17一致/0差分） |
 | 2026-02-28 | PRN `.title/.subttl` をヘッダ出力へ反映 | 回帰なし（golden 17/17, integration 31/31, MS5比較 17一致/0差分） |
 | 2026-02-28 | PRN `.page` をフォームフィード出力へ反映（`-f0` 抑制対応） | 回帰なし（golden 17/17, integration 32/32, MS5比較 17一致/0差分） |
+| 2026-02-28 | `.page <expr>` をページ行数設定として実装（改ページは `.page`/`.page +` のみ） | 回帰なし（golden 17/17, integration 33/33, MS5比較 17一致/0差分） |
 
 ---
 

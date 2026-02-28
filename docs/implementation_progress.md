@@ -140,7 +140,7 @@
 | 条件 | ✅ 完了 | `.if` `.iff` `.ifdef` `.ifndef` `.else` `.elseif` `.endif` |
 | ファイル | ✅ 完了 | `.include` `.insert` `.request` |
 | 制御 | ✅ 完了 | `.end` `.cpu` `.fail` |
-| リスト制御 | ✅ 完了 | `.list/.nlist` と `.sall/.lall` で PRN 行出力を制御、`.width/.title/.subttl/.page` を PRN へ反映 |
+| リスト制御 | ✅ 完了 | `.list/.nlist` と `.sall/.lall` で PRN 行出力を制御、`.width/.title/.subttl/.page` を PRN へ反映（`.page <expr>` 含む） |
 
 **参照ファイル**: `external/has060xx/src/pseudo.s`
 
@@ -234,7 +234,7 @@
 - `TempRecord::LineInfo`: パス3でのPRN行追跡用中間レコード
 - `src/pass/mod.rs`: シンボルファイル生成（`format_sym_file`）
 - `ctx.max_align` → `obj.has_align/max_align` 伝播修正（`$B204`レコード用）
-- 32 integration tests（PRN生成 + `.list/.nlist` + `.sall/.lall` + `.width/.title/.subttl/.page` + `-c4` 最適化 + `.equ/.set`/Pass2回帰 + `-g`検証を含む）通過
+- 33 integration tests（PRN生成 + `.list/.nlist` + `.sall/.lall` + `.width/.title/.subttl/.page` + `-c4` 最適化 + `.equ/.set`/Pass2回帰 + `-g`検証を含む）通過
 
 ---
 
@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 32件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 33件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -342,9 +342,14 @@
   - `src/pass/prn.rs`: `.page` 行を検出し、ページング有効時にフォームフィード（0x0C）を出力
   - `src/pass/mod.rs`: `Options.prn_no_page_ff` を `format_prn` へ伝播
   - `tests/integration_test.rs`: `test_prn_page_emits_formfeed_unless_disabled` を追加
+- `.page <expr>` の行数設定を実装
+  - `src/pass/pass1.rs`: `.page <expr>` を `prn_page_lines` 更新として扱い、`.page`/`.page +` と分離
+  - `src/pass/prn.rs`: 改ページ判定を `.page`/`.page +` のみに限定
+  - `src/pass/mod.rs`: `Options.prn_page_lines` を `format_prn` へ伝播
+  - `tests/integration_test.rs`: `test_prn_page_with_expr_sets_page_lines_without_formfeed` を追加
 - 検証結果
   - `cargo test --test golden_test`: 17/17 通過
-  - `cargo test --test integration_test`: 32/32 通過
+  - `cargo test --test integration_test`: 33/33 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 
 ### 2026-02-24
