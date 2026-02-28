@@ -4,7 +4,7 @@
 
 use std::io::Write;
 use std::path::PathBuf;
-use tempfile::NamedTempFile;
+use tempfile::{Builder, NamedTempFile};
 
 // ─── ヘルパー ────────────────────────────────────────────────────────────────
 
@@ -798,12 +798,19 @@ fn test_scd_directives_are_ignored_without_g() {
     let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
 }
 
-/// SCD有効時（-g）の `.file` はデバッグファイル名を保持する。
+/// HAS互換: SCDフッタの `.file` 名は入力ソースファイル名を使う。
 #[test]
-fn test_scd_file_sets_debug_source_name() {
+fn test_scd_footer_uses_input_source_filename() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\tnop\n").expect("write");
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let expected_file = f
+        .path()
+        .file_name()
+        .expect("filename")
+        .to_string_lossy()
+        .into_owned()
+        .into_bytes();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -811,8 +818,9 @@ fn test_scd_file_sets_debug_source_name() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
-    assert_eq!(ctx.scd_file, b"main.c".to_vec());
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    assert_eq!(ctx.scd_file, b"main.c".to_vec(), "directive value is kept in context");
+    assert_eq!(result.obj.scd_file, expected_file, "footer name should be input source filename");
 }
 
 /// `-g` + `.file` 指定時でも、B204文字列は入力ソースファイル名を使う。
@@ -931,11 +939,15 @@ fn test_g_option_scd_footer_contains_bf_ef_entries() {
     assert!(result.obj_bytes.windows(4).any(|w| w == b".ef\0"));
 }
 
-/// 14文字超の `.file` 名は SCD フッタの exname 領域へ出力される。
+/// 14文字超の入力ソース名は SCD フッタの exname 領域へ出力される。
 #[test]
-fn test_g_option_scd_footer_emits_exname_for_long_filename() {
-    let mut f = NamedTempFile::new().expect("tempfile");
-    f.write_all(b"\t.file\t\"verylongdebugname.s\"\n\tnop\n").expect("write");
+fn test_g_option_scd_footer_emits_exname_for_long_source_filename() {
+    let mut f = Builder::new()
+        .prefix("verylongdebugname_source_")
+        .suffix(".s")
+        .tempfile()
+        .expect("tempfile");
+    f.write_all(b"\tnop\n").expect("write");
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
     let opts = rhas::options::Options {
         source_file: Some(path),

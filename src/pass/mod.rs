@@ -132,11 +132,9 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     let (mut obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file.clone(), prn_enable, max_align);
     obj.has_debug_info = ctx.opts.make_sym_deb;
     obj.scd_enabled = ctx.scd_enabled;
-    obj.scd_file = if ctx.opts.make_sym_deb && !ctx.scd_file.is_empty() {
-        ctx.scd_file.clone()
-    } else {
-        source_file
-    };
+    // HAS互換: SCDフッタの `.file` エントリは入力ソースファイル名を使う。
+    // `.file` 疑似命令は SCD有効化に使われるが、最終フッタ名には反映しない。
+    obj.scd_file = source_file;
     obj.request_files = ctx.request_files.clone();
 
     // ---- HLK バイナリ生成 ----
