@@ -1768,6 +1768,8 @@ pub fn encode_insn(
         InsnHandler::FNop         => encode_fnop(base_opcode, operands),
         InsnHandler::FSave        => encode_fsave_frestore(base_opcode, operands),
         InsnHandler::FRestore     => encode_fsave_frestore(base_opcode, operands),
+        InsnHandler::FBcc         => Err(InsnError::DeferToLinker),
+        InsnHandler::FDBcc        => Err(InsnError::DeferToLinker),
         // 疑似命令・その他未実装
         _ => Err(InsnError::DeferToLinker),
     }

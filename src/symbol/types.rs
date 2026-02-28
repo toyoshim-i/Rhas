@@ -344,6 +344,8 @@ pub enum InsnHandler {
     FNop,        // FNOP
     FSave,       // FSAVE
     FRestore,    // FRESTORE
+    FBcc,        // FBcc
+    FDBcc,       // FDBcc
 }
 
 // ----------------------------------------------------------------

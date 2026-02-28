@@ -900,6 +900,97 @@ fn process_deferred(
         return;
     }
 
+    // FBcc は PC 相対分岐をここで解決する
+    if matches!(handler, InsnHandler::FBcc) {
+        let pc = ctx.location();
+        let target_addr = match ext_info.first() {
+            Some(None) => match resolved_ops.first() {
+                Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
+                    match rpn.first() {
+                        Some(RPNToken::Value(v)) => *v as i32,
+                        _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; }
+                    }
+                }
+                _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; }
+            },
+            _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; } // 外部参照は未対応
+        };
+        let disp = target_addr - (pc as i32 + 2);
+        let mut opcode_word = base;
+        match size {
+            SizeCode::Long => {
+                opcode_word |= 0x0040;
+                ctx.emit(&[
+                    (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
+                    ((disp >> 24) & 0xFF) as u8, ((disp >> 16) & 0xFF) as u8,
+                    ((disp >> 8) & 0xFF) as u8, (disp & 0xFF) as u8,
+                ]);
+            }
+            SizeCode::Word | SizeCode::None => {
+                if !(-32768..=32767).contains(&disp) {
+                    if matches!(size, SizeCode::None) {
+                        opcode_word |= 0x0040;
+                        ctx.emit(&[
+                            (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
+                            ((disp >> 24) & 0xFF) as u8, ((disp >> 16) & 0xFF) as u8,
+                            ((disp >> 8) & 0xFF) as u8, (disp & 0xFF) as u8,
+                        ]);
+                    } else {
+                        ctx.emit_zeros(4);
+                        ctx.num_errors += 1;
+                    }
+                } else {
+                    let dw = disp as i16 as u16;
+                    ctx.emit(&[
+                        (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
+                        (dw >> 8) as u8, (dw & 0xFF) as u8,
+                    ]);
+                }
+            }
+            _ => {
+                ctx.emit_zeros(4);
+                ctx.num_errors += 1;
+            }
+        }
+        return;
+    }
+
+    // FDBcc は opcode + cond + disp16 をここで解決する
+    if matches!(handler, InsnHandler::FDBcc) {
+        let pc = ctx.location();
+        let dn = match resolved_ops.first() {
+            Some(EffectiveAddress::DataReg(n)) => *n,
+            _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
+        };
+        let target_addr = match ext_info.get(1) {
+            Some(None) => match resolved_ops.get(1) {
+                Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
+                    match rpn.first() {
+                        Some(RPNToken::Value(v)) => *v as i32,
+                        _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
+                    }
+                }
+                _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
+            },
+            _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; } // 外部参照は未対応
+        };
+        let opcode_word = 0xF048u16 | (base & 0x0E00) | (dn as u16);
+        let cond_word = base & 0x001F;
+        let disp = target_addr - (pc as i32 + 4);
+        if !(-32768..=32767).contains(&disp) {
+            ctx.emit_zeros(6);
+            ctx.num_errors += 1;
+            return;
+        }
+        let dw = disp as i16 as u16;
+        ctx.emit(&[
+            (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
+            (cond_word >> 8) as u8, (cond_word & 0xFF) as u8,
+            (dw >> 8) as u8, (dw & 0xFF) as u8,
+        ]);
+        return;
+    }
+
     match encode_insn(base, handler, size, &resolved_ops) {
         Ok(bytes) => {
             if !has_ext {

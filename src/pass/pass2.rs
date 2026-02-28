@@ -196,6 +196,31 @@ fn estimate_deferred_size(
     if matches!(handler, InsnHandler::DBcc) {
         return 4;
     }
+    if matches!(handler, InsnHandler::FDBcc) {
+        return 6;
+    }
+    if matches!(handler, InsnHandler::FBcc) {
+        return match size {
+            SizeCode::Long => 6,
+            SizeCode::Word => 4,
+            SizeCode::None => {
+                // 自動サイズ: まず .w を試し、収まらなければ .l
+                let target = match ops.first() {
+                    Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
+                        eval_rpn_with_sym(sym, rpn, loc, sect).map(|ev| ev.value)
+                    }
+                    _ => None,
+                };
+                if let Some(target_addr) = target {
+                    let disp = target_addr - (loc as i32 + 2);
+                    if (-32768..=32767).contains(&disp) { 4 } else { 6 }
+                } else {
+                    4
+                }
+            }
+            _ => 4,
+        };
+    }
 
     let resolved_ops: Vec<EffectiveAddress> = ops.iter()
         .map(|ea| resolve_ea_for_pass2(sym, ea, loc, sect))

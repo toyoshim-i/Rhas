@@ -601,6 +601,43 @@ fn test_fmovem_control_register_encoding() {
     );
 }
 
+/// FBcc / FDBcc の基本エンコード（.w/.l と CPID 反映）。
+#[test]
+fn test_fbcc_fdbcc_encoding() {
+    let src = b"\
+\t.68040\n\
+\t.fpid\t3\n\
+\tfbne.w\ttarget_w\n\
+\tnop\n\
+target_w:\n\
+\tnop\n\
+\tfbne.l\ttarget_l\n\
+\tnop\n\
+target_l:\n\
+\tnop\n\
+\tfdbne\td0,target_d\n\
+\tnop\n\
+target_d:\n\
+\tnop\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(
+        text.bytes,
+        [
+            0xF6, 0x8E, 0x00, 0x04, // fbne.w target_w
+            0x4E, 0x71,             // nop
+            0x4E, 0x71,             // target_w: nop
+            0xF6, 0xCE, 0x00, 0x00, 0x00, 0x06, // fbne.l target_l
+            0x4E, 0x71,             // nop
+            0x4E, 0x71,             // target_l: nop
+            0xF6, 0x48, 0x00, 0x0E, 0x00, 0x04, // fdbne d0,target_d
+            0x4E, 0x71,             // nop
+            0x4E, 0x71,             // target_d: nop
+        ]
+    );
+}
+
 /// FMOVECR は .x 以外のサイズを受け付けない。
 #[test]
 fn test_fmovecr_rejects_non_extend_size() {

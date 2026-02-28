@@ -838,6 +838,27 @@ fn handle_real_insn(
         return;
     }
 
+    // FBcc: ターゲットを RPN として保持（Pass3 でPC相対計算）
+    if matches!(handler, InsnHandler::FBcc) {
+        if let Some(rpn) = parse_branch_target(line, pos) {
+            let opcode = (opcode & !0x0E00) | ((u16::from(p1.ctx.fpid & 0x07)) << 9);
+            let req = size.unwrap_or(SizeCode::None);
+            let byte_size = match req {
+                SizeCode::Long => 6,
+                _ => 4, // .w または自動
+            };
+            p1.advance(byte_size);
+            records.push(TempRecord::DeferredInsn {
+                base: opcode,
+                handler,
+                size: req,
+                ops: vec![EffectiveAddress::AbsLong(rpn)],
+                byte_size,
+            });
+        }
+        return;
+    }
+
     // DBcc: ターゲットを RPN として保持
     if matches!(handler, InsnHandler::DBcc) {
         let ops = parse_operands(line, pos, p1.sym, cpu);
@@ -856,6 +877,29 @@ fn handle_real_insn(
                 base: opcode, handler, size: sz,
                 ops: vec![dn, EffectiveAddress::AbsLong(target)],
                 byte_size: 4,
+            });
+        }
+        return;
+    }
+
+    // FDBcc: Dn,ターゲットを保持（Pass3 でPC相対計算）
+    if matches!(handler, InsnHandler::FDBcc) {
+        let ops = parse_operands(line, pos, p1.sym, cpu);
+        if ops.len() == 2 {
+            let opcode = (opcode & !0x0E00) | ((u16::from(p1.ctx.fpid & 0x07)) << 9);
+            let dn = ops[0].clone();
+            let target = if let EffectiveAddress::AbsLong(rpn) = &ops[1] {
+                rpn.clone()
+            } else {
+                vec![RPNToken::Value(0), RPNToken::End]
+            };
+            p1.advance(6);
+            records.push(TempRecord::DeferredInsn {
+                base: opcode,
+                handler,
+                size: SizeCode::None,
+                ops: vec![dn, EffectiveAddress::AbsLong(target)],
+                byte_size: 6,
             });
         }
         return;
@@ -934,6 +978,8 @@ fn handle_real_insn(
             | InsnHandler::FNop
             | InsnHandler::FSave
             | InsnHandler::FRestore
+            | InsnHandler::FBcc
+            | InsnHandler::FDBcc
     ) {
         opcode = (opcode & !0x0E00) | ((u16::from(p1.ctx.fpid & 0x07)) << 9);
     }

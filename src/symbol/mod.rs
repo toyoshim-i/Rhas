@@ -662,6 +662,38 @@ static OPCODE_TABLE: &[OpcodeEntry] = &[
     OpcodeEntry::noop("fnop",   InsnHandler::FNop,     0xF080, CpuMask(
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
     )),
+    // FBcc
+    OpcodeEntry::op("fbf",      InsnHandler::FBcc,     0xF080, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbeq",     InsnHandler::FBcc,     0xF081, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbne",     InsnHandler::FBcc,     0xF08E, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbt",      InsnHandler::FBcc,     0xF08F, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    OpcodeEntry::op("fbra",     InsnHandler::FBcc,     0xF08F, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::WL, sz::NONE),
+    // FDBcc
+    OpcodeEntry::op("fdbf",     InsnHandler::FDBcc,    0x0000, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbra",    InsnHandler::FDBcc,    0x0000, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbeq",    InsnHandler::FDBcc,    0x0001, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbne",    InsnHandler::FDBcc,    0x000E, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
+    OpcodeEntry::op("fdbt",     InsnHandler::FDBcc,    0x000F, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), sz::NONE, sz::NONE),
     // 無操作命令（no-operand）はoptbln相当
     OpcodeEntry::noop("nop",     InsnHandler::Bcc,  0x4E71, ALL),
     OpcodeEntry::noop("rts",     InsnHandler::Bcc,  0x4E75, ALL),
