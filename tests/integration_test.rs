@@ -709,6 +709,23 @@ fn test_scd_ln_alias_updates_line_state() {
     assert_eq!(ctx.scd_ln, 123);
 }
 
+/// HAS互換: `.ln` 行番号は下位16bitへ丸めて保持する。
+#[test]
+fn test_scd_ln_wraps_to_u16() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.file\t\"main.c\"\n\t.ln\t70000,*\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    assert_eq!(ctx.scd_ln, 70000u32 as u16);
+}
+
 /// SCD有効時（-g）の `.dim` は定数4要素までを受理して一時バッファへ反映する。
 #[test]
 fn test_scd_dim_updates_temp_buffer() {
@@ -725,6 +742,24 @@ fn test_scd_dim_updates_temp_buffer() {
     let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
     assert_eq!(ctx.scd_temp.dim, [1, 2, 3, 4]);
     assert!(ctx.scd_temp.is_long);
+}
+
+/// HAS互換: `.line` は値域チェックせず下位16bitのみ保持する。
+#[test]
+fn test_scd_line_wraps_to_u16_in_temp_size() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.line\t70000\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    assert!(ctx.scd_temp.is_long);
+    assert_eq!(ctx.scd_temp.size, (70000u32 as u16) as u32);
 }
 
 /// SCD有効時（-g）の `.scl` は範囲外値を拒否する。

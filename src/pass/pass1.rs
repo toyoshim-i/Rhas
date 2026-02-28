@@ -2172,10 +2172,6 @@ fn handle_pseudo(
                             return;
                         }
                     };
-                    if !(0..=65535).contains(&line_no) {
-                        p1.error(".ln の行番号は 0..65535 で指定してください");
-                        return;
-                    }
                     let mut loc_rpn = vec![RPNToken::Location, RPNToken::End];
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] == b',' {
@@ -2194,8 +2190,10 @@ fn handle_pseudo(
                         p1.error(".ln のオペランドが不正です");
                         return;
                     }
-                    records.push(TempRecord::ScdLn { line: line_no as u16, loc: loc_rpn });
-                    p1.ctx.scd_ln = line_no as u16;
+                    // HAS互換: .ln の行番号は move.w 相当で下位16bitを保持する。
+                    let line_u16 = line_no as u16;
+                    records.push(TempRecord::ScdLn { line: line_u16, loc: loc_rpn });
+                    p1.ctx.scd_ln = line_u16;
                 }
                 InsnHandler::Line => {
                     skip_spaces(line, pos);
@@ -2211,12 +2209,9 @@ fn handle_pseudo(
                         p1.error(".line のオペランドが不正です");
                         return;
                     }
-                    if !(0..=65535).contains(&value) {
-                        p1.error(".line の値は 0..65535 で指定してください");
-                        return;
-                    }
                     p1.ctx.scd_temp.is_long = true;
-                    p1.ctx.scd_temp.size = value as u16 as u32;
+                    // HAS互換: .line は move.w 相当で下位16bitのみ反映する。
+                    p1.ctx.scd_temp.size = (value as u16) as u32;
                 }
                 InsnHandler::SizeScd => {
                     skip_spaces(line, pos);

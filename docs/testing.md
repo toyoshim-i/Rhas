@@ -61,6 +61,7 @@ SCD まわりで現在固定している仕様:
 - `.type` のロング化条件（0x20/0x30 のみ）をテスト固定
 - `.scl 16` の section=-2 補正をフッタ出力で検証
 - `.endef` の attrib 補完（function/tag/extern/static）をテスト固定
+- `.ln/.line` の 16bit 丸め挙動をテスト固定
 - `.file` exname 条件を 14 文字超に調整
 
 ## 残課題
