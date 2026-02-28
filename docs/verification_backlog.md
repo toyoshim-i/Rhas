@@ -9,6 +9,7 @@
 - `integration_test`: 87/87 pass
 - `error_message_test`: 6/6 pass
 - MS6（FPU/SCD/残互換機能）実装済み
+- 優先度A/Bで追跡していた検証項目は完了（残タスクなし）
 
 ## 優先度A（次に必ず実施）
 1. FPU ゴールデン比較を追加 ✅

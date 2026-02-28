@@ -81,7 +81,7 @@ rhas -h
 | MS3 | 疑似命令・最適化込みで `HANOI.S`（付属サンプル）が通る | ✅ 達成 |
 | MS4 | マクロ処理込みで `K_MACRO.MAC`（構造化マクロライブラリ）が通る | ✅ 達成 |
 | MS5 | 実 X68000 プログラムのビルドがオリジナルと完全一致 | ✅ 達成（17/17 ファイル一致） |
-| MS6 | FPU（68881/68882）/ SCD デバッグ情報 / 残互換機能（`.fpid`/`.offsym` など） | ✅ 達成 |
+| MS6 | FPU（68881/68882）/ SCD デバッグ情報 / 残互換機能（`.fpid`/`.offsym` など） | ✅ 達成（比較 19/19 一致） |
 
 ### 機能実装状況
 
@@ -99,7 +99,7 @@ rhas -h
 | HLK オブジェクトファイル出力 | ✅ 完了 | |
 | PRN リストファイル出力 | ✅ 完了 | |
 | `-c4` 拡張最適化（`ADD #1-8` → `ADDQ` 等） | ✅ 実装済み | ゴールデン `addq_opt` / MS5比較で検証済み |
-| FPU 命令（68881/68882） | ✅ 実装済み | `fnop` / `fsave` / `frestore` / `fmove` / `fmovecr` / `fadd` / `fsub` / `fmul` / `fdiv` / `fcmp` / `ftst`（`.fpid` 反映含む） |
+| FPU 命令（68881/68882） | ✅ 実装済み | `fnop` / `fsave` / `frestore` / `fmove` / `fmovecr` / `fadd` / `fsub` / `fmul` / `fdiv` / `fcmp` / `ftst` / `fbcc` / `fdbcc` / `fsincos` / `fmovem`（制御レジスタ単体・複合、FPn静的/動的リスト、`.fpid` 反映含む） |
 | SCD デバッグ情報（`-g` / `.file`） | ✅ 実装済み | HAS 互換の2モードを実装。`-g` では SCD 疑似命令を無視し、入力ソース名で SCD フッタ/B204 を出力。`.file` モード（`-g` なし）では SCD 疑似命令を有効化し、`.file` 指定名で SCD フッタを出力。可変長 SCD エントリ（`len` 依存）と `.file` 長名/`SCDFILENUM` も対応済み |
 
 ---
@@ -113,11 +113,22 @@ cargo test
 # ゴールデンテスト（HAS060.X 出力とのバイト比較）のみ
 cargo test --test golden_test
 
+# 実ソース比較（MS5 / MS6 拡張）
+./tests/compare_ms5_simple.sh
+./tests/compare_ms6_extended.sh
+
 # ゴールデンファイルの再生成（run68 + HAS060.X が必要）
 zsh tests/gen_golden.sh
 ```
 
 詳細は [docs/testing.md](docs/testing.md) を参照してください。
+
+2026-03-01 時点の主な結果:
+- `golden_test`: 25/25 pass
+- `integration_test`: 87/87 pass
+- `error_message_test`: 6/6 pass
+- `compare_ms5_simple.sh`: 17/17 一致
+- `compare_ms6_extended.sh`: 19/19 一致
 
 ---
 
