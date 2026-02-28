@@ -85,7 +85,7 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
             }
             TempRecord::Branch { opcode, req_size, cur_size, suppressed, target } => {
                 let loc = loc_ctr[cur_sect];
-                let mut new_cur_size = *cur_size;
+                let mut new_cur_size: Option<crate::symbol::types::SizeCode>;
                 let mut new_suppressed = false;
 
                 // サイズ未指定（自動）形式のみ最適化

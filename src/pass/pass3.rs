@@ -12,7 +12,7 @@ use crate::object::{ExternalSymbol, ObjectCode, ScdEvent, SectionInfo, sym_kind}
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol::types::{DefAttrib, ExtAttrib, InsnHandler, SizeCode};
 use super::prn::PrnLine;
-use super::temp::{branch_word_size, TempRecord};
+use super::temp::TempRecord;
 
 // ----------------------------------------------------------------
 // Pass3 エラー
@@ -1073,7 +1073,7 @@ fn process_deferred(
 fn resolve_ea_with_ext(ctx: &P3Ctx<'_>, ea: &EffectiveAddress) -> (EffectiveAddress, Option<EaExtKind>) {
     let zero_rpn = || vec![RPNToken::Value(0u32), RPNToken::End];
 
-    /// RPN 評価を試み、外部参照の場合に EaExtKind を決定する
+    // RPN 評価を試み、外部参照の場合に EaExtKind を決定する
     let classify_ext = |rpn: &Rpn| -> EaExtKind {
         if let Some(name) = is_simple_external(rpn) {
             EaExtKind::SimpleAbs(name.clone())

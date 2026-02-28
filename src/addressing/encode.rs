@@ -2,7 +2,7 @@
 ///
 /// `EffectiveAddress` → 6ビット EA フィールド + 拡張ワードバイト列
 
-use super::{EffectiveAddress, Displacement, IndexSpec, IdxSize, Scale, DispSize, eac};
+use super::{EffectiveAddress, Displacement, IndexSpec, IdxSize, eac};
 use crate::expr::eval_rpn;
 
 // ----------------------------------------------------------------

@@ -11,7 +11,9 @@
 pub mod types;
 
 use std::collections::HashMap;
-use types::{CpuMask, DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeFlags};
+use types::{CpuMask, InsnHandler, SizeFlags};
+#[cfg(test)]
+use types::{DefAttrib, ExtAttrib, FirstDef};
 use types::{cmask, sz, reg};
 pub use types::Symbol;
 

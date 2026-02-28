@@ -1330,7 +1330,7 @@ fn encode_asl(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Resul
 /// base_opcode: DBRA=0x51C8, DBcc=0x52C8 etc
 /// bits 2-0 = Dn
 /// 次ワード = 16ビット相対ディスプレースメント → DeferToLinker
-fn encode_dbcc(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+fn encode_dbcc(_base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
     if operands.len() != 2 {
         return Err(InsnError::OperandCount);
     }
@@ -1526,7 +1526,7 @@ fn parse_bitfield_ext(ops: &[EffectiveAddress]) -> Option<(u16, usize)> {
     let offset_ext = match &ops[1] {
         EffectiveAddress::DataReg(r) => {
             // レジスタ offset: bit 11 set
-            (0x0800u16 | ((*r & 7) as u16))
+            0x0800u16 | ((*r & 7) as u16)
         }
         EffectiveAddress::Immediate(rpn) => {
             let v = eval_const(rpn)? as u16 & 0x1F;
@@ -1669,7 +1669,7 @@ fn encode_packunpk(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, 
 /// CAS Dc,Du,<ea>（68020+）
 /// opcode: 0x08C0 | size | ea
 /// extension: Du (bits 8-6) | Dc (bits 2-0)
-fn encode_cas(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+fn encode_cas(_base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
     if operands.len() != 3 { return Err(InsnError::OperandCount); }
     let dc = data_reg(&operands[0]).ok_or(InsnError::InvalidOperand)?;
     let du = data_reg(&operands[1]).ok_or(InsnError::InvalidOperand)?;

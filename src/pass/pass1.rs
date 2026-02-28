@@ -460,7 +460,7 @@ fn parse_line(
     if line.is_empty() { return; }
 
     // ラベル解析（行頭が非空白）
-    let (mut label, mut is_global_label) = if line[0] != b' ' && line[0] != b'\t' {
+    let (label, is_global_label) = if line[0] != b' ' && line[0] != b'\t' {
         match parse_label(line, &mut pos) {
             Some((name, is_global)) => (Some(name), is_global),
             None => (None, false),
