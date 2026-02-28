@@ -79,6 +79,10 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
                             if offset == next_offset && !is_bsr(*opcode) {
                                 new_suppressed = true;
                                 new_cur_size = None;
+                            } else if *suppressed {
+                                // HAS互換: 一度サプレス(0)になった自動分岐は、
+                                // 再出現時にまず .s として復活させる。
+                                new_cur_size = Some(crate::symbol::types::SizeCode::Short);
                             } else if can_shrink_to_short(*cur_size, loc, ev.value as u32, offset) {
                                 // HAS互換: 前方分岐では短縮に伴ってターゲットも前詰めされるため、
                                 // w→s で +2, l→s で +4 まで許容される。
