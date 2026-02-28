@@ -79,7 +79,9 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
                             if offset == next_offset && !is_bsr(*opcode) {
                                 new_suppressed = true;
                                 new_cur_size = None;
-                            } else if offset >= -128 && offset <= 127 {
+                            } else if can_shrink_to_short(*cur_size, loc, ev.value as u32, offset) {
+                                // HAS互換: 前方分岐では短縮に伴ってターゲットも前詰めされるため、
+                                // w→s で +2, l→s で +4 まで許容される。
                                 new_cur_size = Some(crate::symbol::types::SizeCode::Short);
                             } else {
                                 new_cur_size = None; // word
@@ -134,6 +136,19 @@ fn eval_target(sym: &SymbolTable, target: &Rpn, loc: u32, sect_id: u8) -> Option
 fn is_bsr(opcode: u16) -> bool {
     // 条件コード部が 0001 なら BSR
     ((opcode >> 8) & 0x0f) == 0x01
+}
+
+fn can_shrink_to_short(
+    cur_size: Option<crate::symbol::types::SizeCode>,
+    branch_loc: u32,
+    target_addr: u32,
+    raw_offset: i64,
+) -> bool {
+    let old_size = branch_word_size(cur_size) as i64;
+    let shrink = old_size - 2;
+    let forward = target_addr > branch_loc;
+    let adjusted = if forward && shrink > 0 { raw_offset - shrink } else { raw_offset };
+    adjusted >= -128 && adjusted <= 127
 }
 
 fn update_symbol(sym: &mut SymbolTable, name: &[u8], section: u8, value: i32) {
