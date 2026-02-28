@@ -2166,7 +2166,34 @@ fn handle_pseudo(
         }
 
         // ---- FP 等（未実装）----
-        InsnHandler::FpId | InsnHandler::Pragma => {}
+        InsnHandler::FpId => {
+            skip_spaces(line, pos);
+            if *pos >= line.len() || line[*pos] == b';' {
+                p1.error(".fpid の値がありません");
+                return;
+            }
+            let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
+                Some(v) if v.section == 0 => v.value,
+                _ => {
+                    p1.error(".fpid は定数式で指定してください");
+                    return;
+                }
+            };
+            skip_spaces(line, pos);
+            if *pos < line.len() && line[*pos] != b';' {
+                p1.error(".fpid のオペランドが不正です");
+                return;
+            }
+            if value < 0 {
+                // 負値は FPU 命令を禁止
+                p1.ctx.cpu_type &= !cpuconst::CFPP;
+            } else if value <= 7 {
+                p1.ctx.fpid = value as u8;
+            } else {
+                p1.error(".fpid の値は 0..7 で指定してください");
+            }
+        }
+        InsnHandler::Pragma => {}
 
         _ => {} // その他未実装
     }

@@ -438,6 +438,42 @@ fn test_offsym_overwrite_warning_and_error_mode() {
     }
 }
 
+/// `.fpid` は 0..7 を受け付け、負値では CFPP を無効化する。
+#[test]
+fn test_fpid_sets_id_and_can_disable_fpu() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.fpid\t3\n\t.fpid\t-1\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    assert_eq!(ctx.fpid, 3);
+    assert_eq!(ctx.cpu_type & rhas::options::cpu::CFPP, 0, "negative .fpid should disable CFPP");
+}
+
+/// `.fpid` は 0..7 以外を拒否する。
+#[test]
+fn test_fpid_rejects_out_of_range() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.fpid\t8\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    match rhas::pass::assemble(&mut ctx) {
+        Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
+        Err(other) => panic!("unexpected error: {:?}", other),
+        Ok(_) => panic!("assemble should fail"),
+    }
+}
+
 /// .if/.endif 条件アセンブル
 #[test]
 fn test_conditional_asm() {

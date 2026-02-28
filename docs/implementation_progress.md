@@ -134,7 +134,7 @@
 
 | 疑似命令グループ | 状態 | 説明 |
 |---|---|---|
-| セクション | ⚠️ 一部未完 | `.text` `.data` `.bss` `.stack` `.org` `.offset`（`.offsym` は暫定/厳密互換未実装） |
+| セクション | ⚠️ 一部未完 | `.text` `.data` `.bss` `.stack` `.org` `.offset` `.offsym`（SCD/FPU関連の一部は別途） |
 | データ | ✅ 完了 | `.dc` `.ds` `.dcb` `.align` `.even` `.quad` |
 | シンボル | ✅ 完了 | `.equ` `.set` `.reg` `.xdef` `.xref` `.globl` `.comm` `.rcomm` `.rlcomm` |
 | 条件 | ✅ 完了 | `.if` `.iff` `.ifdef` `.ifndef` `.else` `.elseif` `.endif` |
@@ -247,7 +247,7 @@
 | MS3 | 疑似命令・最適化込みで `HANOI.S` が通る | ✅ 完了（76866 バイト、エラーなし） |
 | MS4 | マクロ処理込みで `K_MACRO.MAC` が通る | ✅ 完了（エラーなし、構造化マクロライブラリ全定義処理）|
 | MS5 | 実X68000プログラムのビルドがオリジナルと完全一致 | ✅ 完了（17ファイル中17一致） |
-| MS6 | FPU/ColdFire/SCD/PRN全機能 | ⬜ |
+| MS6 | FPU/ColdFire/SCD/PRN全機能 | 🚧 |
 
 ---
 
@@ -297,8 +297,12 @@
 - `.offsym` 上書き時の `ow_offsym` 挙動を実装
   - `src/pass/pass1.rs`: 上書き禁止モード（`ow_offsym`）ではエラー、通常は警告カウントを加算
   - `tests/integration_test.rs`: `test_offsym_overwrite_warning_and_error_mode` を追加
+- `.fpid` 疑似命令の基本挙動を実装
+  - `src/context.rs`: `fpid` フィールドを追加（0..7、初期値0）
+  - `src/pass/pass1.rs`: `.fpid` の定数評価、範囲チェック、負値時の `CFPP` クリアを実装
+  - `tests/integration_test.rs`: `test_fpid_sets_id_and_can_disable_fpu` / `test_fpid_rejects_out_of_range` を追加
 - 検証結果（最新）
-  - `cargo test --test integration_test`: 44/44 通過
+  - `cargo test --test integration_test`: 46/46 通過
   - `cargo test --test golden_test`: 17/17 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 

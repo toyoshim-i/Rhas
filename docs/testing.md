@@ -208,6 +208,8 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_offsym_with_symbol_sets_symbol_value` | `.offsym <expr>,<sym>` がシンボルへ初期値を与えること |
 | `test_offsym_with_symbol_rejects_alignment_directives` | `.offsym <expr>,<sym>` 中の `.even/.quad/.align` がエラーになること |
 | `test_offsym_overwrite_warning_and_error_mode` | `.offsym` 上書きが通常は警告、`ow_offsym` 有効時はエラーになること |
+| `test_fpid_sets_id_and_can_disable_fpu` | `.fpid` が 0..7 を受理し、負値で FPU 無効化（CFPPクリア）すること |
+| `test_fpid_rejects_out_of_range` | `.fpid` が範囲外値（8以上）を拒否すること |
 
 ---
 
@@ -277,6 +279,7 @@ diff $ORIG_O $RHAS_O
 | 2026-03-01 | `.offsym` 基本挙動（`.offset` 同等 + 初期値シンボル）を実装 | 回帰なし（golden 17/17, integration 42/42, MS5比較 17一致/0差分） |
 | 2026-03-01 | `.offsym` シンボル指定中の `.even/.quad/.align` 禁止を実装 | 回帰なし（golden 17/17, integration 43/43, MS5比較 17一致/0差分） |
 | 2026-03-01 | `.offsym` 上書き時の警告/禁止（`ow_offsym`）を実装 | 回帰なし（golden 17/17, integration 44/44, MS5比較 17一致/0差分） |
+| 2026-03-01 | `.fpid` の定数受理・範囲検証・負値時FPU無効化を実装 | 回帰なし（golden 17/17, integration 46/46, MS5比較 17一致/0差分） |
 
 ---
 

@@ -92,6 +92,8 @@ pub struct AssemblyContext {
     pub cpu_number: u32,
     /// 現在の CPU タイプビット（CPUTYPE, CPUTYPE2）
     pub cpu_type: u16,
+    /// FPU コプロセッサ ID（.fpid で設定、0..7）
+    pub fpid: u8,
 
     // ---- エラー ----
     /// エラー数（NUMOFERR）
@@ -156,6 +158,7 @@ impl AssemblyContext {
 
             cpu_number,
             cpu_type,
+            fpid: 0,
 
             num_errors: 0,
             num_warnings: 0,
