@@ -103,7 +103,7 @@ pub enum TempRecord {
         is_long: bool,
     },
     /// SCD: `.scl -1`（関数定義終了）
-    ScdFuncEnd,
+    ScdFuncEnd { location: u32, section: u8 },
 }
 
 impl TempRecord {

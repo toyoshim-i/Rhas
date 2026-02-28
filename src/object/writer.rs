@@ -145,6 +145,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
         offset = offset.wrapping_add(size);
     }
 
+    let mut open_func_defs: Vec<usize> = Vec::new();
     for ev in &obj.scd_events {
         match ev {
             ScdEvent::Ln { line, location, section } => {
@@ -153,7 +154,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                     lines.push((*location, *line));
                 }
             }
-            ScdEvent::Endef { name, value, section, scl, type_code, size, dim, is_long, .. } => {
+            ScdEvent::Endef { name, attrib, value, section, scl, type_code, size, dim, is_long, .. } => {
                 // HAS互換: enumメンバ（scl=16）は存在しないセクション(-2)へ補正する。
                 let out_section = if *scl == 16 { -2 } else { *section };
                 let mut ent = ScdEntry {
@@ -169,6 +170,18 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 };
                 fill_scd_name(&mut ent.name, name);
                 entries.push(ent);
+                // HAS互換: 関数定義開始(0x21)は .scl -1 でサイズ確定させる。
+                if *attrib == 0x21 {
+                    open_func_defs.push(entries.len() - 1);
+                }
+            }
+            ScdEvent::FuncEnd { location, section } => {
+                if *section == 1 {
+                    if let Some(idx) = open_func_defs.pop() {
+                        let ent = &mut entries[idx];
+                        ent.size = location.saturating_sub(ent.value);
+                    }
+                }
             }
             _ => {}
         }

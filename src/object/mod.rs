@@ -88,7 +88,7 @@ pub enum ScdEvent {
         dim: [u16; 4],
         is_long: bool,
     },
-    FuncEnd,
+    FuncEnd { location: u32, section: u8 },
 }
 
 /// 旧 SymKind 互換エイリアス（既存テストとの互換性維持）

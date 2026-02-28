@@ -754,8 +754,11 @@ pub fn pass3(
                     is_long: *is_long,
                 });
             }
-            TempRecord::ScdFuncEnd => {
-                obj.scd_events.push(ScdEvent::FuncEnd);
+            TempRecord::ScdFuncEnd { location, section } => {
+                obj.scd_events.push(ScdEvent::FuncEnd {
+                    location: *location,
+                    section: *section,
+                });
             }
         }
     }

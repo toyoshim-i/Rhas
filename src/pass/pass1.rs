@@ -2115,7 +2115,10 @@ fn handle_pseudo(
                     }
                     if value == -1 {
                         p1.ctx.scd_temp.attrib = 0x2F;
-                        records.push(TempRecord::ScdFuncEnd);
+                        records.push(TempRecord::ScdFuncEnd {
+                            location: p1.ctx.location(),
+                            section: p1.section_id(),
+                        });
                     } else if (0..=255).contains(&value) {
                         p1.ctx.scd_temp.scl = value as u8;
                     } else {

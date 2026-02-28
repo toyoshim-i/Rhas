@@ -858,7 +858,10 @@ fn test_scd_records_are_emitted_in_pass1() {
     assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdVal { rpn }
         if matches!(rpn.as_slice(), [rhas::expr::RPNToken::Location, rhas::expr::RPNToken::End]))));
     assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdTag { name } if name.as_slice() == b"bar")));
-    assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdFuncEnd)));
+    assert!(records.iter().any(|r| matches!(
+        r,
+        rhas::pass::temp::TempRecord::ScdFuncEnd { .. }
+    )));
     assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { .. })));
 }
 
@@ -980,7 +983,10 @@ fn test_scd_scl_minus1_suppresses_endef_record() {
         b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.scl\t-1\n\t.endef\n",
         true,
     );
-    assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdFuncEnd)));
+    assert!(records.iter().any(|r| matches!(
+        r,
+        rhas::pass::temp::TempRecord::ScdFuncEnd { .. }
+    )));
     assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { .. })));
 }
 
@@ -1100,6 +1106,67 @@ fn test_scd_endef_derives_attrib_from_type_and_scl() {
         rhas::pass::temp::TempRecord::ScdEndef { name, attrib, .. }
             if name.as_slice() == b"locv" && *attrib == 0x30
     )));
+}
+
+/// HAS互換: `.scl -1` は直前の関数定義エントリの size を現在位置で確定する。
+#[test]
+fn test_scd_funcend_updates_function_size_in_footer() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(
+        b"\t.file\t\"main.c\"\n\
+\t.def\tfunc\n\
+\t.val\t.\n\
+\t.type\t$20\n\
+\t.endef\n\
+\tnop\n\
+\tnop\n\
+\t.scl\t-1\n\
+\tnop\n",
+    )
+    .expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+
+    let end_pos = (0..bytes.len().saturating_sub(14))
+        .find(|&i| {
+            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
+                return false;
+            }
+            let p = i + 2;
+            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
+            p + 12 + line_len + scd_len + exname_len == bytes.len()
+        })
+        .expect("0000 terminator");
+    let p = end_pos + 2;
+    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+    let scd_base = p + 12 + line_len;
+    let scd_count = scd_len / 36;
+
+    let mut found = false;
+    for i in 0..scd_count {
+        let e = scd_base + i * 36;
+        let name = &bytes[e..e + 8];
+        if name.starts_with(b"func") {
+            let type_code = u16::from_be_bytes([bytes[e + 14], bytes[e + 15]]);
+            let size = u32::from_be_bytes([bytes[e + 22], bytes[e + 23], bytes[e + 24], bytes[e + 25]]);
+            if type_code == 0x0020 {
+                assert_eq!(size, 4);
+                found = true;
+                break;
+            }
+        }
+    }
+    assert!(found, "function SCD entry should exist");
 }
 
 /// `.request` は `$E001` レコードとして出力される。
