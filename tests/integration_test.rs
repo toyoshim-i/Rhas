@@ -437,6 +437,25 @@ fn test_prn_list_file() {
     assert!(prn_str.contains("4E71"), "nop bytes in PRN");
 }
 
+/// -g オプションで $B204 レコードが出力される（.align 未使用でも出力）。
+#[test]
+fn test_g_option_emits_b204_record() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\tnop\n").expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+
+    let found = result.obj_bytes.windows(2).any(|w| w == [0xB2, 0x04]);
+    assert!(found, "B204 record should exist when -g is enabled");
+}
+
 // ─── -c4 最適化 ──────────────────────────────────────────────────────────────
 
 #[test]

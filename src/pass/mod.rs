@@ -126,7 +126,8 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     // ---- Pass 3: コード生成 → ObjectCode ----
     let prn_enable = ctx.opts.make_prn;
     let max_align = ctx.max_align;
-    let (obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file, prn_enable, max_align);
+    let (mut obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file, prn_enable, max_align);
+    obj.has_debug_info = ctx.opts.make_sym_deb;
 
     // ---- HLK バイナリ生成 ----
     let obj_bytes = write_hlk(&obj);

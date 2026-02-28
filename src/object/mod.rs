@@ -98,6 +98,8 @@ pub struct ObjectCode {
     pub request_files: Vec<Vec<u8>>,
     /// アライン使用フラグ
     pub has_align: bool,
+    /// SCDデバッグ情報出力フラグ（-g）
+    pub has_debug_info: bool,
     /// 最大アライン値（2^n の n）
     pub max_align: u8,
     /// HLK コード本体（20xx セクション切り替え + 10xx コードブロック）
@@ -114,6 +116,7 @@ impl ObjectCode {
             ext_syms: Vec::new(),
             request_files: Vec::new(),
             has_align: false,
+            has_debug_info: false,
             max_align: 0,
             code_body: Vec::new(),
         }

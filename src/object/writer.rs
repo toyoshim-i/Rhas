@@ -40,8 +40,8 @@ pub fn write_hlk(obj: &ObjectCode) -> Vec<u8> {
         push_str_even(&mut out, sect.name().as_bytes());
     }
 
-    // ---- $B204: アラインメント情報（.align 使用時）----
-    if obj.has_align {
+    // ---- $B204: アラインメント情報（.align 使用時 / -g 指定時）----
+    if obj.has_align || obj.has_debug_info {
         out.push(0xB2);
         out.push(0x04);
         let n = obj.max_align as u32;
