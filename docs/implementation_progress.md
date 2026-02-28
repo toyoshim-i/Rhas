@@ -21,7 +21,7 @@
 | `src/context.rs` | ✅ 完了 | AssemblyContext骨格 |
 | `src/main.rs` | ✅ 完了 | エントリポイント + CLIバインディング |
 
-**参照ファイル**: `has_source/src/main.s`（docmdline, option_*）
+**参照ファイル**: `external/has060xx/src/main.s`（docmdline, option_*）
 
 ---
 
@@ -44,7 +44,7 @@
 - 3テーブル構成: `user_syms`（大文字小文字区別）+ `reg_table` + `cmd_table`（区別なし）
 - CPU フィルタリング付きルックアップ
 
-**参照ファイル**: `has_source/src/symbol.s`, `symbol.equ`, `regname.s`, `opname.s`
+**参照ファイル**: `external/has060xx/src/symbol.s`, `symbol.equ`, `regname.s`, `opname.s`
 
 ---
 
@@ -74,7 +74,7 @@
   - 同一セクション <アドレス>-<アドレス> → 定数
   - 異セクション・外部参照 → `DeferToLinker` エラー（Phase 7 で処理）
 
-**参照ファイル**: `has_source/src/expr.s`（convrpn, calcrpn）
+**参照ファイル**: `external/has060xx/src/expr.s`（convrpn, calcrpn）
 
 ---
 
@@ -98,7 +98,7 @@
 - brief拡張ワード生成（68000モード）
 - 50+ ユニットテスト
 
-**参照ファイル**: `has_source/src/eamode.s`, `eamode.equ`
+**参照ファイル**: `external/has060xx/src/eamode.s`, `eamode.equ`
 
 ---
 
@@ -122,7 +122,7 @@
 - シンボル参照を含む EA → `InsnError::DeferToLinker`
 - 65 ユニットテスト
 
-**参照ファイル**: `has_source/src/doasm.s`（各命令ハンドラ）
+**参照ファイル**: `external/has060xx/src/doasm.s`（各命令ハンドラ）
 
 ---
 
@@ -142,7 +142,7 @@
 | 制御 | ✅ 完了 | `.end` `.cpu` `.fail` |
 | リスト制御 | ✅ 完了（スタブ） | `.list` `.nlist` `.sall` `.lall` `.page` `.title` `.subttl` `.width` |
 
-**参照ファイル**: `has_source/src/pseudo.s`
+**参照ファイル**: `external/has060xx/src/pseudo.s`
 
 ---
 
@@ -168,7 +168,7 @@
 - HLK writer: $D000ヘッダ、$C0xxセクション、$B2xx外部シンボル、$0000終端
 - MS1達成: `move.b d0,d1` → 正しいHLKオブジェクト出力（integration test通過）
 
-**参照ファイル**: `has_source/src/objgen.s`, `docs/hlk_object_format.md`
+**参照ファイル**: `external/has060xx/src/objgen.s`, `docs/hlk_object_format.md`
 
 ---
 
@@ -193,7 +193,7 @@
 - 文字列内の `&param` も置換対応
 - 6 integration tests 通過（macro_no_args, macro_with_args, rept, irp, irpc）
 
-**参照ファイル**: `has_source/src/macro.s`
+**参照ファイル**: `external/has060xx/src/macro.s`
 
 ---
 

@@ -214,6 +214,6 @@ pub enum SymbolKind {
 
 ## 参照
 
-- HASソースコード: `has_source/src/objgen.s`（`makeobjhead`, `outsymbol`, `outxrefdef`）
-- HASソースコード: `has_source/src/has.equ`（セクションコード定義）
+- HASソースコード: `external/has060xx/src/objgen.s`（`makeobjhead`, `outsymbol`, `outxrefdef`）
+- HASソースコード: `external/has060xx/src/has.equ`（セクションコード定義）
 - 関連ツール: HLK.X（リンカ）、LIB.X（ライブラリアン）
