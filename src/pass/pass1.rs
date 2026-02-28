@@ -253,6 +253,8 @@ fn preprocess_numeric_local_labels(line: &[u8], counts: &mut HashMap<u32, u32>) 
     let mut result = Vec::with_capacity(line.len() + 16);
     let mut i = 0usize;
     let mut def_num: Option<u32> = None;
+    let mut in_single = false;
+    let mut in_double = false;
 
     // 行頭の `N:` 定義を先に処理
     let mut j = 0usize;
@@ -277,9 +279,30 @@ fn preprocess_numeric_local_labels(line: &[u8], counts: &mut HashMap<u32, u32>) 
             result.extend_from_slice(&line[i..]);
             break;
         }
+        if !in_double && b == b'\'' {
+            in_single = !in_single;
+            result.push(b);
+            i += 1;
+            continue;
+        }
+        if !in_single && b == b'"' {
+            in_double = !in_double;
+            result.push(b);
+            i += 1;
+            continue;
+        }
+        if in_single || in_double {
+            result.push(b);
+            i += 1;
+            continue;
+        }
 
         if b.is_ascii_digit() {
-            let left_boundary = i == 0 || !is_num_local_ident_cont(line[i - 1]);
+            let prev = if i > 0 { Some(line[i - 1]) } else { None };
+            // $2b / %1010 / 0x2f のような数値リテラルは置換しない。
+            let numeric_prefix = matches!(prev, Some(b'$' | b'%'))
+                || (i >= 2 && (line[i - 2] == b'0') && matches!(line[i - 1], b'x' | b'X'));
+            let left_boundary = (i == 0 || !is_num_local_ident_cont(line[i - 1])) && !numeric_prefix;
             if left_boundary {
                 let mut k = i;
                 while k < line.len() && line[k].is_ascii_digit() {

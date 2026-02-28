@@ -291,11 +291,14 @@
 - 数値ローカルラベル（`1f` / `1b`）の実装
   - `src/pass/pass1.rs`: `1:` 定義と `1f`/`1b` 参照を一意名へ前処理展開
   - `tests/integration_test.rs`: 前方/後方参照の回帰テスト 2件を追加
+- 数値ローカルラベル展開の安全化
+  - `src/pass/pass1.rs`: `$2b` など数値リテラル、およびクォート文字列内を置換対象から除外
+  - `tests/integration_test.rs`: `test_numeric_local_label_does_not_touch_hex_literal` を追加
 - 検証結果
   - `cargo test --test golden_test`: 17/17 通過
-  - `cargo test --test integration_test`: 21/21 通過
+  - `cargo test --test integration_test`: 22/22 通過
   - `tests/compare_ms5_simple.sh`: 15一致 / 2差分（`doasm +164`, `pseudo +14`）
-  - `file.o` は一致化。残差は `doasm/pseudo` の分岐最適化系。
+  - 本修正単体では一致件数に変化なし。`file.o` は引き続き一致、残差は `doasm/pseudo`。
 
 ### 2026-02-24
 

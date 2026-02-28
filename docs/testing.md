@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 180件 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 21件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 22件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイート（215件）を実行
@@ -156,7 +156,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 
 ---
 
-## 3. 統合テスト（21件）
+## 3. 統合テスト（22件）
 
 `tests/integration_test.rs` — 3パス全体を通した end-to-end 検証。
 
@@ -235,6 +235,7 @@ diff $ORIG_O $RHAS_O
 | 2026-02-28 | `opt_asl`（`ASL #1,Dn -> ADD Dn,Dn`）実装 + 統合テスト追加 | 回帰なし（golden 17/17, integration 18/18） |
 | 2026-02-28 | Pass2 で DeferredInsn サイズ再評価を追加 | 回帰なし（golden 17/17, integration 19/19）、MS5差分は 14一致/3差分のまま |
 | 2026-02-28 | 数値ローカルラベル `1f/1b` 展開を実装 | 回帰なし（golden 17/17, integration 21/21）、MS5差分は 15一致/2差分へ改善 |
+| 2026-02-28 | 数値ローカルラベル展開をリテラル/文字列に対して安全化 | 回帰なし（golden 17/17, integration 22/22）、MS5差分は 15一致/2差分のまま |
 
 ---
 

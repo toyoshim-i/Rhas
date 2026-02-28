@@ -143,6 +143,22 @@ fn test_numeric_local_label_backward() {
     assert_eq!(text.bytes, [0x4E, 0x71, 0x66, 0xFC]);
 }
 
+/// 数値ローカルラベル展開は16進リテラル `$2b` を誤変換しない。
+#[test]
+fn test_numeric_local_label_does_not_touch_hex_literal() {
+    let src = b"\
+\tmoveq\t#$2b,d0\n\
+\tbne\t1f\n\
+\tnop\n\
+1:\n\
+\tnop\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    // moveq #$2b,d0 ; bne.s +2 ; nop ; nop
+    assert_eq!(text.bytes, [0x70, 0x2B, 0x66, 0x02, 0x4E, 0x71, 0x4E, 0x71]);
+}
+
 /// Pass2 は DeferredInsn のサイズ変化をラベル値へ反映する。
 /// 反映漏れがあると bra target のオフセットが +4 になってしまう。
 #[test]
