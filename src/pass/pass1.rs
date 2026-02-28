@@ -2015,18 +2015,42 @@ fn handle_pseudo(
                         p1.error(".endef にオペランドは指定できません");
                         return;
                     }
+                    // HAS互換: .endef 時に attrib を type/scl から補完する。
+                    let mut attrib = p1.ctx.scd_temp.attrib;
+                    let mut is_long = p1.ctx.scd_temp.is_long;
+                    if (attrib & 0x0F) == 0 {
+                        let t = p1.ctx.scd_temp.type_code & 0x0030;
+                        if t == 0x0020 {
+                            // 関数定義開始
+                            attrib = 0x21;
+                            is_long = true;
+                        } else {
+                            match p1.ctx.scd_temp.scl {
+                                // struct/union/enum タグ定義開始
+                                10 | 12 | 15 => {
+                                    attrib = 0x11;
+                                    is_long = true;
+                                }
+                                // extern 変数
+                                2 | 80 | 82 => attrib = 0x50,
+                                // static 変数/その他
+                                _ if attrib == 0 => attrib = 0x30,
+                                _ => {}
+                            }
+                        }
+                    }
                     // HAS互換: `.scl -1`（attrib=0x2F）後の `.endef` は出力しない。
-                    if p1.ctx.scd_temp.attrib != 0x2F {
+                    if attrib != 0x2F {
                         records.push(TempRecord::ScdEndef {
                             name: p1.ctx.scd_temp.name.clone(),
-                            attrib: p1.ctx.scd_temp.attrib,
+                            attrib,
                             value: p1.ctx.scd_temp.value,
                             section: p1.ctx.scd_temp.section,
                             scl: p1.ctx.scd_temp.scl,
                             type_code: p1.ctx.scd_temp.type_code,
                             size: p1.ctx.scd_temp.size,
                             dim: p1.ctx.scd_temp.dim,
-                            is_long: p1.ctx.scd_temp.is_long,
+                            is_long,
                         });
                     }
                     p1.ctx.scd_temp = crate::context::ScdTemp::default();

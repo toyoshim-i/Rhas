@@ -41,6 +41,7 @@
 - exname 条件を 14文字超へ調整
 - `.type` のロング判定を HAS 互換（0x20/0x30 のみ）へ修正
 - `.scl 16`（enum メンバ）の section を SCD 出力時に `-2` へ補正
+- `.endef` の attrib 自動決定（function/tag/extern/static）を HAS 互換化
 
 ## テスト状況
 | スイート | 状態 |

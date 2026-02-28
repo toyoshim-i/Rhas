@@ -1023,6 +1023,50 @@ fn test_scd_enum_member_forces_section_minus2_in_footer() {
     assert!(found, "enumv SCD entry should exist");
 }
 
+/// HAS互換: `.endef` で未指定 attrib は type/scl から補完される。
+#[test]
+fn test_scd_endef_derives_attrib_from_type_and_scl() {
+    let function = pass1_records(
+        b"\t.file\t\"main.c\"\n\t.def\tfunc\n\t.type\t$20\n\t.endef\n",
+        true,
+    );
+    assert!(function.iter().any(|r| matches!(
+        r,
+        rhas::pass::temp::TempRecord::ScdEndef { name, attrib, is_long, .. }
+            if name.as_slice() == b"func" && *attrib == 0x21 && *is_long
+    )));
+
+    let tag = pass1_records(
+        b"\t.file\t\"main.c\"\n\t.def\ttag1\n\t.scl\t10\n\t.endef\n",
+        true,
+    );
+    assert!(tag.iter().any(|r| matches!(
+        r,
+        rhas::pass::temp::TempRecord::ScdEndef { name, attrib, is_long, .. }
+            if name.as_slice() == b"tag1" && *attrib == 0x11 && *is_long
+    )));
+
+    let ext = pass1_records(
+        b"\t.file\t\"main.c\"\n\t.def\textv\n\t.scl\t2\n\t.endef\n",
+        true,
+    );
+    assert!(ext.iter().any(|r| matches!(
+        r,
+        rhas::pass::temp::TempRecord::ScdEndef { name, attrib, .. }
+            if name.as_slice() == b"extv" && *attrib == 0x50
+    )));
+
+    let local = pass1_records(
+        b"\t.file\t\"main.c\"\n\t.def\tlocv\n\t.endef\n",
+        true,
+    );
+    assert!(local.iter().any(|r| matches!(
+        r,
+        rhas::pass::temp::TempRecord::ScdEndef { name, attrib, .. }
+            if name.as_slice() == b"locv" && *attrib == 0x30
+    )));
+}
+
 /// `.request` は `$E001` レコードとして出力される。
 #[test]
 fn test_request_emits_e001_record() {
