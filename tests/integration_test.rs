@@ -745,6 +745,40 @@ fn test_prn_page_plus_emits_formfeed() {
     assert!(prn.contains(&0x0C), "formfeed should be emitted for .page +");
 }
 
+/// `prn_no_page_ff` が true のとき、明示/自動いずれの改ページも抑制される。
+#[test]
+fn test_prn_no_page_ff_disables_all_formfeed() {
+    let mut src = Vec::<u8>::new();
+    src.extend_from_slice(b"\t.page\t+\n");
+    for _ in 0..20 {
+        src.extend_from_slice(b"\tnop\n");
+    }
+
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(&src).expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let prn_file = NamedTempFile::new().expect("prn tempfile");
+    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+
+    let mut opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_prn: true,
+        prn_file: Some(prn_path.clone()),
+        ..Default::default()
+    };
+    opts.prn_no_page_ff = true;
+    opts.prn_page_lines = 10;
+
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx).expect("assemble");
+
+    let prn = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&prn_path).unwrap()
+    )).expect("read prn");
+    assert!(!prn.contains(&0x0C), "no formfeed should be emitted when prn_no_page_ff=true");
+}
+
 // ─── -c4 最適化 ──────────────────────────────────────────────────────────────
 
 #[test]

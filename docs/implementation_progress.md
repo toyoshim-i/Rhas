@@ -234,7 +234,7 @@
 - `TempRecord::LineInfo`: パス3でのPRN行追跡用中間レコード
 - `src/pass/mod.rs`: シンボルファイル生成（`format_sym_file`）
 - `ctx.max_align` → `obj.has_align/max_align` 伝播修正（`$B204`レコード用）
-- 36 integration tests（PRN生成 + `.list/.nlist` + `.sall/.lall` + `.width/.title/.subttl/.page` + `-c4` 最適化 + `.equ/.set`/Pass2回帰 + `-g`検証を含む）通過
+- 37 integration tests（PRN生成 + `.list/.nlist` + `.sall/.lall` + `.width/.title/.subttl/.page` + `-c4` 最適化 + `.equ/.set`/Pass2回帰 + `-g`検証を含む）通過
 
 ---
 
@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 36件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 37件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -353,9 +353,11 @@
 - `.page -1` / `.page +` の境界挙動を固定
   - `tests/integration_test.rs`: `test_prn_page_minus1_disables_auto_page_break` を追加
   - `tests/integration_test.rs`: `test_prn_page_plus_emits_formfeed` を追加
+- `prn_no_page_ff` の抑制範囲を固定
+  - `tests/integration_test.rs`: `test_prn_no_page_ff_disables_all_formfeed` を追加
 - 検証結果
   - `cargo test --test golden_test`: 17/17 通過
-  - `cargo test --test integration_test`: 36/36 通過
+  - `cargo test --test integration_test`: 37/37 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 
 ### 2026-02-24
