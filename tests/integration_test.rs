@@ -584,6 +584,46 @@ fn test_prn_title_and_subttl_are_reflected() {
     assert!(prn_str.contains("PartA"), "subttl should appear in PRN");
 }
 
+/// `.page` が PRN にフォームフィードを出力する（`-f0` では抑制）。
+#[test]
+fn test_prn_page_emits_formfeed_unless_disabled() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\tnop\n\t.page\n\tnop\n").expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let prn_file_a = NamedTempFile::new().expect("prn tempfile");
+    let prn_path_a = prn_file_a.path().to_str().expect("path").as_bytes().to_vec();
+    let mut opts_a = rhas::options::Options {
+        source_file: Some(src_path.clone()),
+        make_prn: true,
+        prn_file: Some(prn_path_a.clone()),
+        ..Default::default()
+    };
+    opts_a.prn_no_page_ff = false;
+    let mut ctx_a = rhas::context::AssemblyContext::new(opts_a);
+    rhas::pass::assemble(&mut ctx_a).expect("assemble a");
+    let prn_a = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&prn_path_a).unwrap()
+    )).expect("read prn a");
+    assert!(prn_a.contains(&0x0C), "formfeed should be emitted for .page");
+
+    let prn_file_b = NamedTempFile::new().expect("prn tempfile");
+    let prn_path_b = prn_file_b.path().to_str().expect("path").as_bytes().to_vec();
+    let mut opts_b = rhas::options::Options {
+        source_file: Some(src_path),
+        make_prn: true,
+        prn_file: Some(prn_path_b.clone()),
+        ..Default::default()
+    };
+    opts_b.prn_no_page_ff = true;
+    let mut ctx_b = rhas::context::AssemblyContext::new(opts_b);
+    rhas::pass::assemble(&mut ctx_b).expect("assemble b");
+    let prn_b = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&prn_path_b).unwrap()
+    )).expect("read prn b");
+    assert!(!prn_b.contains(&0x0C), "formfeed should be suppressed when no_page_ff");
+}
+
 // ─── -c4 最適化 ──────────────────────────────────────────────────────────────
 
 #[test]
