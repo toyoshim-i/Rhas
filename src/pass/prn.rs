@@ -20,22 +20,24 @@ pub struct PrnLine {
 }
 
 /// PRN出力のデフォルト設定
-const PRN_CODE_WIDTH: usize = 16;   // コード部文字数 (8バイト = 16 hex chars)
-const PRN_LINE_WIDTH: usize = 136;  // 全体幅
+const DEFAULT_PRN_CODE_WIDTH: usize = 16;   // コード部文字数 (8バイト = 16 hex chars)
+const DEFAULT_PRN_LINE_WIDTH: usize = 136;  // 全体幅
 
 /// PRNリストをバイト列として生成する
-pub fn format_prn(lines: &[PrnLine], title: &[u8]) -> Vec<u8> {
+pub fn format_prn(lines: &[PrnLine], title: &[u8], line_width: usize, code_width: usize) -> Vec<u8> {
     let mut out = Vec::new();
+    let line_width = line_width.max(80);
+    let code_width = code_width.max(4);
 
     for line in lines {
-        format_prn_line(&mut out, line, title);
+        format_prn_line(&mut out, line, title, line_width, code_width);
     }
 
     out
 }
 
-fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8]) {
-    // コードバイトのHEX文字列化（PRN_CODE_WIDTH文字まで）
+fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8], line_width: usize, code_width: usize) {
+    // コードバイトのHEX文字列化（code_width文字まで）
     // 8バイト超の場合は継続行に分割
     let hex_chars: Vec<u8> = bytes_to_hex(&entry.bytes);
     let source_text = &entry.text;
@@ -44,7 +46,7 @@ fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8]) {
     let mut is_first = true;
 
     loop {
-        let code_end = (code_offset + PRN_CODE_WIDTH).min(hex_chars.len());
+        let code_end = (code_offset + code_width).min(hex_chars.len());
         let code_chunk = &hex_chars[code_offset..code_end];
 
         if is_first {
@@ -70,16 +72,16 @@ fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8]) {
             out.extend_from_slice(b"               ");
         }
 
-        // コード部 (PRN_CODE_WIDTH文字、右側スペースパディング)
+        // コード部 (code_width文字、右側スペースパディング)
         out.extend_from_slice(code_chunk);
-        let padding = PRN_CODE_WIDTH - code_chunk.len();
+        let padding = code_width - code_chunk.len();
         for _ in 0..padding {
             out.push(b' ');
         }
 
         // ソース部（初回のみ、幅制限内）
         if is_first && !source_text.is_empty() {
-            let max_src = PRN_LINE_WIDTH.saturating_sub(5 + 1 + 8 + 1 + 1 + PRN_CODE_WIDTH);
+            let max_src = line_width.saturating_sub(5 + 1 + 8 + 1 + 1 + code_width);
             let src_len = source_text.len().min(max_src);
             out.extend_from_slice(&source_text[..src_len]);
         }
@@ -122,7 +124,7 @@ mod tests {
             text: b"        move.b  d0,d1".to_vec(),
             is_macro: false,
         };
-        let out = format_prn(&[line], b"test");
+        let out = format_prn(&[line], b"test", DEFAULT_PRN_LINE_WIDTH, DEFAULT_PRN_CODE_WIDTH);
         let s = String::from_utf8_lossy(&out);
         // Check structure: "    1 00000000  1200            ..."
         assert!(s.contains("    1 00000000 "));
@@ -132,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_format_long_code() {
-        // 10 bytes = 20 hex chars > PRN_CODE_WIDTH(16)
+        // 10 bytes = 20 hex chars > code_width(16)
         let line = PrnLine {
             line_num: 2,
             location: 0x100,
@@ -141,7 +143,7 @@ mod tests {
             text: b"        long instruction".to_vec(),
             is_macro: false,
         };
-        let out = format_prn(&[line], b"test");
+        let out = format_prn(&[line], b"test", DEFAULT_PRN_LINE_WIDTH, DEFAULT_PRN_CODE_WIDTH);
         let s = String::from_utf8_lossy(&out);
         // Should have 2 lines (first 8 bytes + last 2 bytes)
         assert_eq!(s.lines().count(), 2);
@@ -157,7 +159,7 @@ mod tests {
             text: b"        macro_call".to_vec(),
             is_macro: true,
         };
-        let out = format_prn(&[line], b"test");
+        let out = format_prn(&[line], b"test", DEFAULT_PRN_LINE_WIDTH, DEFAULT_PRN_CODE_WIDTH);
         let s = String::from_utf8_lossy(&out);
         // '*' marker for macro
         assert!(s.contains('*'));

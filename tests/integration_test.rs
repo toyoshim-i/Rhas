@@ -523,6 +523,39 @@ fn test_prn_lall_shows_macro_expansion_lines() {
     assert!(prn_str.contains("*4E71"), "macro expansion line should be marked with '*'");
 }
 
+/// `.width` の値が PRN 1行の表示幅に反映される。
+#[test]
+fn test_prn_width_directive_limits_line_width() {
+    let mut src = Vec::<u8>::new();
+    src.extend_from_slice(b"\t.width\t80\n\tnop\t;");
+    src.extend(std::iter::repeat(b'A').take(160));
+    src.extend_from_slice(b"\n");
+
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(&src).expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let prn_file = NamedTempFile::new().expect("prn tempfile");
+    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_prn: true,
+        prn_file: Some(prn_path.clone()),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx).expect("assemble");
+
+    let prn_content = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&prn_path).unwrap()
+    )).expect("read prn file");
+    let prn_str = String::from_utf8_lossy(&prn_content);
+
+    let max_len = prn_str.lines().map(|l| l.len()).max().unwrap_or(0);
+    assert!(max_len <= 80, "PRN line should be clipped to width 80, got {}", max_len);
+}
+
 // ─── -c4 最適化 ──────────────────────────────────────────────────────────────
 
 #[test]

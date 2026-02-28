@@ -1813,7 +1813,18 @@ fn handle_pseudo(
         InsnHandler::Sall => {
             p1.ctx.prn_macro_listing = false;
         }
-        InsnHandler::Width | InsnHandler::Page | InsnHandler::Title | InsnHandler::SubTtl => {}
+        InsnHandler::Width => {
+            skip_spaces(line, pos);
+            match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn).map(|v| v.value)) {
+                Some(v) if (80..=255).contains(&v) => {
+                    p1.ctx.opts.prn_width = ((v as u16) & !7) as u16;
+                }
+                _ => {
+                    p1.error(".width の値が不正です (80..255)");
+                }
+            }
+        }
+        InsnHandler::Page | InsnHandler::Title | InsnHandler::SubTtl => {}
 
         // ---- .fail ----
         InsnHandler::Fail => {
