@@ -116,6 +116,22 @@ next:\n\
     assert_eq!(text.bytes, [0x4E, 0x71], "bra next should be removed");
 }
 
+/// Pass2 は DeferredInsn のサイズ変化をラベル値へ反映する。
+/// 反映漏れがあると bra target のオフセットが +4 になってしまう。
+#[test]
+fn test_pass2_updates_labels_after_deferred_size_change() {
+    let src = b"\
+\tbra\ttarget\n\
+\tmove.w\t(target-target,a0),d0\n\
+target:\n\
+\tnop\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    // 正しいオフセットは +2 (pc+2 -> target=0x0004)。
+    assert_eq!(text.bytes, [0x60, 0x02, 0x30, 0x10, 0x4E, 0x71]);
+}
+
 /// .equ シンボル参照
 #[test]
 fn test_equ_symbol() {

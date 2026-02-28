@@ -1,12 +1,16 @@
-/// Pass 2: 最適化（分岐サイズ縮小）
+/// Pass 2: 最適化（分岐サイズ縮小 + DeferredInsn サイズ再評価）
 ///
-/// オリジナルの pass2 に対応。分岐命令のサイズを最適化する。
-/// 収束するまで繰り返し分岐サイズを縮小する。
+/// オリジナルの pass2 に対応。分岐命令のサイズ最適化に加えて、
+/// Pass1 で未解決だった EA を再評価して命令長を更新する。
+/// 収束するまで繰り返す。
 
-use crate::expr::{eval_rpn, Rpn};
+use crate::addressing::{Displacement, EffectiveAddress};
+use crate::expr::{eval_rpn, Rpn, RPNToken};
 use crate::expr::eval::EvalValue;
+use crate::instructions::{encode_insn, InsnError};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol::types::DefAttrib;
+use crate::symbol::types::{InsnHandler, SizeCode};
 use super::temp::{branch_word_size, TempRecord};
 
 /// Pass2: TempRecord 列のロケーションカウンタを再計算し、分岐サイズを最適化する
@@ -54,6 +58,16 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
             }
             TempRecord::Org { value } => {
                 loc_ctr[cur_sect] = *value;
+            }
+            TempRecord::DeferredInsn { base, handler, size, ops, byte_size } => {
+                let loc = loc_ctr[cur_sect];
+                let sect = cur_sect as u8 + 1;
+                let new_size = estimate_deferred_size(sym, *base, *handler, *size, ops, loc, sect);
+                if *byte_size != new_size {
+                    *byte_size = new_size;
+                    changed = true;
+                }
+                loc_ctr[cur_sect] = loc_ctr[cur_sect].wrapping_add(*byte_size);
             }
             TempRecord::Branch { opcode, req_size, cur_size, suppressed, target } => {
                 let loc = loc_ctr[cur_sect];
@@ -153,6 +167,193 @@ fn can_shrink_to_short(
     let forward = target_addr > branch_loc;
     let adjusted = if forward && shrink > 0 { raw_offset - shrink } else { raw_offset };
     adjusted >= -128 && adjusted <= 127
+}
+
+fn estimate_deferred_size(
+    sym: &SymbolTable,
+    base: u16,
+    handler: InsnHandler,
+    size: SizeCode,
+    ops: &[EffectiveAddress],
+    loc: u32,
+    sect: u8,
+) -> u32 {
+    // DBcc は常に opcode + disp16 の 4 バイト。
+    if matches!(handler, InsnHandler::DBcc) {
+        return 4;
+    }
+
+    let resolved_ops: Vec<EffectiveAddress> = ops.iter()
+        .map(|ea| resolve_ea_for_pass2(sym, ea, loc, sect))
+        .collect();
+
+    match encode_insn(base, handler, size, &resolved_ops) {
+        Ok(bytes) => bytes.len() as u32,
+        Err(InsnError::DeferToLinker) => 2 + resolved_ops.iter().map(|ea| ea_ext_size_for_insn(ea, size)).sum::<u32>(),
+        Err(_) => 2 + resolved_ops.iter().map(|ea| ea_ext_size_for_insn(ea, size)).sum::<u32>(),
+    }
+}
+
+fn resolve_ea_for_pass2(
+    sym: &SymbolTable,
+    ea: &EffectiveAddress,
+    loc: u32,
+    sect: u8,
+) -> EffectiveAddress {
+    let zero_rpn = || vec![RPNToken::Value(0), RPNToken::End];
+    let one_rpn = || vec![RPNToken::Value(1), RPNToken::End];
+    match ea {
+        EffectiveAddress::Immediate(rpn) => {
+            if let Some(ev) = eval_rpn_with_sym(sym, rpn, loc, sect) {
+                EffectiveAddress::Immediate(vec![RPNToken::Value(ev.value as u32), RPNToken::End])
+            } else {
+                EffectiveAddress::Immediate(zero_rpn())
+            }
+        }
+        EffectiveAddress::AbsShort(rpn) => {
+            if let Some(ev) = eval_rpn_with_sym(sym, rpn, loc, sect) {
+                EffectiveAddress::AbsShort(vec![RPNToken::Value(ev.value as u32), RPNToken::End])
+            } else {
+                EffectiveAddress::AbsShort(zero_rpn())
+            }
+        }
+        EffectiveAddress::AbsLong(rpn) => {
+            if let Some(ev) = eval_rpn_with_sym(sym, rpn, loc, sect) {
+                EffectiveAddress::AbsLong(vec![RPNToken::Value(ev.value as u32), RPNToken::End])
+            } else {
+                EffectiveAddress::AbsLong(zero_rpn())
+            }
+        }
+        EffectiveAddress::AddrRegDisp { an, disp } => {
+            if disp.const_val.is_some() || disp.rpn.is_empty() {
+                ea.clone()
+            } else if let Some(ev) = eval_rpn_with_sym(sym, &disp.rpn, loc, sect) {
+                EffectiveAddress::AddrRegDisp {
+                    an: *an,
+                    disp: Displacement {
+                        rpn: vec![RPNToken::Value(ev.value as u32), RPNToken::End],
+                        size: disp.size,
+                        const_val: Some(ev.value),
+                    },
+                }
+            } else {
+                // 未解決時は 0 を使うと (An) へ短縮されすぎるので 1 を使う。
+                EffectiveAddress::AddrRegDisp {
+                    an: *an,
+                    disp: Displacement {
+                        rpn: one_rpn(),
+                        size: disp.size,
+                        const_val: Some(1),
+                    },
+                }
+            }
+        }
+        EffectiveAddress::AddrRegIdx { an, disp, idx } => {
+            if disp.const_val.is_some() || disp.rpn.is_empty() {
+                ea.clone()
+            } else if let Some(ev) = eval_rpn_with_sym(sym, &disp.rpn, loc, sect) {
+                EffectiveAddress::AddrRegIdx {
+                    an: *an,
+                    disp: Displacement {
+                        rpn: vec![RPNToken::Value(ev.value as u32), RPNToken::End],
+                        size: disp.size,
+                        const_val: Some(ev.value),
+                    },
+                    idx: idx.clone(),
+                }
+            } else {
+                EffectiveAddress::AddrRegIdx {
+                    an: *an,
+                    disp: Displacement {
+                        rpn: one_rpn(),
+                        size: disp.size,
+                        const_val: Some(1),
+                    },
+                    idx: idx.clone(),
+                }
+            }
+        }
+        EffectiveAddress::PcDisp(disp) => {
+            if disp.const_val.is_some() || disp.rpn.is_empty() {
+                ea.clone()
+            } else if let Some(ev) = eval_rpn_with_sym(sym, &disp.rpn, loc, sect) {
+                let displacement = ev.value - (loc as i32 + 2);
+                EffectiveAddress::PcDisp(Displacement {
+                    rpn: vec![RPNToken::Value(displacement as u32), RPNToken::End],
+                    size: disp.size,
+                    const_val: Some(displacement),
+                })
+            } else {
+                EffectiveAddress::PcDisp(Displacement {
+                    rpn: zero_rpn(),
+                    size: disp.size,
+                    const_val: Some(0),
+                })
+            }
+        }
+        EffectiveAddress::PcIdx { disp, idx } => {
+            if disp.const_val.is_some() || disp.rpn.is_empty() {
+                ea.clone()
+            } else if let Some(ev) = eval_rpn_with_sym(sym, &disp.rpn, loc, sect) {
+                let displacement = ev.value - (loc as i32 + 2);
+                EffectiveAddress::PcIdx {
+                    disp: Displacement {
+                        rpn: vec![RPNToken::Value(displacement as u32), RPNToken::End],
+                        size: disp.size,
+                        const_val: Some(displacement),
+                    },
+                    idx: idx.clone(),
+                }
+            } else {
+                EffectiveAddress::PcIdx {
+                    disp: Displacement {
+                        rpn: zero_rpn(),
+                        size: disp.size,
+                        const_val: Some(0),
+                    },
+                    idx: idx.clone(),
+                }
+            }
+        }
+        _ => ea.clone(),
+    }
+}
+
+fn eval_rpn_with_sym(sym: &SymbolTable, rpn: &Rpn, loc: u32, sect: u8) -> Option<EvalValue> {
+    eval_rpn(rpn, loc, loc, sect, &|name| {
+        sym.lookup_sym(name).and_then(|s| {
+            if let Symbol::Value { value, section, attrib, .. } = s {
+                if *attrib >= DefAttrib::NoDet {
+                    return Some(EvalValue { value: *value, section: *section });
+                }
+            }
+            None
+        })
+    }).ok()
+}
+
+fn ea_ext_size_for_insn(ea: &EffectiveAddress, size: SizeCode) -> u32 {
+    match ea {
+        EffectiveAddress::Immediate(_) => match size {
+            SizeCode::Long => 4,
+            _ => 2,
+        },
+        other => ea_ext_size(other),
+    }
+}
+
+fn ea_ext_size(ea: &EffectiveAddress) -> u32 {
+    match ea {
+        EffectiveAddress::DataReg(_) | EffectiveAddress::AddrReg(_)
+        | EffectiveAddress::AddrRegInd(_) | EffectiveAddress::AddrRegPostInc(_)
+        | EffectiveAddress::AddrRegPreDec(_) => 0,
+        EffectiveAddress::AbsShort(_) | EffectiveAddress::AddrRegDisp { .. }
+        | EffectiveAddress::PcDisp(_) => 2,
+        EffectiveAddress::AbsLong(_) => 4,
+        EffectiveAddress::Immediate(_) => 2,
+        EffectiveAddress::AddrRegIdx { .. } | EffectiveAddress::PcIdx { .. } => 2,
+        EffectiveAddress::CcrReg | EffectiveAddress::SrReg => 0,
+    }
 }
 
 fn update_symbol(sym: &mut SymbolTable, name: &[u8], section: u8, value: i32) {

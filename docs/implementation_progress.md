@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 180件 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 18件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 19件 | ✅ 全通過 |
 
 ---
 
@@ -284,11 +284,15 @@
   - `src/pass/pass3.rs`: 分岐サプレス状態を反映して出力
   - `src/pass/pass1.rs`: `opt_asl`（`ASL #1,Dn -> ADD Dn,Dn`）実装、`jmp/jsr` 最適化条件をオリジナル寄りに調整
   - `tests/integration_test.rs`: 4件追加（直後BRAサプレス + `-c4` 最適化3件）
+- Pass2 の見直し（DeferredInsn のサイズ再評価）
+  - `src/pass/pass2.rs`: 未解決 EA を Pass2 で再評価し、`DeferredInsn.byte_size` とラベル値再計算に反映
+  - `tests/integration_test.rs`: 回帰テスト `test_pass2_updates_labels_after_deferred_size_change` を追加
+    - 既知不具合: `bra target` が `6004` になるケースを `6002` に修正
 - 検証結果
   - `cargo test --test golden_test`: 17/17 通過
-  - `cargo test --test integration_test`: 18/18 通過
-  - `tests/compare_ms5_simple.sh`: 13一致 / 4差分（`doasm +170`, `file +6`, `objgen +4`, `pseudo +52`）
-  - 一致件数は前回から変化なし。次段は `optimize.s` の `dispadr/disppc/dispopc` 系ロジック移植が主対象
+  - `cargo test --test integration_test`: 19/19 通過
+  - `tests/compare_ms5_simple.sh`: 14一致 / 3差分（`doasm +168`, `file +6`, `pseudo +52`）
+  - 本修正単体では一致件数に変化なし。次段は `optimize.s` の `dispadr/disppc/dispopc` 系ロジック移植が主対象
 
 ### 2026-02-24
 

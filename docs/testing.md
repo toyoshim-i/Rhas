@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 180件 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 18件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 19件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイート（215件）を実行
@@ -156,7 +156,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 
 ---
 
-## 3. 統合テスト（18件）
+## 3. 統合テスト（19件）
 
 `tests/integration_test.rs` — 3パス全体を通した end-to-end 検証。
 
@@ -206,7 +206,7 @@ diff $ORIG_O $RHAS_O
 | ファイル | 状態 | 差分 | 原因 |
 |---|---|---|---|
 | commitlog.o | ✅ 一致 | 0 | — |
-| doasm.o | ⚠️ 差異あり | +170 bytes | 残差（分岐最適化カスケード他） |
+| doasm.o | ⚠️ 差異あり | +168 bytes | 残差（分岐最適化カスケード他） |
 | eamode.o | ✅ 一致 | 0 | — |
 | encode.o | ✅ 一致 | 0 | — |
 | error2.o | ✅ 一致 | 0 | — |
@@ -233,6 +233,7 @@ diff $ORIG_O $RHAS_O
 | 2026-02-28 | ADD/SUB #1-8 → ADDQ/SUBQ 最適化実装 | doasm.o -6 bytes |
 | 2026-02-28 | 分岐最適化の内部表現強化（`cur_size`/`suppressed`）+ 直後 `BRA/Bcc` サプレス実装 | ゴールデン/統合テストは通過。MS5比較の一致数は 13/17 のまま |
 | 2026-02-28 | `opt_asl`（`ASL #1,Dn -> ADD Dn,Dn`）実装 + 統合テスト追加 | 回帰なし（golden 17/17, integration 18/18） |
+| 2026-02-28 | Pass2 で DeferredInsn サイズ再評価を追加 | 回帰なし（golden 17/17, integration 19/19）、MS5差分は 14一致/3差分のまま |
 
 ---
 
@@ -303,7 +304,7 @@ cargo test --test golden_test rofst_disp
 
 | ファイル | 差分 | 推定原因 |
 |---|---|---|
-| `doasm.o` | +170 bytes | 分岐最適化カスケード（ADD→ADDQ 変換後のラベルオフセット変化が隣接分岐サイズに波及） |
+| `doasm.o` | +168 bytes | 分岐最適化カスケード（ADD→ADDQ 変換後のラベルオフセット変化が隣接分岐サイズに波及） |
 | `pseudo.o` | +52 bytes | 不明。ADD→ADDQ 対象命令が存在するはずだが変化なし |
 | `file.o` | +6 bytes | 分岐カスケード残差 |
 | `objgen.o` | +4 bytes | 分岐カスケード残差 |
