@@ -31,19 +31,32 @@ pub fn format_prn(
     line_width: usize,
     code_width: usize,
     no_page_ff: bool,
-    _page_lines: usize,
+    page_lines: usize,
 ) -> Vec<u8> {
     let mut out = Vec::new();
     let line_width = line_width.max(80);
     let code_width = code_width.max(4);
-    append_header(&mut out, title, subttl, line_width);
+    let page_limit = if page_lines == u16::MAX as usize || page_lines < 10 {
+        None
+    } else {
+        Some(page_lines)
+    };
+    let mut page_line_count = append_header(&mut out, title, subttl, line_width);
 
     for line in lines {
         if is_page_break_directive(&line.text) && !no_page_ff {
             out.push(0x0C);
             out.push(b'\n');
+            page_line_count = 0;
         }
-        format_prn_line(&mut out, line, title, line_width, code_width);
+        if let Some(limit) = page_limit {
+            if !no_page_ff && page_line_count >= limit {
+                out.push(0x0C);
+                out.push(b'\n');
+                page_line_count = 0;
+            }
+        }
+        page_line_count += format_prn_line(&mut out, line, title, line_width, code_width);
     }
 
     out
@@ -79,7 +92,7 @@ fn is_page_break_directive(text: &[u8]) -> bool {
     text[q] == b'+'
 }
 
-fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8], line_width: usize, code_width: usize) {
+fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8], line_width: usize, code_width: usize) -> usize {
     // コードバイトのHEX文字列化（code_width文字まで）
     // 8バイト超の場合は継続行に分割
     let hex_chars: Vec<u8> = bytes_to_hex(&entry.bytes);
@@ -87,6 +100,7 @@ fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8], line_width
 
     let mut code_offset = 0;
     let mut is_first = true;
+    let mut emitted_lines = 0usize;
 
     loop {
         let code_end = (code_offset + code_width).min(hex_chars.len());
@@ -130,6 +144,7 @@ fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8], line_width
         }
 
         out.push(b'\n');
+        emitted_lines += 1;
 
         code_offset = code_end;
         is_first = false;
@@ -139,12 +154,13 @@ fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8], line_width
             break;
         }
     }
+    emitted_lines
 }
 
-fn append_header(out: &mut Vec<u8>, title: &[u8], subttl: &[u8], line_width: usize) {
-    fn append_one(out: &mut Vec<u8>, prefix: &[u8], text: &[u8], width: usize) {
+fn append_header(out: &mut Vec<u8>, title: &[u8], subttl: &[u8], line_width: usize) -> usize {
+    fn append_one(out: &mut Vec<u8>, prefix: &[u8], text: &[u8], width: usize) -> usize {
         if text.is_empty() {
-            return;
+            return 0;
         }
         let mut line = Vec::with_capacity(width);
         line.extend_from_slice(prefix);
@@ -154,10 +170,11 @@ fn append_header(out: &mut Vec<u8>, title: &[u8], subttl: &[u8], line_width: usi
         }
         out.extend_from_slice(&line);
         out.push(b'\n');
+        1
     }
 
-    append_one(out, b"; TITLE: ", title, line_width);
-    append_one(out, b"; SUBTTL: ", subttl, line_width);
+    append_one(out, b"; TITLE: ", title, line_width)
+        + append_one(out, b"; SUBTTL: ", subttl, line_width)
 }
 
 /// バイト列を16進文字列に変換
@@ -274,5 +291,22 @@ mod tests {
         assert!(!is_page_break_directive(b"\t.page\t60"));
         assert!(!is_page_break_directive(b"\t.pagex"));
         assert!(!is_page_break_directive(b";.page"));
+    }
+
+    #[test]
+    fn test_auto_page_break_by_line_limit() {
+        let mut lines = Vec::new();
+        for i in 0..12u32 {
+            lines.push(PrnLine {
+                line_num: i + 1,
+                location: i * 2,
+                section: 1,
+                bytes: vec![0x4E, 0x71],
+                text: b"nop".to_vec(),
+                is_macro: false,
+            });
+        }
+        let out = format_prn(&lines, b"", b"", DEFAULT_PRN_LINE_WIDTH, DEFAULT_PRN_CODE_WIDTH, false, 10);
+        assert!(out.contains(&0x0C));
     }
 }

@@ -650,6 +650,39 @@ fn test_prn_page_with_expr_sets_page_lines_without_formfeed() {
     assert!(!prn.contains(&0x0C), "formfeed should not be emitted for .page <expr>");
 }
 
+/// `prn_page_lines` に達すると自動でフォームフィード改ページされる。
+#[test]
+fn test_prn_auto_page_break_by_line_limit() {
+    let mut src = Vec::<u8>::new();
+    for _ in 0..12 {
+        src.extend_from_slice(b"\tnop\n");
+    }
+
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(&src).expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let prn_file = NamedTempFile::new().expect("prn tempfile");
+    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+
+    let mut opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_prn: true,
+        prn_file: Some(prn_path.clone()),
+        ..Default::default()
+    };
+    opts.prn_page_lines = 10;
+    opts.prn_no_page_ff = false;
+
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx).expect("assemble");
+
+    let prn = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&prn_path).unwrap()
+    )).expect("read prn");
+    assert!(prn.contains(&0x0C), "auto page break should emit formfeed");
+}
+
 // ─── -c4 最適化 ──────────────────────────────────────────────────────────────
 
 #[test]
