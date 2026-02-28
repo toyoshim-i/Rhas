@@ -1,0 +1,3 @@
+[submodule "external/has060xx"]
+	path = external/has060xx
+	url = https://github.com/kg68k/has060xx.git

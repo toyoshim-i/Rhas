@@ -321,10 +321,13 @@ fn token_as_const(tok: &RPNToken, sym: &SymbolTable) -> Option<i32> {
     }
 }
 
-/// RPN が「単一 XREF ± 定数」パターン [SymbolRef(name), <const>, Op(Add/Sub), End] かチェック
+/// RPN が「単一 XREF ± 定数」パターンかチェック。2つのパターンを認識する:
+///   Pattern 1: [SymbolRef(ext), <const>, Op(Add/Sub), End]  ← ext + const
+///   Pattern 2: [<const>, SymbolRef(ext), Op(Add), End]      ← const + ext（可換）
 /// 定数は ValueByte / ValueWord / Value / 定数 SymbolRef のいずれでもよい
 fn is_external_with_offset<'a>(rpn: &'a Rpn, sym: &SymbolTable) -> Option<(&'a Vec<u8>, i32)> {
     if rpn.len() == 4 {
+        // Pattern 1: [SymbolRef(ext), const, Add/Sub, End]
         if let (RPNToken::SymbolRef(name), tok, RPNToken::Op(op), RPNToken::End) =
             (&rpn[0], &rpn[1], &rpn[2], &rpn[3])
         {
@@ -333,6 +336,17 @@ fn is_external_with_offset<'a>(rpn: &'a Rpn, sym: &SymbolTable) -> Option<(&'a V
                     Operator::Add => return Some((name, n)),
                     Operator::Sub => return Some((name, -n)),
                     _ => {}
+                }
+            }
+        }
+        // Pattern 2: [const, SymbolRef(ext), Add, End]  （加算は可換なので const + ext = ext + const）
+        if let (tok, RPNToken::SymbolRef(name), RPNToken::Op(Operator::Add), RPNToken::End) =
+            (&rpn[0], &rpn[1], &rpn[2], &rpn[3])
+        {
+            if let Some(n) = token_as_const(tok, sym) {
+                // tok が定数として解決でき、name が定数でない（外部参照）場合のみ
+                if token_as_const(&RPNToken::SymbolRef(name.clone()), sym).is_none() {
+                    return Some((name, n));
                 }
             }
         }

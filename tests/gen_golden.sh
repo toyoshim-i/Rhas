@@ -44,7 +44,12 @@ for asm_file in "$ASM_DIR"/*.s; do
 
     # HAS060.X (Human68k binary) only accepts bare filenames, not full paths.
     # Run from the work directory using the basename only; output goes there too.
-    (cd "$WORK_DIR" && run68 "$HAS" -u -w0 "${name}.s" 2>/dev/null) || true
+    # Files ending with _opt use -c4 to enable extended optimizations.
+    if [[ "$name" == *_opt ]]; then
+        (cd "$WORK_DIR" && run68 "$HAS" -c4 -u -w0 "${name}.s" 2>/dev/null) || true
+    else
+        (cd "$WORK_DIR" && run68 "$HAS" -u -w0 "${name}.s" 2>/dev/null) || true
+    fi
 
     if [[ -f "$work_out" ]]; then
         cp "$work_out" "$golden"

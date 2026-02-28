@@ -664,6 +664,32 @@ fn handle_real_insn(
 
     // 通常命令
     let ops = parse_operands(line, pos, &*p1.sym, cpu);
+
+    // ADD/SUB #imm(1-8), <ea> → ADDQ/SUBQ 最適化（opt_adda_suba フラグ）
+    // 元の ADD/SUB はオペコード 0xD000/0x9000 で SubAdd ハンドラを使う。
+    // 即値が 1-8 の定数なら ADDQ(0x5000)/SUBQ(0x5100) に置き換える。
+    let (handler, opcode) = if matches!(handler, InsnHandler::SubAdd)
+        && p1.ctx.opts.opt_adda_suba
+        && ops.len() >= 2
+    {
+        if let EffectiveAddress::Immediate(rpn) = &ops[0] {
+            if let Some(ev) = p1.eval_const(rpn) {
+                if ev.section == 0 && ev.value >= 1 && ev.value <= 8 {
+                    let new_opcode = if opcode & 0x4000 != 0 { 0x5000u16 } else { 0x5100u16 };
+                    (InsnHandler::SubAddQ, new_opcode)
+                } else {
+                    (handler, opcode)
+                }
+            } else {
+                (handler, opcode)
+            }
+        } else {
+            (handler, opcode)
+        }
+    } else {
+        (handler, opcode)
+    };
+
     match encode_insn(opcode, handler, sz, &ops) {
         Ok(bytes) => {
             p1.advance(bytes.len() as u32);
