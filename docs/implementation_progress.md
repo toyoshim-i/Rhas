@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 56件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 57件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -333,8 +333,12 @@
   - `src/pass/pass3.rs`: `.ln` を評価して `ScdEvent::Ln { location, section }` として収集
   - `tests/integration_test.rs`: `test_g_option_emits_scd_footer_after_terminator` を追加
   - 現状: `.file/.text/.data/.bss` + `.endef` 基本エントリまで出力。`.bf/.ef` 等の完全一致は次段で実装
+- SCD フッタへ関数雛形（`func/.bf/.ef`）を追加
+  - `src/object/writer.rs`: `-g` 時に関数・`.bf`・`.ef` エントリを自動生成
+  - `tests/integration_test.rs`: `test_g_option_scd_footer_contains_bf_ef_entries` を追加
+  - HAS 直接比較（簡易サンプル）: サイズ差分が `-152` → `-44` へ改善
 - 検証結果（最新）
-  - `cargo test --test integration_test`: 56/56 通過
+  - `cargo test --test integration_test`: 57/57 通過
   - `cargo test --test golden_test`: 17/17 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 

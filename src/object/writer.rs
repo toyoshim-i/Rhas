@@ -39,6 +39,16 @@ fn fill_scd_name(dst: &mut [u8; 8], s: &[u8]) {
     dst[..n].copy_from_slice(&s[..n]);
 }
 
+fn set_file_bytes(ent: &mut ScdEntry, s: &[u8]) {
+    let mut buf = [0u8; 12];
+    let n = s.len().min(12);
+    buf[..n].copy_from_slice(&s[..n]);
+    ent.tag = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
+    ent.size = u32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]);
+    ent.dim0 = u16::from_be_bytes([buf[8], buf[9]]);
+    ent.dim1 = u16::from_be_bytes([buf[10], buf[11]]);
+}
+
 fn push_scd_entry(out: &mut Vec<u8>, e: &ScdEntry) {
     out.extend_from_slice(&e.name);
     out.extend_from_slice(&e.value.to_be_bytes());
@@ -61,6 +71,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
 
     let mut lines: Vec<(u32, u16)> = Vec::new();
     let mut entries: Vec<ScdEntry> = Vec::new();
+    let text_size = obj.sections.first().map(|s| s.size).unwrap_or(0);
 
     // HAS の既定エントリに合わせ、.file/.text/.data/.bss を最小構成で出力する。
     let mut file_ent = ScdEntry {
@@ -71,14 +82,44 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
         ..Default::default()
     };
     fill_scd_name(&mut file_ent.name, b".file");
-    // ".file" の拡張情報としてソース名先頭4バイトを tag に格納（簡易互換）。
-    if !obj.source_file.is_empty() {
-        let mut tag = [0u8; 4];
-        let n = obj.source_file.len().min(4);
-        tag[..n].copy_from_slice(&obj.source_file[..n]);
-        file_ent.tag = u32::from_be_bytes(tag);
-    }
+    set_file_bytes(&mut file_ent, &obj.source_file);
     entries.push(file_ent);
+
+    // HAS の scdout0 相当: 関数/.bf/.ef の雛形を追加する。
+    let mut func_ent = ScdEntry {
+        value: 0,
+        section: 1,
+        type_code: 0x0020,
+        scl: 0x03,
+        len: 1,
+        size: text_size,
+        next: 8,
+        ..Default::default()
+    };
+    fill_scd_name(&mut func_ent.name, &obj.source_name);
+    entries.push(func_ent);
+
+    let mut bf_ent = ScdEntry {
+        value: 0,
+        section: 1,
+        scl: 0x65,
+        len: 1,
+        size: 1,
+        next: 6,
+        ..Default::default()
+    };
+    fill_scd_name(&mut bf_ent.name, b".bf");
+    entries.push(bf_ent);
+
+    let mut ef_ent = ScdEntry {
+        value: text_size,
+        section: 1,
+        scl: 0x65,
+        len: 1,
+        ..Default::default()
+    };
+    fill_scd_name(&mut ef_ent.name, b".ef");
+    entries.push(ef_ent);
 
     let mut offset = 0u32;
     for (name, sect, idx) in [(b".text".as_slice(), 1i16, 0usize), (b".data".as_slice(), 2, 1), (b".bss".as_slice(), 3, 2)] {
@@ -121,6 +162,10 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
             }
             _ => {}
         }
+    }
+    // .ef の line count 相当を埋める（近似: 最大行番号）
+    if let Some(ef) = entries.iter_mut().find(|e| &e.name[..3] == b".ef") {
+        ef.size = lines.iter().map(|(_, l)| *l as u32).max().unwrap_or(0);
     }
 
     let line_len = (lines.len() as u32) * 6;

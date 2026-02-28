@@ -832,6 +832,23 @@ fn test_g_option_emits_scd_footer_after_terminator() {
     assert!(scd_len >= 36, "scd table should have at least one entry");
 }
 
+/// `-g` 時の SCD フッタには `.bf` / `.ef` エントリが含まれる。
+#[test]
+fn test_g_option_scd_footer_contains_bf_ef_entries() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.file\t\"main.c\"\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    assert!(result.obj_bytes.windows(4).any(|w| w == b".bf\0"));
+    assert!(result.obj_bytes.windows(4).any(|w| w == b".ef\0"));
+}
+
 /// `.val` の定数式は Endef に section=-1 として保持される。
 #[test]
 fn test_scd_val_constant_is_preserved_in_endef_snapshot() {

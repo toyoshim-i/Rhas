@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 56件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 57件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイートを実行
@@ -220,6 +220,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_scd_events_are_collected_in_object` | SCD `TempRecord` が Pass3 で `ObjectCode.scd_events` に収集されること |
 | `test_scd_val_constant_is_preserved_in_endef_snapshot` | `.val` の定数式が `.endef` スナップショットに `section=-1` として保持されること |
 | `test_g_option_emits_scd_footer_after_terminator` | `-g` 時に `$0000` 後ろへ SCD フッタ（長さ3つ + テーブル）が出力されること |
+| `test_g_option_scd_footer_contains_bf_ef_entries` | `-g` 時の SCD フッタに `.bf` / `.ef` エントリが含まれること |
 
 ---
 
@@ -297,6 +298,7 @@ diff $ORIG_O $RHAS_O
 | 2026-03-01 | SCDイベントを `ObjectCode.scd_events` に収集（Pass3） | 回帰なし（golden 17/17, integration 54/54, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD `.val` の値/セクションを `.endef` スナップショットへ伝播 | 回帰なし（golden 17/17, integration 55/55, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD フッタ出力骨格（`$0000` 後ろの長さ3つ + テーブル）を実装 | 回帰なし（golden 17/17, integration 56/56, MS5比較 17一致/0差分） |
+| 2026-03-01 | SCD フッタへ `func/.bf/.ef` 自動エントリを追加 | 回帰なし（golden 17/17, integration 57/57, MS5比較 17一致/0差分） |
 
 ---
 
