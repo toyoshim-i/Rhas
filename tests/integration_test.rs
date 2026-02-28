@@ -824,11 +824,7 @@ fn test_scd_records_are_emitted_in_pass1() {
         if matches!(rpn.as_slice(), [rhas::expr::RPNToken::Location, rhas::expr::RPNToken::End]))));
     assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdTag { name } if name.as_slice() == b"bar")));
     assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdFuncEnd)));
-    assert!(records.iter().any(|r| matches!(
-        r,
-        rhas::pass::temp::TempRecord::ScdEndef { name, value, section, .. }
-            if name.as_slice() == b"foo" && *value == 0 && *section == 1
-    )));
+    assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { .. })));
 }
 
 /// SCD疑似命令は Pass3 で ObjectCode.scd_events に収集される。
@@ -939,6 +935,17 @@ fn test_scd_val_constant_is_preserved_in_endef_snapshot() {
 fn test_scd_directives_require_file_directive() {
     let records = pass1_records(b"\t.ln\t123,*\n\t.def\tfoo\n\t.endef\n", true);
     assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdLn { .. })));
+    assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { .. })));
+}
+
+/// HAS互換: `.scl -1` 後の `.endef` は SCDエントリを生成しない。
+#[test]
+fn test_scd_scl_minus1_suppresses_endef_record() {
+    let records = pass1_records(
+        b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.scl\t-1\n\t.endef\n",
+        true,
+    );
+    assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdFuncEnd)));
     assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { .. })));
 }
 

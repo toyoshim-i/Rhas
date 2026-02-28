@@ -2015,17 +2015,20 @@ fn handle_pseudo(
                         p1.error(".endef にオペランドは指定できません");
                         return;
                     }
-                    records.push(TempRecord::ScdEndef {
-                        name: p1.ctx.scd_temp.name.clone(),
-                        attrib: p1.ctx.scd_temp.attrib,
-                        value: p1.ctx.scd_temp.value,
-                        section: p1.ctx.scd_temp.section,
-                        scl: p1.ctx.scd_temp.scl,
-                        type_code: p1.ctx.scd_temp.type_code,
-                        size: p1.ctx.scd_temp.size,
-                        dim: p1.ctx.scd_temp.dim,
-                        is_long: p1.ctx.scd_temp.is_long,
-                    });
+                    // HAS互換: `.scl -1`（attrib=0x2F）後の `.endef` は出力しない。
+                    if p1.ctx.scd_temp.attrib != 0x2F {
+                        records.push(TempRecord::ScdEndef {
+                            name: p1.ctx.scd_temp.name.clone(),
+                            attrib: p1.ctx.scd_temp.attrib,
+                            value: p1.ctx.scd_temp.value,
+                            section: p1.ctx.scd_temp.section,
+                            scl: p1.ctx.scd_temp.scl,
+                            type_code: p1.ctx.scd_temp.type_code,
+                            size: p1.ctx.scd_temp.size,
+                            dim: p1.ctx.scd_temp.dim,
+                            is_long: p1.ctx.scd_temp.is_long,
+                        });
+                    }
                     p1.ctx.scd_temp = crate::context::ScdTemp::default();
                 }
                 InsnHandler::Val => {
