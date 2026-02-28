@@ -601,6 +601,30 @@ fn test_fmovem_control_register_encoding() {
     );
 }
 
+/// FMOVEM FPn レジスタリスト（静的リスト）のエンコード。
+#[test]
+fn test_fmovem_fpreg_list_encoding() {
+    let src = b"\
+\t.68040\n\
+\t.fpid\t3\n\
+\tfmovem.x\tfp0/fp1,(a0)\n\
+\tfmovem.x\t(a0),fp0/fp1\n\
+\tfmovem.x\tfp0/fp1,-(a0)\n\
+\tfmovem.x\t(a0)+,fp0/fp1\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(
+        text.bytes,
+        [
+            0xF6, 0x10, 0xF0, 0xC0, // fmovem.x fp0/fp1,(a0)
+            0xF6, 0x10, 0xD0, 0xC0, // fmovem.x (a0),fp0/fp1
+            0xF6, 0x20, 0xE0, 0x03, // fmovem.x fp0/fp1,-(a0)
+            0xF6, 0x18, 0xD0, 0xC0, // fmovem.x (a0)+,fp0/fp1
+        ]
+    );
+}
+
 /// FBcc / FDBcc の基本エンコード（.w/.l と CPID 反映）。
 #[test]
 fn test_fbcc_fdbcc_encoding() {
