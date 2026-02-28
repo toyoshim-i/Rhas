@@ -63,6 +63,8 @@ SCD まわりで現在固定している仕様:
 - `.endef` の attrib 補完（function/tag/extern/static）をテスト固定
 - `.ln/.line` の 16bit 丸め挙動をテスト固定
 - `.scl -1` による関数 `size` 確定（SCD フッタ）をテスト固定
+- `.tag` の `tag` フィールド反映をテスト固定
+- `.bb/.eb` の `next` チェイン反映をテスト固定
 - `.file` exname 条件を 14 文字超に調整
 
 ## 残課題

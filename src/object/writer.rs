@@ -146,6 +146,11 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     }
 
     let mut open_func_defs: Vec<usize> = Vec::new();
+    let mut open_bb: Vec<usize> = Vec::new();
+    let mut open_bf: Vec<usize> = Vec::new();
+    let mut open_tag_defs: Vec<usize> = Vec::new();
+    let mut tag_def_by_name: std::collections::HashMap<Vec<u8>, u32> = std::collections::HashMap::new();
+    let mut pending_tag_name: Option<Vec<u8>> = None;
     for ev in &obj.scd_events {
         match ev {
             ScdEvent::Ln { line, location, section } => {
@@ -154,32 +159,73 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                     lines.push((*location, *line));
                 }
             }
+            ScdEvent::Tag { name } => {
+                pending_tag_name = Some(name.clone());
+            }
             ScdEvent::Endef { name, attrib, value, section, scl, type_code, size, dim, is_long, .. } => {
                 // HAS互換: enumメンバ（scl=16）は存在しないセクション(-2)へ補正する。
                 let out_section = if *scl == 16 { -2 } else { *section };
+                let tag_ref = pending_tag_name
+                    .as_ref()
+                    .and_then(|n| tag_def_by_name.get(n))
+                    .copied()
+                    .unwrap_or(0);
                 let mut ent = ScdEntry {
                     value: *value,
                     section: out_section,
                     type_code: *type_code,
                     scl: *scl,
                     len: if *is_long { 1 } else { 0 },
+                    tag: tag_ref,
                     size: *size,
                     dim0: dim[0],
                     dim1: dim[1],
+                    next: ((dim[2] as u32) << 16) | (dim[3] as u32),
                     ..Default::default()
                 };
                 fill_scd_name(&mut ent.name, name);
                 entries.push(ent);
+                let cur = entries.len() - 1;
+                let cur_num = cur as u32;
+                pending_tag_name = None;
+
                 // HAS互換: 関数定義開始(0x21)は .scl -1 でサイズ確定させる。
                 if *attrib == 0x21 {
-                    open_func_defs.push(entries.len() - 1);
+                    open_func_defs.push(cur);
+                } else if *attrib == 0x2B {
+                    // .bb
+                    open_bb.push(cur);
+                } else if *attrib == 0x2C {
+                    // .eb: 対応する .bb へ次位置を書き戻す
+                    if let Some(bb) = open_bb.pop() {
+                        entries[bb].next = cur_num + 1;
+                    }
+                } else if *attrib == 0x2D {
+                    // .bf
+                    open_bf.push(cur);
+                } else if *attrib == 0x2E {
+                    // .ef: 対応する .bf の next を .ef 位置へ
+                    if let Some(bf) = open_bf.pop() {
+                        entries[bf].next = cur_num;
+                    }
+                } else if *attrib == 0x11 {
+                    // タグ定義開始
+                    open_tag_defs.push(cur);
+                    tag_def_by_name.insert(name.clone(), cur_num);
+                } else if *attrib == 0x1F {
+                    // タグ定義終了(.eos): 開始タグから次エントリへチェイン
+                    if let Some(tag_begin) = open_tag_defs.pop() {
+                        entries[tag_begin].next = cur_num + 1;
+                    }
                 }
             }
             ScdEvent::FuncEnd { location, section } => {
                 if *section == 1 {
                     if let Some(idx) = open_func_defs.pop() {
+                        let next_num = entries.len() as u32;
                         let ent = &mut entries[idx];
                         ent.size = location.saturating_sub(ent.value);
+                        ent.next = next_num;
                     }
                 }
             }

@@ -44,6 +44,8 @@
 - `.endef` の attrib 自動決定（function/tag/extern/static）を HAS 互換化
 - `.ln/.line` の値域を HAS 互換化（下位16bitへ丸め）
 - `.scl -1` 時の関数終端位置を保持し、SCD関数エントリ size へ反映
+- `.tag` 参照を SCD `tag` フィールドへ反映
+- `attrib` に応じた `next` チェイン（`.bb/.eb`, `.bf/.ef`, tag begin/end, function end）を反映
 
 ## テスト状況
 | スイート | 状態 |
@@ -55,9 +57,8 @@
 
 ## MS6 残タスク（優先順）
 1. FPU 命令（68881/68882）実装
-2. SCD 出力の原典比較で未一致点を順次解消
-3. SCD タグ/関数チェインなど高次情報の互換度向上
-4. 追加の互換疑似命令・境界挙動の詰め
+2. SCD 出力の原典比較で未一致点を最終調整
+3. 追加の互換疑似命令・境界挙動の詰め
 
 ## 直近コミット（ドキュメント時点）
 - `3bb7f62` Align SCD `.file` exname threshold to 14+ chars

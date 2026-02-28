@@ -1169,6 +1169,121 @@ fn test_scd_funcend_updates_function_size_in_footer() {
     assert!(found, "function SCD entry should exist");
 }
 
+/// HAS互換: `.tag <name>` は Endef エントリの tag フィールドへ反映される。
+#[test]
+fn test_scd_tag_links_to_existing_tag_definition() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(
+        b"\t.file\t\"main.c\"\n\
+\t.def\tmytag\n\
+\t.scl\t10\n\
+\t.endef\n\
+\t.def\tvar1\n\
+\t.tag\tmytag\n\
+\t.endef\n\
+\tnop\n",
+    )
+    .expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+
+    let end_pos = (0..bytes.len().saturating_sub(14))
+        .find(|&i| {
+            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
+                return false;
+            }
+            let p = i + 2;
+            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
+            p + 12 + line_len + scd_len + exname_len == bytes.len()
+        })
+        .expect("0000 terminator");
+    let p = end_pos + 2;
+    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+    let scd_base = p + 12 + line_len;
+    let scd_count = scd_len / 36;
+
+    let mut mytag_idx = None;
+    let mut var_tag = None;
+    for i in 0..scd_count {
+        let e = scd_base + i * 36;
+        let name = &bytes[e..e + 8];
+        if name.starts_with(b"mytag") {
+            mytag_idx = Some(i as u32);
+        } else if name.starts_with(b"var1") {
+            var_tag = Some(u32::from_be_bytes([bytes[e + 18], bytes[e + 19], bytes[e + 20], bytes[e + 21]]));
+        }
+    }
+    assert_eq!(var_tag, mytag_idx);
+}
+
+/// HAS互換: `.bb` と `.eb` は .bb.next にチェインを形成する。
+#[test]
+fn test_scd_bb_eb_updates_bb_next_chain() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(
+        b"\t.file\t\"main.c\"\n\
+\t.def\t.bb\n\
+\t.endef\n\
+\t.def\t.eb\n\
+\t.endef\n\
+\tnop\n",
+    )
+    .expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+
+    let end_pos = (0..bytes.len().saturating_sub(14))
+        .find(|&i| {
+            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
+                return false;
+            }
+            let p = i + 2;
+            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
+            p + 12 + line_len + scd_len + exname_len == bytes.len()
+        })
+        .expect("0000 terminator");
+    let p = end_pos + 2;
+    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+    let scd_base = p + 12 + line_len;
+    let scd_count = scd_len / 36;
+
+    let mut bb_idx = None;
+    let mut bb_next = None;
+    let mut eb_idx = None;
+    for i in 0..scd_count {
+        let e = scd_base + i * 36;
+        let name = &bytes[e..e + 8];
+        if name.starts_with(b".bb") {
+            bb_idx = Some(i as u32);
+            bb_next = Some(u32::from_be_bytes([bytes[e + 30], bytes[e + 31], bytes[e + 32], bytes[e + 33]]));
+        } else if name.starts_with(b".eb") {
+            eb_idx = Some(i as u32);
+        }
+    }
+    assert!(bb_idx.is_some() && eb_idx.is_some());
+    assert_eq!(bb_next, eb_idx.map(|v| v + 1));
+}
+
 /// `.request` は `$E001` レコードとして出力される。
 #[test]
 fn test_request_emits_e001_record() {
