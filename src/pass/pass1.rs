@@ -1959,10 +1959,229 @@ fn handle_pseudo(
         // ---- .endm / .exitm / .local / .sizem（マクロ外では無視）----
         InsnHandler::EndM | InsnHandler::ExitM | InsnHandler::Local | InsnHandler::SizeM => {}
 
-        // ---- SCD デバッグ（Phase 10）----
+        // ---- SCD デバッグ（MS6）----
         InsnHandler::Def | InsnHandler::Endef | InsnHandler::Val | InsnHandler::Scl
-        | InsnHandler::TypeScd | InsnHandler::Tag | InsnHandler::Line
-        | InsnHandler::SizeScd | InsnHandler::Dim => {}
+        | InsnHandler::TypeScd | InsnHandler::Tag | InsnHandler::Ln | InsnHandler::Line
+        | InsnHandler::SizeScd | InsnHandler::Dim => {
+            // -g 無効時は HAS 同様に SCD 疑似命令を実質無視する。
+            if !p1.ctx.opts.make_sym_deb {
+                return;
+            }
+            match handler {
+                InsnHandler::Def => {
+                    skip_spaces(line, pos);
+                    let name = read_ident(line, pos);
+                    if name.is_empty() {
+                        p1.error(".def のシンボル名がありません");
+                        return;
+                    }
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".def のオペランドが不正です");
+                        return;
+                    }
+                    let mut temp = crate::context::ScdTemp::default();
+                    temp.name = name.iter().take(8).copied().collect();
+                    temp.size = p1.ctx.scd_ln as u32;
+                    p1.ctx.scd_ln = 0;
+                    if let Some(attr) = scd_special_attr(&temp.name) {
+                        temp.attrib = attr;
+                        temp.is_long = true;
+                    }
+                    p1.ctx.scd_temp = temp;
+                }
+                InsnHandler::Endef => {
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".endef にオペランドは指定できません");
+                        return;
+                    }
+                    p1.ctx.scd_temp = crate::context::ScdTemp::default();
+                }
+                InsnHandler::Val => {
+                    skip_spaces(line, pos);
+                    if *pos >= line.len() || line[*pos] == b';' {
+                        p1.error(".val の式がありません");
+                        return;
+                    }
+                    if parse_expr(line, pos).is_err() {
+                        p1.error(".val の式が不正です");
+                        return;
+                    }
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".val のオペランドが不正です");
+                        return;
+                    }
+                }
+                InsnHandler::Scl => {
+                    skip_spaces(line, pos);
+                    let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
+                        Some(v) if v.section == 0 => v.value,
+                        _ => {
+                            p1.error(".scl は定数式で指定してください");
+                            return;
+                        }
+                    };
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".scl のオペランドが不正です");
+                        return;
+                    }
+                    if value == -1 {
+                        p1.ctx.scd_temp.attrib = 0x2F;
+                    } else if (0..=255).contains(&value) {
+                        p1.ctx.scd_temp.scl = value as u8;
+                    } else {
+                        p1.error(".scl の値は -1 または 0..255 で指定してください");
+                    }
+                }
+                InsnHandler::TypeScd => {
+                    skip_spaces(line, pos);
+                    let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
+                        Some(v) if v.section == 0 => v.value,
+                        _ => {
+                            p1.error(".type は定数式で指定してください");
+                            return;
+                        }
+                    };
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".type のオペランドが不正です");
+                        return;
+                    }
+                    if !(0..=65535).contains(&value) {
+                        p1.error(".type の値は 0..65535 で指定してください");
+                        return;
+                    }
+                    p1.ctx.scd_temp.type_code = value as u16;
+                    if (value & 0x0030) != 0 {
+                        p1.ctx.scd_temp.is_long = true;
+                    }
+                }
+                InsnHandler::Tag => {
+                    skip_spaces(line, pos);
+                    let tag_name = read_ident(line, pos);
+                    if tag_name.is_empty() {
+                        p1.error(".tag のタグ名がありません");
+                        return;
+                    }
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".tag のオペランドが不正です");
+                        return;
+                    }
+                    p1.ctx.scd_temp.is_long = true;
+                }
+                InsnHandler::Ln => {
+                    skip_spaces(line, pos);
+                    let line_no = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
+                        Some(v) if v.section == 0 => v.value,
+                        _ => {
+                            p1.error(".ln の行番号は定数式で指定してください");
+                            return;
+                        }
+                    };
+                    if !(0..=65535).contains(&line_no) {
+                        p1.error(".ln の行番号は 0..65535 で指定してください");
+                        return;
+                    }
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] == b',' {
+                        *pos += 1;
+                        skip_spaces(line, pos);
+                        if parse_expr(line, pos).is_err() {
+                            p1.error(".ln のロケーション式が不正です");
+                            return;
+                        }
+                        skip_spaces(line, pos);
+                    }
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".ln のオペランドが不正です");
+                        return;
+                    }
+                    p1.ctx.scd_ln = line_no as u16;
+                }
+                InsnHandler::Line => {
+                    skip_spaces(line, pos);
+                    let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
+                        Some(v) if v.section == 0 => v.value,
+                        _ => {
+                            p1.error(".line は定数式で指定してください");
+                            return;
+                        }
+                    };
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".line のオペランドが不正です");
+                        return;
+                    }
+                    if !(0..=65535).contains(&value) {
+                        p1.error(".line の値は 0..65535 で指定してください");
+                        return;
+                    }
+                    p1.ctx.scd_temp.is_long = true;
+                    p1.ctx.scd_temp.size = value as u16 as u32;
+                }
+                InsnHandler::SizeScd => {
+                    skip_spaces(line, pos);
+                    let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
+                        Some(v) if v.section == 0 => v.value,
+                        _ => {
+                            p1.error(".size は定数式で指定してください");
+                            return;
+                        }
+                    };
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".size のオペランドが不正です");
+                        return;
+                    }
+                    if value != 0 {
+                        p1.ctx.scd_temp.is_long = true;
+                        p1.ctx.scd_temp.size = value as u32;
+                    }
+                }
+                InsnHandler::Dim => {
+                    skip_spaces(line, pos);
+                    let mut dims = [0u16; 4];
+                    let mut i = 0usize;
+                    if *pos >= line.len() || line[*pos] == b';' {
+                        p1.error(".dim の値がありません");
+                        return;
+                    }
+                    loop {
+                        if i >= 4 {
+                            p1.error(".dim は最大4要素まで指定できます");
+                            return;
+                        }
+                        let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
+                            Some(v) if v.section == 0 => v.value,
+                            _ => {
+                                p1.error(".dim は定数式のみ指定できます");
+                                return;
+                            }
+                        };
+                        dims[i] = value as u16;
+                        i += 1;
+                        skip_spaces(line, pos);
+                        if *pos < line.len() && line[*pos] == b',' {
+                            *pos += 1;
+                            skip_spaces(line, pos);
+                            continue;
+                        }
+                        break;
+                    }
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".dim のオペランドが不正です");
+                        return;
+                    }
+                    p1.ctx.scd_temp.dim = dims;
+                    p1.ctx.scd_temp.is_long = true;
+                }
+                _ => {}
+            }
+        }
 
         // ---- .reg ----
         InsnHandler::Reg => {
@@ -2473,6 +2692,22 @@ fn parse_align_pad(line: &[u8], pos: &mut usize, p1: &mut P1Ctx<'_>) -> Option<u
         }
     }
     None
+}
+
+fn scd_special_attr(name: &[u8]) -> Option<u8> {
+    if name.eq_ignore_ascii_case(b".eos") {
+        Some(0x1F)
+    } else if name.eq_ignore_ascii_case(b".bb") {
+        Some(0x2B)
+    } else if name.eq_ignore_ascii_case(b".eb") {
+        Some(0x2C)
+    } else if name.eq_ignore_ascii_case(b".bf") {
+        Some(0x2D)
+    } else if name.eq_ignore_ascii_case(b".ef") {
+        Some(0x2E)
+    } else {
+        None
+    }
 }
 
 // ----------------------------------------------------------------

@@ -302,6 +302,7 @@ pub enum InsnHandler {
     Scl,
     TypeScd,
     Tag,
+    Ln,
     Line,
     SizeScd,
     Dim,

@@ -118,6 +118,10 @@ pub struct AssemblyContext {
     pub offset_loc: u32,
     /// `.offsym <expr>,<sym>` でシンボル指定付きオフセットモード中か
     pub offsym_with_symbol: bool,
+    /// `.ln` で指定されたSCD行番号
+    pub scd_ln: u16,
+    /// SCD 拡張シンボル一時バッファ（`.def`〜`.endef`）
+    pub scd_temp: ScdTemp,
 
     // ---- 条件アセンブル ----
     /// .if のネスト深度（IFNEST）
@@ -171,6 +175,8 @@ impl AssemblyContext {
             is_offset_mode: false,
             offset_loc: 0,
             offsym_with_symbol: false,
+            scd_ln: 0,
+            scd_temp: ScdTemp::default(),
 
             if_nest: 0,
             if_skip_nest: 0,
@@ -250,6 +256,18 @@ impl AssemblyContext {
     pub fn effective_warn_level(&self) -> u8 {
         self.opts.effective_warn_level()
     }
+}
+
+/// SCD 拡張シンボル一時データ（オリジナルの SCDTEMP 相当）
+#[derive(Debug, Clone, Default)]
+pub struct ScdTemp {
+    pub name: Vec<u8>,
+    pub attrib: u8,
+    pub scl: u8,
+    pub type_code: u16,
+    pub size: u32,
+    pub dim: [u16; 4],
+    pub is_long: bool,
 }
 
 #[cfg(test)]

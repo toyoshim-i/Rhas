@@ -722,6 +722,7 @@ static OPCODE_TABLE: &[OpcodeEntry] = &[
     OpcodeEntry::pseudo("scl",     InsnHandler::Scl),
     OpcodeEntry::pseudo("type",    InsnHandler::TypeScd),
     OpcodeEntry::pseudo("tag",     InsnHandler::Tag),
+    OpcodeEntry::pseudo("ln",      InsnHandler::Ln),
     OpcodeEntry::pseudo("line",    InsnHandler::Line),
     OpcodeEntry::pseudo("size",    InsnHandler::SizeScd),
     OpcodeEntry::pseudo("dim",     InsnHandler::Dim),

@@ -641,6 +641,77 @@ fn test_g_option_emits_b204_record() {
     assert!(found, "B204 record should exist when -g is enabled");
 }
 
+/// SCD有効時（-g）に `.ln` は行番号を保持し、2番目オペランド式も受理する。
+#[test]
+fn test_scd_ln_alias_updates_line_state() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.ln\t123,*\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    assert_eq!(ctx.scd_ln, 123);
+}
+
+/// SCD有効時（-g）の `.dim` は定数4要素までを受理して一時バッファへ反映する。
+#[test]
+fn test_scd_dim_updates_temp_buffer() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.def\tfoo\n\t.dim\t1,2,3,4\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    assert_eq!(ctx.scd_temp.dim, [1, 2, 3, 4]);
+    assert!(ctx.scd_temp.is_long);
+}
+
+/// SCD有効時（-g）の `.scl` は範囲外値を拒否する。
+#[test]
+fn test_scd_scl_rejects_out_of_range() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.scl\t256\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    match rhas::pass::assemble(&mut ctx) {
+        Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
+        Err(other) => panic!("unexpected error: {:?}", other),
+        Ok(_) => panic!("assemble should fail"),
+    }
+}
+
+/// SCD無効時（-gなし）は SCD 疑似命令を無視する。
+#[test]
+fn test_scd_directives_are_ignored_without_g() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.scl\t9999\n\t.dim\tA,B,C,D,E\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: false,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+}
+
 /// `.request` は `$E001` レコードとして出力される。
 #[test]
 fn test_request_emits_e001_record() {
