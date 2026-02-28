@@ -1960,7 +1960,7 @@ fn handle_pseudo(
         InsnHandler::EndM | InsnHandler::ExitM | InsnHandler::Local | InsnHandler::SizeM => {}
 
         // ---- SCD デバッグ（MS6）----
-        InsnHandler::Def | InsnHandler::Endef | InsnHandler::Val | InsnHandler::Scl
+        InsnHandler::FileScd | InsnHandler::Def | InsnHandler::Endef | InsnHandler::Val | InsnHandler::Scl
         | InsnHandler::TypeScd | InsnHandler::Tag | InsnHandler::Ln | InsnHandler::Line
         | InsnHandler::SizeScd | InsnHandler::Dim => {
             // -g 無効時は HAS 同様に SCD 疑似命令を実質無視する。
@@ -1968,6 +1968,20 @@ fn handle_pseudo(
                 return;
             }
             match handler {
+                InsnHandler::FileScd => {
+                    skip_spaces(line, pos);
+                    let name = parse_filename(line, pos);
+                    if name.is_empty() {
+                        p1.error(".file のファイル名がありません");
+                        return;
+                    }
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] != b';' {
+                        p1.error(".file のオペランドが不正です");
+                        return;
+                    }
+                    p1.ctx.scd_file = name;
+                }
                 InsnHandler::Def => {
                     skip_spaces(line, pos);
                     let name = read_ident(line, pos);

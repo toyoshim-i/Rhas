@@ -296,6 +296,7 @@ pub enum InsnHandler {
     Rcomm,
     Rlcomm,
     // SCD デバッグ（Phase 10）
+    FileScd,
     Def,
     Endef,
     Val,

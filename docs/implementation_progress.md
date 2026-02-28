@@ -226,7 +226,7 @@
 | PRNリストファイル（`-p`） | ✅ 完了 | ソース行+アドレス+機械語バイトのリストファイル生成 |
 | シンボルファイル（`-x`） | ✅ 完了 | シンボル名・型・値のリスト出力 |
 | `.align` B204レコード | ✅ 完了 | `.align`使用時に `$B204` アラインメント情報レコードを出力 |
-| SCD疑似命令（`-g`） | 🚧 部分実装 | `.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim` の構文/値検証と状態更新を実装（デバッグシンボル出力は未実装） |
+| SCD疑似命令（`-g`） | 🚧 部分実装 | `.file/.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim` の構文/値検証と状態更新を実装（デバッグシンボル出力は未実装） |
 | HUPAIR対応 | N/A | ネイティブRust環境では不要（X68k DOS固有機能） |
 
 **実装内容**:
@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 50件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 51件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -306,8 +306,13 @@
   - `src/context.rs`: `ScdTemp` と `scd_ln` ワーク領域を追加
   - `src/pass/pass1.rs`: `.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim` の解析と制約チェックを追加（`-g`無効時は無視）
   - `tests/integration_test.rs`: SCD関連テスト4件を追加
+- SCD疑似命令 `.file` を実装
+  - `src/symbol/mod.rs`: `.file` を疑似命令テーブルへ追加
+  - `src/context.rs`: `scd_file` ワーク領域を追加
+  - `src/pass/pass1.rs`: `.file` のファイル名解析と `scd_file` 反映を実装
+  - `tests/integration_test.rs`: `test_scd_file_sets_debug_source_name` を追加
 - 検証結果（最新）
-  - `cargo test --test integration_test`: 50/50 通過
+  - `cargo test --test integration_test`: 51/51 通過
   - `cargo test --test golden_test`: 17/17 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 

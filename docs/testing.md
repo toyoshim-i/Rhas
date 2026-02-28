@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 50件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 51件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイートを実行
@@ -156,7 +156,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 
 ---
 
-## 3. 統合テスト（50件）
+## 3. 統合テスト（51件）
 
 `tests/integration_test.rs` — 3パス全体を通した end-to-end 検証。
 
@@ -214,6 +214,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_scd_dim_updates_temp_buffer` | `-g` 有効時に `.dim` が一時バッファへ反映されること |
 | `test_scd_scl_rejects_out_of_range` | `-g` 有効時に `.scl` が範囲外値を拒否すること |
 | `test_scd_directives_are_ignored_without_g` | `-g` 無効時は SCD 疑似命令を無視すること |
+| `test_scd_file_sets_debug_source_name` | `-g` 有効時に `.file` がSCD用ソースファイル名を更新すること |
 
 ---
 
@@ -285,6 +286,7 @@ diff $ORIG_O $RHAS_O
 | 2026-03-01 | `.offsym` 上書き時の警告/禁止（`ow_offsym`）を実装 | 回帰なし（golden 17/17, integration 44/44, MS5比較 17一致/0差分） |
 | 2026-03-01 | `.fpid` の定数受理・範囲検証・負値時FPU無効化を実装 | 回帰なし（golden 17/17, integration 46/46, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD疑似命令（`.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim`）の構文/値検証を実装 | 回帰なし（golden 17/17, integration 50/50, MS5比較 17一致/0差分） |
+| 2026-03-01 | SCD疑似命令 `.file` を実装（SCD用ファイル名ワーク更新） | 回帰なし（golden 17/17, integration 51/51, MS5比較 17一致/0差分） |
 
 ---
 

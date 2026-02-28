@@ -712,6 +712,23 @@ fn test_scd_directives_are_ignored_without_g() {
     let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
 }
 
+/// SCD有効時（-g）の `.file` はデバッグファイル名を保持する。
+#[test]
+fn test_scd_file_sets_debug_source_name() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.file\t\"main.c\"\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    assert_eq!(ctx.scd_file, b"main.c".to_vec());
+}
+
 /// `.request` は `$E001` レコードとして出力される。
 #[test]
 fn test_request_emits_e001_record() {

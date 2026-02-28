@@ -120,6 +120,8 @@ pub struct AssemblyContext {
     pub offsym_with_symbol: bool,
     /// `.ln` で指定されたSCD行番号
     pub scd_ln: u16,
+    /// SCDデバッグ用のソースファイル名（`.file`）
+    pub scd_file: Vec<u8>,
     /// SCD 拡張シンボル一時バッファ（`.def`〜`.endef`）
     pub scd_temp: ScdTemp,
 
@@ -176,6 +178,7 @@ impl AssemblyContext {
             offset_loc: 0,
             offsym_with_symbol: false,
             scd_ln: 0,
+            scd_file: Vec::new(),
             scd_temp: ScdTemp::default(),
 
             if_nest: 0,

@@ -716,6 +716,7 @@ static OPCODE_TABLE: &[OpcodeEntry] = &[
     OpcodeEntry::pseudo("fpid",    InsnHandler::FpId),
     OpcodeEntry::pseudo("pragma",  InsnHandler::Pragma),
     // SCD デバッグ情報（Phase 10）
+    OpcodeEntry::pseudo("file",    InsnHandler::FileScd),
     OpcodeEntry::pseudo("def",     InsnHandler::Def),
     OpcodeEntry::pseudo("endef",   InsnHandler::Endef),
     OpcodeEntry::pseudo("val",     InsnHandler::Val),
