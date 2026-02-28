@@ -5,7 +5,7 @@
 
 ## 現在の前提（2026-03-01）
 - `cargo test`: pass
-- `golden_test`: 24/24 pass
+- `golden_test`: 25/25 pass
 - `integration_test`: 87/87 pass
 - `error_message_test`: 6/6 pass
 - MS6（FPU/SCD/残互換機能）実装済み

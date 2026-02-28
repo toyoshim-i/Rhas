@@ -220,3 +220,4 @@ golden_test!(fmovem_ctrl_list);
 golden_test!(fmovem_list);
 golden_test!(fmovem_dyn);
 golden_test!(fpu_branch);
+golden_test!(fsincos);
