@@ -122,6 +122,8 @@ pub struct AssemblyContext {
     pub scd_ln: u16,
     /// SCDデバッグ用のソースファイル名（`.file`）
     pub scd_file: Vec<u8>,
+    /// SCD疑似命令が有効化されたか（`.file` 検出後に true）
+    pub scd_enabled: bool,
     /// SCD 拡張シンボル一時バッファ（`.def`〜`.endef`）
     pub scd_temp: ScdTemp,
 
@@ -179,6 +181,7 @@ impl AssemblyContext {
             offsym_with_symbol: false,
             scd_ln: 0,
             scd_file: Vec::new(),
+            scd_enabled: false,
             scd_temp: ScdTemp::default(),
 
             if_nest: 0,

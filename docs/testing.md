@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 58件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 59件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイートを実行
@@ -210,12 +210,13 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_offsym_overwrite_warning_and_error_mode` | `.offsym` 上書きが通常は警告、`ow_offsym` 有効時はエラーになること |
 | `test_fpid_sets_id_and_can_disable_fpu` | `.fpid` が 0..7 を受理し、負値で FPU 無効化（CFPPクリア）すること |
 | `test_fpid_rejects_out_of_range` | `.fpid` が範囲外値（8以上）を拒否すること |
-| `test_scd_ln_alias_updates_line_state` | `-g` 有効時に `.ln` が行番号を保持し、ロケーション式を受理すること |
-| `test_scd_dim_updates_temp_buffer` | `-g` 有効時に `.dim` が一時バッファへ反映されること |
-| `test_scd_scl_rejects_out_of_range` | `-g` 有効時に `.scl` が範囲外値を拒否すること |
+| `test_scd_ln_alias_updates_line_state` | `-g` + `.file` 有効時に `.ln` が行番号を保持し、ロケーション式を受理すること |
+| `test_scd_dim_updates_temp_buffer` | `-g` + `.file` 有効時に `.dim` が一時バッファへ反映されること |
+| `test_scd_scl_rejects_out_of_range` | `-g` + `.file` 有効時に `.scl` が範囲外値を拒否すること |
 | `test_scd_directives_are_ignored_without_g` | `-g` 無効時は SCD 疑似命令を無視すること |
 | `test_scd_file_sets_debug_source_name` | `-g` 有効時に `.file` がSCD用ソースファイル名を更新すること |
 | `test_scd_file_does_not_affect_b204_filename` | `-g` + `.file` 指定時でも B204 は入力ソースファイル名を維持すること |
+| `test_scd_directives_require_file_directive` | HAS互換として `-g` だけでは SCD疑似命令が有効化されないこと |
 | `test_scd_records_are_emitted_in_pass1` | SCD疑似命令が Pass1 で専用 `TempRecord` に変換されること |
 | `test_scd_events_are_collected_in_object` | SCD `TempRecord` が Pass3 で `ObjectCode.scd_events` に収集されること |
 | `test_scd_val_constant_is_preserved_in_endef_snapshot` | `.val` の定数式が `.endef` スナップショットに `section=-1` として保持されること |
@@ -295,6 +296,7 @@ diff $ORIG_O $RHAS_O
 | 2026-03-01 | SCD疑似命令（`.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim`）の構文/値検証を実装 | 回帰なし（golden 17/17, integration 50/50, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD疑似命令 `.file` を実装（SCD用ファイル名ワーク更新） | 回帰なし（golden 17/17, integration 51/51, MS5比較 17一致/0差分） |
 | 2026-03-01 | `-g` 時の `.file` と B204 の役割分離（B204は入力ソース名を維持） | 回帰なし（golden 17/17, integration 58/58, MS5比較 17一致/0差分） |
+| 2026-03-01 | SCD疑似命令を `.file` 有効化後のみ処理（HAS `checksymdeb` 相当） | 回帰なし（golden 17/17, integration 59/59, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD疑似命令の `TempRecord` 化（`.ln/.val/.tag/.endef/.scl -1`）を実装 | 回帰なし（golden 17/17, integration 53/53, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCDイベントを `ObjectCode.scd_events` に収集（Pass3） | 回帰なし（golden 17/17, integration 54/54, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD `.val` の値/セクションを `.endef` スナップショットへ伝播 | 回帰なし（golden 17/17, integration 55/55, MS5比較 17一致/0差分） |

@@ -659,7 +659,7 @@ fn test_g_option_emits_b204_record() {
 #[test]
 fn test_scd_ln_alias_updates_line_state() {
     let mut f = NamedTempFile::new().expect("tempfile");
-    f.write_all(b"\t.ln\t123,*\n\tnop\n").expect("write");
+    f.write_all(b"\t.file\t\"main.c\"\n\t.ln\t123,*\n\tnop\n").expect("write");
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
 
     let opts = rhas::options::Options {
@@ -676,7 +676,7 @@ fn test_scd_ln_alias_updates_line_state() {
 #[test]
 fn test_scd_dim_updates_temp_buffer() {
     let mut f = NamedTempFile::new().expect("tempfile");
-    f.write_all(b"\t.def\tfoo\n\t.dim\t1,2,3,4\n\tnop\n").expect("write");
+    f.write_all(b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.dim\t1,2,3,4\n\tnop\n").expect("write");
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
 
     let opts = rhas::options::Options {
@@ -694,7 +694,7 @@ fn test_scd_dim_updates_temp_buffer() {
 #[test]
 fn test_scd_scl_rejects_out_of_range() {
     let mut f = NamedTempFile::new().expect("tempfile");
-    f.write_all(b"\t.scl\t256\n").expect("write");
+    f.write_all(b"\t.file\t\"main.c\"\n\t.scl\t256\n").expect("write");
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
 
     let opts = rhas::options::Options {
@@ -798,7 +798,7 @@ fn test_scd_records_are_emitted_in_pass1() {
 #[test]
 fn test_scd_events_are_collected_in_object() {
     let mut f = NamedTempFile::new().expect("tempfile");
-    f.write_all(b"\t.ln\t7,*\n\t.def\tfoo\n\t.val\t.\n\t.endef\n").expect("write");
+    f.write_all(b"\t.file\t\"main.c\"\n\t.ln\t7,*\n\t.def\tfoo\n\t.val\t.\n\t.endef\n").expect("write");
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
 
     let opts = rhas::options::Options {
@@ -887,7 +887,7 @@ fn test_g_option_scd_footer_emits_exname_for_long_filename() {
 #[test]
 fn test_scd_val_constant_is_preserved_in_endef_snapshot() {
     let records = pass1_records(
-        b"\t.def\tfoo\n\t.val\t4\n\t.endef\n",
+        b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.val\t4\n\t.endef\n",
         true,
     );
     assert!(records.iter().any(|r| matches!(
@@ -895,6 +895,14 @@ fn test_scd_val_constant_is_preserved_in_endef_snapshot() {
         rhas::pass::temp::TempRecord::ScdEndef { name, value, section, .. }
             if name.as_slice() == b"foo" && *value == 4 && *section == -1
     )));
+}
+
+/// HAS互換: `-g` だけでは SCD疑似命令は有効化されず、`.file` が必要。
+#[test]
+fn test_scd_directives_require_file_directive() {
+    let records = pass1_records(b"\t.ln\t123,*\n\t.def\tfoo\n\t.endef\n", true);
+    assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdLn { .. })));
+    assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { .. })));
 }
 
 /// `.request` は `$E001` レコードとして出力される。

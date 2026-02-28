@@ -1967,6 +1967,10 @@ fn handle_pseudo(
             if !p1.ctx.opts.make_sym_deb {
                 return;
             }
+            // HAS 互換: `.file` で SCD モード有効化されるまで、SCD 疑似命令は無視する。
+            if handler != InsnHandler::FileScd && !p1.ctx.scd_enabled {
+                return;
+            }
             match handler {
                 InsnHandler::FileScd => {
                     skip_spaces(line, pos);
@@ -1980,6 +1984,7 @@ fn handle_pseudo(
                         p1.error(".file のオペランドが不正です");
                         return;
                     }
+                    p1.ctx.scd_enabled = true;
                     p1.ctx.scd_file = name;
                 }
                 InsnHandler::Def => {
