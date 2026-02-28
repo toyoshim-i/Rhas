@@ -234,7 +234,7 @@
 - `TempRecord::LineInfo`: パス3でのPRN行追跡用中間レコード
 - `src/pass/mod.rs`: シンボルファイル生成（`format_sym_file`）
 - `ctx.max_align` → `obj.has_align/max_align` 伝播修正（`$B204`レコード用）
-- 14 integration tests（PRN生成テスト含む）通過
+- 18 integration tests（PRN生成 + `-c4` 最適化検証含む）通過
 
 ---
 
@@ -246,7 +246,7 @@
 | MS2 | 68000全整数命令エンコード + ラベル・外部参照解決 | ✅ 完了 |
 | MS3 | 疑似命令・最適化込みで `HANOI.S` が通る | ✅ 完了（76866 バイト、エラーなし） |
 | MS4 | マクロ処理込みで `K_MACRO.MAC` が通る | ✅ 完了（エラーなし、構造化マクロライブラリ全定義処理）|
-| MS5 | 実X68000プログラムのビルドがオリジナルと完全一致 | ⬜ |
+| MS5 | 実X68000プログラムのビルドがオリジナルと完全一致 | 🔄 進行中（17ファイル中13一致、4差分） |
 | MS6 | FPU/ColdFire/SCD/PRN全機能 | ⬜ |
 
 ---
@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 180件 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 14件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 18件 | ✅ 全通過 |
 
 ---
 
@@ -275,6 +275,20 @@
 ---
 
 ## 変更ログ
+
+### 2026-02-28
+
+- MS5差分の追加調査と実装見直し
+  - `src/pass/temp.rs`: `TempRecord::Branch` に `cur_size` / `suppressed` を追加
+  - `src/pass/pass2.rs`: 自動分岐のサイズ再判定と直後 `BRA/Bcc` サプレス処理を追加
+  - `src/pass/pass3.rs`: 分岐サプレス状態を反映して出力
+  - `src/pass/pass1.rs`: `opt_asl`（`ASL #1,Dn -> ADD Dn,Dn`）実装、`jmp/jsr` 最適化条件をオリジナル寄りに調整
+  - `tests/integration_test.rs`: 4件追加（直後BRAサプレス + `-c4` 最適化3件）
+- 検証結果
+  - `cargo test --test golden_test`: 17/17 通過
+  - `cargo test --test integration_test`: 18/18 通過
+  - `tests/compare_ms5_simple.sh`: 13一致 / 4差分（`doasm +170`, `file +6`, `objgen +4`, `pseudo +52`）
+  - 一致件数は前回から変化なし。次段は `optimize.s` の `dispadr/disppc/dispopc` 系ロジック移植が主対象
 
 ### 2026-02-24
 

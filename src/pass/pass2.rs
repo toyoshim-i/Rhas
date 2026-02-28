@@ -6,7 +6,7 @@
 use crate::expr::{eval_rpn, Rpn};
 use crate::expr::eval::EvalValue;
 use crate::symbol::{Symbol, SymbolTable};
-use crate::symbol::types::{DefAttrib, SizeCode};
+use crate::symbol::types::DefAttrib;
 use super::temp::{branch_word_size, TempRecord};
 
 /// Pass2: TempRecord 列のロケーションカウンタを再計算し、分岐サイズを最適化する
@@ -55,16 +55,54 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
             TempRecord::Org { value } => {
                 loc_ctr[cur_sect] = *value;
             }
-            TempRecord::Branch { req_size, target, .. } => {
+            TempRecord::Branch { opcode, req_size, cur_size, suppressed, target } => {
                 let loc = loc_ctr[cur_sect];
-                // サイズ未指定（デフォルト）形式のみ縮小候補（明示的 .w は最適化しない）
+                let mut new_cur_size = *cur_size;
+                let mut new_suppressed = false;
+
+                // サイズ未指定（自動）形式のみ最適化
                 if req_size.is_none() {
-                    if try_shrink_branch(sym, target, loc, cur_sect as u8 + 1) {
-                        *req_size = Some(SizeCode::Short);
-                        changed = true;
+                    if let Some(ev) = eval_target(sym, target, loc, cur_sect as u8 + 1) {
+                        // 同一セクション参照のみ最適化対象
+                        if ev.section as u8 == cur_sect as u8 + 1 {
+                            let offset = (ev.value as i64) - (loc as i64 + 2);
+                            let next_offset = if *suppressed {
+                                -2
+                            } else {
+                                match cur_size {
+                                Some(crate::symbol::types::SizeCode::Short) => 0,
+                                Some(crate::symbol::types::SizeCode::Long) => 4,
+                                _ => 2, // None=.w
+                                }
+                            };
+                            // 直後への bra/bcc は命令自体を削除（bsr は除外）
+                            if offset == next_offset && !is_bsr(*opcode) {
+                                new_suppressed = true;
+                                new_cur_size = None;
+                            } else if offset >= -128 && offset <= 127 {
+                                new_cur_size = Some(crate::symbol::types::SizeCode::Short);
+                            } else {
+                                new_cur_size = None; // word
+                            }
+                        } else {
+                            new_cur_size = None; // セクション違いは最適化しない
+                        }
+                    } else {
+                        new_cur_size = None; // 未確定は最適化しない
                     }
+                } else {
+                    // 明示サイズはサプレスしない
+                    new_cur_size = *req_size;
                 }
-                loc_ctr[cur_sect] = loc_ctr[cur_sect].wrapping_add(branch_word_size(*req_size));
+
+                if *cur_size != new_cur_size || *suppressed != new_suppressed {
+                    *cur_size = new_cur_size;
+                    *suppressed = new_suppressed;
+                    changed = true;
+                }
+                if !new_suppressed {
+                    loc_ctr[cur_sect] = loc_ctr[cur_sect].wrapping_add(branch_word_size(new_cur_size));
+                }
             }
             rec => {
                 let sz = rec.byte_size();
@@ -79,7 +117,7 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
 
 /// 分岐命令がショート形式に縮小できるか判定する
 /// target を評価し、オフセットが [-128, 127] に収まれば true
-fn try_shrink_branch(sym: &SymbolTable, target: &Rpn, loc: u32, sect_id: u8) -> bool {
+fn eval_target(sym: &SymbolTable, target: &Rpn, loc: u32, sect_id: u8) -> Option<EvalValue> {
     let result = eval_rpn(target, loc, loc, sect_id, &|name| {
         sym.lookup_sym(name).and_then(|s| {
             if let Symbol::Value { value, section, attrib, .. } = s {
@@ -90,16 +128,12 @@ fn try_shrink_branch(sym: &SymbolTable, target: &Rpn, loc: u32, sect_id: u8) -> 
             None
         })
     });
-    match result {
-        Ok(v) if v.section as u8 == sect_id => {
-            // 同一セクション内の参照: オフセットを計算
-            // 68000: offset = target - (branch_pc + 2)
-            let branch_end = loc.wrapping_add(2);
-            let offset = (v.value as i64) - (branch_end as i64);
-            offset >= -128 && offset <= 127
-        }
-        _ => false,
-    }
+    result.ok()
+}
+
+fn is_bsr(opcode: u16) -> bool {
+    // 条件コード部が 0001 なら BSR
+    ((opcode >> 8) & 0x0f) == 0x01
 }
 
 fn update_symbol(sym: &mut SymbolTable, name: &[u8], section: u8, value: i32) {

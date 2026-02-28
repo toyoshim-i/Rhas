@@ -628,7 +628,13 @@ fn handle_real_insn(
         if let Some(rpn) = target {
             let byte_sz = super::temp::branch_word_size(size);
             p1.advance(byte_sz);
-            records.push(TempRecord::Branch { opcode, target: rpn, req_size: size });
+            records.push(TempRecord::Branch {
+                opcode,
+                target: rpn,
+                req_size: size,
+                cur_size: size,
+                suppressed: false,
+            });
         } else {
             // オペランドなし (NOP/RTS 等)
             if let Ok(bytes) = encode_insn(opcode, handler, sz, &[]) {
@@ -663,34 +669,260 @@ fn handle_real_insn(
     }
 
     // 通常命令
-    let ops = parse_operands(line, pos, &*p1.sym, cpu);
+    let mut ops = parse_operands(line, pos, &*p1.sym, cpu);
+    let mut enc_size = sz;
 
-    // ADD/SUB #imm(1-8), <ea> → ADDQ/SUBQ 最適化（opt_adda_suba フラグ）
-    // 元の ADD/SUB はオペコード 0xD000/0x9000 で SubAdd ハンドラを使う。
-    // 即値が 1-8 の定数なら ADDQ(0x5000)/SUBQ(0x5100) に置き換える。
-    let (handler, opcode) = if matches!(handler, InsnHandler::SubAdd)
+    // JMP/JSR 最適化（安全に判定できるケースのみ）
+    if matches!(handler, InsnHandler::JmpJsr) && p1.ctx.opts.opt_jmp_jsr && ops.len() == 1 {
+        match &ops[0] {
+            // jmp/jsr (2,pc): jmpは削除、jsrはpea (2,pc)
+            EffectiveAddress::PcDisp(disp) if disp.size.is_none() && disp.const_val == Some(2) => {
+                if opcode == 0x4EC0 {
+                    // jmp (2,pc) は命令自体を削除
+                    return;
+                }
+                if opcode == 0x4E80 {
+                    // jsr (2,pc) → pea (2,pc)
+                    let bytes = vec![0x48, 0x7A, 0x00, 0x02];
+                    p1.advance(bytes.len() as u32);
+                    records.push(TempRecord::Const(bytes));
+                    return;
+                }
+            }
+            // jmp/jsr label（サイズ指定なし）→ jbra/jbsr 相当の分岐最適化パスへ渡す
+            // オリジナルは定数ターゲット（jmp $FF0038 など）を除いて変換する。
+            EffectiveAddress::AbsLong(rpn) if !single_operand_has_explicit_long_suffix(line, pos) => {
+                let is_const_abs = matches!(p1.eval_const(rpn), Some(v) if v.section == 0);
+                if !is_const_abs {
+                    let bcc_opcode = if opcode == 0x4E80 { 0x6100 } else { 0x6000 };
+                    let byte_sz = super::temp::branch_word_size(None);
+                    p1.advance(byte_sz);
+                    records.push(TempRecord::Branch {
+                        opcode: bcc_opcode,
+                        target: rpn.clone(),
+                        req_size: None,
+                        cur_size: None,
+                        suppressed: false,
+                    });
+                    return;
+                }
+            }
+            // jmp/jsr (label,pc)（サイズ指定なし・非定数）も分岐最適化へ渡す
+            EffectiveAddress::PcDisp(disp)
+                if disp.size.is_none() && disp.const_val.is_none() =>
+            {
+                let bcc_opcode = if opcode == 0x4E80 { 0x6100 } else { 0x6000 };
+                let byte_sz = super::temp::branch_word_size(None);
+                p1.advance(byte_sz);
+                records.push(TempRecord::Branch {
+                    opcode: bcc_opcode,
+                    target: disp.rpn.clone(),
+                    req_size: None,
+                    cur_size: None,
+                    suppressed: false,
+                });
+                return;
+            }
+            _ => {}
+        }
+    }
+
+    // 命令最適化（-c4）
+    let mut handler = handler;
+    let mut opcode = opcode;
+
+    // MOVE.l #imm,Dn → MOVEQ #imm,Dn（#-128..255）
+    // MOVE.b/.w #0,Dn → CLR.b/.w Dn
+    if matches!(handler, InsnHandler::Move) && ops.len() >= 2 {
+        if let (EffectiveAddress::Immediate(rpn), EffectiveAddress::DataReg(_)) = (&ops[0], &ops[1]) {
+            if let Some(ev) = p1.eval_const(rpn) {
+                if ev.section == 0 {
+                    if p1.ctx.opts.opt_move0
+                        && enc_size == SizeCode::Long
+                        && !p1.ctx.opts.no_quick
+                        && ev.value >= -128
+                        && ev.value <= 255
+                    {
+                        handler = InsnHandler::MoveQ;
+                        opcode = 0x7000;
+                    } else if p1.ctx.opts.opt_move0
+                        && ev.value == 0
+                        && matches!(enc_size, SizeCode::Byte | SizeCode::Word)
+                    {
+                        handler = InsnHandler::Clr;
+                        opcode = 0x4200;
+                        ops = vec![ops[1].clone()];
+                    }
+                }
+            }
+        }
+    }
+
+    // CLR.l Dn → MOVEQ #0,Dn（68000/68010のみ）
+    if matches!(handler, InsnHandler::Clr)
+        && p1.ctx.opts.opt_clr
+        && enc_size == SizeCode::Long
+        && p1.ctx.opts.cpu_number < 68020
+        && ops.len() == 1
+        && matches!(ops[0], EffectiveAddress::DataReg(_))
+    {
+        handler = InsnHandler::MoveQ;
+        opcode = 0x7000;
+        ops = vec![
+            EffectiveAddress::Immediate(vec![RPNToken::Value(0), RPNToken::End]),
+            ops[0].clone(),
+        ];
+    }
+
+    // CMP #0,Dn → TST Dn
+    if matches!(handler, InsnHandler::Cmp)
+        && p1.ctx.opts.opt_cmp0
+        && ops.len() == 2
+        && matches!(ops[1], EffectiveAddress::DataReg(_))
+    {
+        if let EffectiveAddress::Immediate(rpn) = &ops[0] {
+            if let Some(ev) = p1.eval_const(rpn) {
+                if ev.section == 0 && ev.value == 0 {
+                    handler = InsnHandler::Tst;
+                    opcode = 0x4A00;
+                    ops = vec![ops[1].clone()];
+                }
+            }
+        }
+    }
+
+    // CMPI #0,<ea> → TST <ea>
+    if matches!(handler, InsnHandler::CmpI)
+        && p1.ctx.opts.opt_cmpi0
+        && ops.len() == 2
+    {
+        if let EffectiveAddress::Immediate(rpn) = &ops[0] {
+            if let Some(ev) = p1.eval_const(rpn) {
+                if ev.section == 0 && ev.value == 0 {
+                    handler = InsnHandler::Tst;
+                    opcode = 0x4A00;
+                    ops = vec![ops[1].clone()];
+                }
+            }
+        }
+    }
+
+    // SUBI/ADDI #imm(1-8),<ea> → SUBQ/ADDQ
+    if matches!(handler, InsnHandler::SubAddI)
+        && p1.ctx.opts.opt_sub_addi0
+        && ops.len() >= 2
+    {
+        if let EffectiveAddress::Immediate(rpn) = &ops[0] {
+            if let Some(ev) = p1.eval_const(rpn) {
+                if ev.section == 0 && ev.value >= 1 && ev.value <= 8 {
+                    handler = InsnHandler::SubAddQ;
+                    opcode = if (opcode & 0x0200) != 0 { 0x5000 } else { 0x5100 };
+                }
+            }
+        }
+    }
+
+    // ADD/SUB #imm(1-8), <ea> → ADDQ/SUBQ（opt_adda_suba）
+    if matches!(handler, InsnHandler::SubAdd)
         && p1.ctx.opts.opt_adda_suba
         && ops.len() >= 2
     {
         if let EffectiveAddress::Immediate(rpn) = &ops[0] {
             if let Some(ev) = p1.eval_const(rpn) {
                 if ev.section == 0 && ev.value >= 1 && ev.value <= 8 {
-                    let new_opcode = if opcode & 0x4000 != 0 { 0x5000u16 } else { 0x5100u16 };
-                    (InsnHandler::SubAddQ, new_opcode)
-                } else {
-                    (handler, opcode)
+                    handler = InsnHandler::SubAddQ;
+                    opcode = if opcode & 0x4000 != 0 { 0x5000 } else { 0x5100 };
                 }
-            } else {
-                (handler, opcode)
             }
-        } else {
-            (handler, opcode)
         }
-    } else {
-        (handler, opcode)
-    };
+    }
 
-    match encode_insn(opcode, handler, sz, &ops) {
+    // MOVEA.L #d16,An → MOVEA.W #d16,An
+    if matches!(handler, InsnHandler::MoveA)
+        && p1.ctx.opts.opt_movea
+        && enc_size == SizeCode::Long
+        && ops.len() == 2
+        && matches!(ops[1], EffectiveAddress::AddrReg(_))
+    {
+        if let EffectiveAddress::Immediate(rpn) = &ops[0] {
+            if let Some(ev) = p1.eval_const(rpn) {
+                if ev.section == 0 && ev.value >= -32768 && ev.value <= 32767 {
+                    enc_size = SizeCode::Word;
+                }
+            }
+        }
+    }
+
+    // CMPA.L #d16,An → CMPA.W #d16,An
+    if matches!(handler, InsnHandler::CmpA)
+        && p1.ctx.opts.opt_cmpa
+        && enc_size == SizeCode::Long
+        && ops.len() == 2
+        && matches!(ops[1], EffectiveAddress::AddrReg(_))
+    {
+        if let EffectiveAddress::Immediate(rpn) = &ops[0] {
+            if let Some(ev) = p1.eval_const(rpn) {
+                if ev.section == 0 && ev.value >= -32768 && ev.value <= 32767 {
+                    enc_size = SizeCode::Word;
+                }
+            }
+        }
+    }
+
+    // LEA 最適化:
+    //   LEA (An),An / LEA (0,An),An → 削除
+    //   LEA (d,An),An (d=-8..-1,1..8) → SUBQ/ADDQ.W #|d|,An
+    if matches!(handler, InsnHandler::Lea)
+        && p1.ctx.opts.opt_lea
+        && ops.len() == 2
+    {
+        if let (src, EffectiveAddress::AddrReg(dst_an)) = (&ops[0], &ops[1]) {
+            match src {
+                EffectiveAddress::AddrRegInd(src_an) if src_an == dst_an => {
+                    return;
+                }
+                EffectiveAddress::AddrRegDisp { an: src_an, disp }
+                    if src_an == dst_an && disp.size.is_none() =>
+                {
+                    if let Some(d) = disp.const_val {
+                        if d == 0 {
+                            return;
+                        }
+                        if (1..=8).contains(&d) || (-8..=-1).contains(&d) {
+                            handler = InsnHandler::SubAddQ;
+                            opcode = if d > 0 { 0x5000 } else { 0x5100 };
+                            enc_size = SizeCode::Word;
+                            let imm = if d > 0 { d } else { -d };
+                            ops = vec![
+                                EffectiveAddress::Immediate(vec![RPNToken::Value(imm as u32), RPNToken::End]),
+                                EffectiveAddress::AddrReg(*dst_an),
+                            ];
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // ASL #1,Dn → ADD Dn,Dn（68060以外）
+    if matches!(handler, InsnHandler::Asl)
+        && p1.ctx.opts.opt_asl
+        && p1.ctx.opts.cpu_number < 68060
+        && ops.len() == 2
+    {
+        if let (EffectiveAddress::Immediate(rpn), EffectiveAddress::DataReg(dn)) = (&ops[0], &ops[1]) {
+            if let Some(ev) = p1.eval_const(rpn) {
+                if ev.section == 0 && ev.value == 1 {
+                    handler = InsnHandler::SubAdd;
+                    opcode = 0xD000; // ADD
+                    ops = vec![EffectiveAddress::DataReg(*dn), EffectiveAddress::DataReg(*dn)];
+                }
+            }
+        }
+    }
+
+    match encode_insn(opcode, handler, enc_size, &ops) {
         Ok(bytes) => {
             p1.advance(bytes.len() as u32);
             records.push(TempRecord::Const(bytes));
@@ -700,7 +932,7 @@ fn handle_real_insn(
             let resolved: Vec<EffectiveAddress> = ops.iter()
                 .map(|ea| resolve_ea_const_for_size(ea, p1.sym))
                 .collect();
-            match encode_insn(opcode, handler, sz, &resolved) {
+            match encode_insn(opcode, handler, enc_size, &resolved) {
                 Ok(bytes) => {
                     // パス1で全シンボルが解決できた → 定数として確定（.set変数等）
                     p1.advance(bytes.len() as u32);
@@ -708,10 +940,10 @@ fn handle_real_insn(
                 }
                 Err(_) => {
                     // 未解決のシンボル残存 → パス3に延期
-                    let byte_size = estimate_insn_size(opcode, handler, sz, &ops);
+                    let byte_size = estimate_insn_size(opcode, handler, enc_size, &ops);
                     p1.advance(byte_size);
                     records.push(TempRecord::DeferredInsn {
-                        base: opcode, handler, size: sz, ops, byte_size,
+                        base: opcode, handler, size: enc_size, ops, byte_size,
                     });
                 }
             }
@@ -720,6 +952,18 @@ fn handle_real_insn(
             p1.error(&format!("命令のエンコードに失敗しました: {:?}", e));
         }
     }
+}
+
+fn single_operand_has_explicit_long_suffix(line: &[u8], pos: usize) -> bool {
+    let mut end = line.len();
+    if let Some(i) = line[pos..].iter().position(|&b| b == b';') {
+        end = pos + i;
+    }
+    let mut s = &line[pos..end];
+    while !s.is_empty() && matches!(s[0], b' ' | b'\t') { s = &s[1..]; }
+    while !s.is_empty() && matches!(s[s.len() - 1], b' ' | b'\t') { s = &s[..s.len() - 1]; }
+    let sl = to_lowercase(s);
+    sl.ends_with(b".l")
 }
 
 /// 分岐命令のターゲット RPN を解析する

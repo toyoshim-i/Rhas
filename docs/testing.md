@@ -8,10 +8,10 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 180件 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 14件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 18件 | 3パス全体のエンドツーエンド |
 
 ```
-cargo test          # 全スイート（211件）を実行
+cargo test          # 全スイート（215件）を実行
 cargo test --test golden_test        # ゴールデンテストのみ
 cargo test --test integration_test  # 統合テストのみ
 ```
@@ -156,7 +156,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 
 ---
 
-## 3. 統合テスト（14件）
+## 3. 統合テスト（18件）
 
 `tests/integration_test.rs` — 3パス全体を通した end-to-end 検証。
 
@@ -178,6 +178,10 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_irp` | `.irp param, list` の展開 |
 | `test_irpc` | `.irpc param, str` の各文字展開 |
 | `test_prn_list_file` | `-p` オプションで PRN リストファイルが生成される |
+| `test_bra_to_next_is_suppressed` | 直後ラベルへの `BRA` が pass2 でサプレスされること |
+| `test_c4_cmpi0_to_tst` | `-c4` で `CMPI #0,Dn` が `TST Dn` に最適化されること |
+| `test_c4_movea_l_imm_to_w` | `-c4` で `MOVEA.L #d16,An` が `MOVEA.W` へ縮小されること |
+| `test_c4_asl_imm1_to_add` | `-c4` で `ASL #1,Dn` が `ADD Dn,Dn` に最適化されること |
 
 ---
 
@@ -227,6 +231,8 @@ diff $ORIG_O $RHAS_O
 |---|---|---|
 | 2026-02-28 | `is_external_with_offset` 逆順パターン対応 | optimize.o 完全一致（-192 bytes）、objgen.o -108 bytes、file.o -48 bytes |
 | 2026-02-28 | ADD/SUB #1-8 → ADDQ/SUBQ 最適化実装 | doasm.o -6 bytes |
+| 2026-02-28 | 分岐最適化の内部表現強化（`cur_size`/`suppressed`）+ 直後 `BRA/Bcc` サプレス実装 | ゴールデン/統合テストは通過。MS5比較の一致数は 13/17 のまま |
+| 2026-02-28 | `opt_asl`（`ASL #1,Dn -> ADD Dn,Dn`）実装 + 統合テスト追加 | 回帰なし（golden 17/17, integration 18/18） |
 
 ---
 
@@ -317,7 +323,7 @@ cargo test --test golden_test rofst_disp
 | `opt_movea` | `MOVEA <ea>,An` 最適化（サイズ縮小等） | `movea_opt.s` | 未テスト |
 | `opt_cmpa` | `CMPA <ea>,An` → `CMP <ea>,An`（.l のみ） | `cmpa_opt.s` | 未テスト |
 | `opt_lea` | `LEA (d,An),An` → `ADDA/SUBA #d,An` 等 | `lea_opt.s` | 未テスト |
-| `opt_asl` | `ASL #1,Dn` → `ADD Dn,Dn`（1ビット左シフト） | `asl_opt.s` | 未テスト |
+| `opt_asl` | `ASL #1,Dn` → `ADD Dn,Dn`（1ビット左シフト） | `asl_opt.s` | 実装済（統合テストあり、ゴールデン未整備） |
 | `opt_cmp0` | `CMP #0, <ea>` → `TST <ea>` | `cmp0_opt.s` | 未テスト |
 | `opt_move0` | `MOVE #0, <ea>` → `CLR <ea>` | `move0_opt.s` | 未テスト |
 | `opt_cmpi0` | `CMPI #0, <ea>` → `TST <ea>` | `cmpi0_opt.s` | 未テスト |

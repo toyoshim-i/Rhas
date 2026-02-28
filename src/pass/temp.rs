@@ -32,6 +32,10 @@ pub enum TempRecord {
         target: Rpn,
         /// サイズ指定（None = 自動/デフォルトはワード）
         req_size: Option<SizeCode>,
+        /// Pass2 後の実効サイズ（None = ワード）
+        cur_size: Option<SizeCode>,
+        /// Pass2 により分岐命令が削除された（直後への bra/bcc）
+        suppressed: bool,
     },
 
     /// .dc データ（式を含むため Pass3 で評価）
@@ -83,7 +87,9 @@ impl TempRecord {
         match self {
             TempRecord::Const(b)         => b.len() as u32,
             TempRecord::DeferredInsn { byte_size, .. } => *byte_size,
-            TempRecord::Branch { req_size, .. } => branch_word_size(*req_size),
+            TempRecord::Branch { cur_size, suppressed, .. } => {
+                if *suppressed { 0 } else { branch_word_size(*cur_size) }
+            }
             TempRecord::Data { size, .. } => *size as u32,
             TempRecord::Ds { byte_count } => *byte_count,
             TempRecord::Align { .. }     => 0,

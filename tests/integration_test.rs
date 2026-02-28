@@ -21,6 +21,32 @@ fn assemble_src(src: &[u8]) -> rhas::pass::AssembleResult {
     rhas::pass::assemble(&mut ctx).expect("assemble")
 }
 
+/// -c4 相当の拡張最適化を有効にしてアセンブルする。
+fn assemble_src_c4(src: &[u8]) -> rhas::pass::AssembleResult {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(src).expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        opt_clr: true,
+        opt_movea: true,
+        opt_adda_suba: true,
+        opt_cmpa: true,
+        opt_lea: true,
+        opt_asl: true,
+        opt_cmp0: true,
+        opt_move0: true,
+        opt_cmpi0: true,
+        opt_sub_addi0: true,
+        opt_bsr: true,
+        opt_jmp_jsr: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx).expect("assemble")
+}
+
 // ─── MS1: 最小アセンブル ─────────────────────────────────────────────────────
 
 /// move.b d0,d1 が 0x1200 にエンコードされ、正しい HLK ファイルが出力される。
@@ -75,6 +101,19 @@ loop:\n\
     assert_eq!(&text.bytes[0..2], &[0x4E, 0x71], "nop");
     // BRA.S: 0x60xx where xx = displacement byte (-4 = 0xFC)
     assert_eq!(&text.bytes[2..4], &[0x60, 0xFC], "bra.s loop offset=-4");
+}
+
+/// 直後ラベルへの BRA は pass2 でサプレスされる（HAS互換）
+#[test]
+fn test_bra_to_next_is_suppressed() {
+    let src = b"\
+\tbra\tnext\n\
+next:\n\
+\tnop\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(text.bytes, [0x4E, 0x71], "bra next should be removed");
 }
 
 /// .equ シンボル参照
@@ -285,4 +324,33 @@ fn test_prn_list_file() {
     // コードバイトが含まれていること
     assert!(prn_str.contains("1200"), "move.b d0,d1 bytes in PRN");
     assert!(prn_str.contains("4E71"), "nop bytes in PRN");
+}
+
+// ─── -c4 最適化 ──────────────────────────────────────────────────────────────
+
+#[test]
+fn test_c4_cmpi0_to_tst() {
+    let src = b"\tcmpi.l\t#0,d3\n";
+    let result = assemble_src_c4(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    // TST.L D3 = 0x4A83
+    assert_eq!(text.bytes, [0x4A, 0x83]);
+}
+
+#[test]
+fn test_c4_movea_l_imm_to_w() {
+    let src = b"\tmovea.l\t#1234,a2\n";
+    let result = assemble_src_c4(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    // MOVEA.W #1234,A2 = 0x347C 0x04D2
+    assert_eq!(text.bytes, [0x34, 0x7C, 0x04, 0xD2]);
+}
+
+#[test]
+fn test_c4_asl_imm1_to_add() {
+    let src = b"\tasl.w\t#1,d2\n";
+    let result = assemble_src_c4(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    // ADD.W D2,D2 = 0xD442
+    assert_eq!(text.bytes, [0xD4, 0x42]);
 }

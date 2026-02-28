@@ -5,7 +5,8 @@
 
 set -euo pipefail
 
-HAS=/private/tmp/has_test/HAS060.X
+HAS="${HAS:-/private/tmp/has_test/HAS060.X}"
+RUN68_BIN="${RUN68_BIN:-run68}"
 ASM_DIR="$(cd "$(dirname "$0")/asm" && pwd)"
 GOLDEN_DIR="$(cd "$(dirname "$0")/golden" && pwd)"
 WORK_DIR=$(mktemp -d)
@@ -17,8 +18,8 @@ if [[ ! -f "$HAS" ]]; then
     echo "ERROR: HAS060.X not found at $HAS" >&2
     exit 1
 fi
-if ! command -v run68 &>/dev/null; then
-    echo "ERROR: run68 not found in PATH" >&2
+if ! command -v "$RUN68_BIN" &>/dev/null; then
+    echo "ERROR: run68 not found: $RUN68_BIN" >&2
     exit 1
 fi
 
@@ -46,9 +47,9 @@ for asm_file in "$ASM_DIR"/*.s; do
     # Run from the work directory using the basename only; output goes there too.
     # Files ending with _opt use -c4 to enable extended optimizations.
     if [[ "$name" == *_opt ]]; then
-        (cd "$WORK_DIR" && run68 "$HAS" -c4 -u -w0 "${name}.s" 2>/dev/null) || true
+        (cd "$WORK_DIR" && "$RUN68_BIN" "$HAS" -c4 -u -w0 "${name}.s" 2>/dev/null) || true
     else
-        (cd "$WORK_DIR" && run68 "$HAS" -u -w0 "${name}.s" 2>/dev/null) || true
+        (cd "$WORK_DIR" && "$RUN68_BIN" "$HAS" -u -w0 "${name}.s" 2>/dev/null) || true
     fi
 
     if [[ -f "$work_out" ]]; then

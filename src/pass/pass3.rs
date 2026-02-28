@@ -507,9 +507,9 @@ pub fn pass3(
                 process_deferred(&mut ctx, *base, *handler, *size, ops);
             }
 
-            TempRecord::Branch { opcode, target, req_size } => {
+            TempRecord::Branch { opcode, target, cur_size, suppressed, .. } => {
                 register_xdefs_in_rpn(&mut ctx, target);
-                process_branch(&mut ctx, *opcode, target, *req_size);
+                process_branch(&mut ctx, *opcode, target, *cur_size, *suppressed);
             }
 
             TempRecord::Data { size, rpn } => {
@@ -1023,7 +1023,11 @@ fn process_branch(
     opcode:   u16,
     target:   &Rpn,
     req_size: Option<SizeCode>,
+    suppressed: bool,
 ) {
+    if suppressed {
+        return;
+    }
     let pc = ctx.location(); // 命令先頭のアドレス
 
     // ターゲットアドレスを評価
