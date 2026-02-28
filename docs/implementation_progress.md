@@ -226,7 +226,7 @@
 | PRNリストファイル（`-p`） | ✅ 完了 | ソース行+アドレス+機械語バイトのリストファイル生成 |
 | シンボルファイル（`-x`） | ✅ 完了 | シンボル名・型・値のリスト出力 |
 | `.align` B204レコード | ✅ 完了 | `.align`使用時に `$B204` アラインメント情報レコードを出力 |
-| SCD疑似命令（`-g`） | 🚧 部分実装 | `.file/.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim` の構文/値検証と状態更新を実装、`TempRecord`化を開始、`B204`ファイル名に`.file`を反映（デバッグシンボル出力は未実装） |
+| SCD疑似命令（`-g`） | 🚧 部分実装 | `.file/.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim` の構文/値検証と状態更新を実装、`TempRecord`化を開始、`.file` は SCD 側に反映し `B204` は入力ソース名を維持（デバッグシンボル出力は未実装） |
 | HUPAIR対応 | N/A | ネイティブRust環境では不要（X68k DOS固有機能） |
 
 **実装内容**:
@@ -311,9 +311,10 @@
   - `src/context.rs`: `scd_file` ワーク領域を追加
   - `src/pass/pass1.rs`: `.file` のファイル名解析と `scd_file` 反映を実装
   - `tests/integration_test.rs`: `test_scd_file_sets_debug_source_name` を追加
-- `-g` 出力の `B204` へ `.file` 名を反映
-  - `src/pass/mod.rs`: Pass1で設定された `ctx.scd_file` を `ObjectCode.source_file` に接続
-  - `tests/integration_test.rs`: `test_scd_file_reflects_b204_filename` を追加
+- `-g` 出力の `.file`/`B204` 役割分離を実装
+  - `src/pass/mod.rs`: `ObjectCode.source_file`（B204）と `ObjectCode.scd_file`（SCD）を分離
+  - `src/object/writer.rs`: SCD `.file` エントリと exname は `scd_file` を参照
+  - `tests/integration_test.rs`: `test_scd_file_does_not_affect_b204_filename` を追加
 - SCD疑似命令の中間コード化を開始
   - `src/pass/temp.rs`: `ScdLn/ScdVal/ScdTag/ScdEndef/ScdFuncEnd` を追加
   - `src/pass/pass1.rs`: `.ln/.val/.tag/.endef/.scl -1` で SCD `TempRecord` を生成

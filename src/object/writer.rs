@@ -73,8 +73,8 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     let mut entries: Vec<ScdEntry> = Vec::new();
     let text_size = obj.sections.first().map(|s| s.size).unwrap_or(0);
     let mut exname_data: Vec<u8> = Vec::new();
-    if obj.source_file.len() > 8 {
-        exname_data.extend_from_slice(&obj.source_file);
+    if obj.scd_file.len() > 8 {
+        exname_data.extend_from_slice(&obj.scd_file);
         exname_data.push(0);
         if (exname_data.len() & 1) != 0 {
             exname_data.push(0);
@@ -90,7 +90,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
         ..Default::default()
     };
     fill_scd_name(&mut file_ent.name, b".file");
-    set_file_bytes(&mut file_ent, &obj.source_file);
+    set_file_bytes(&mut file_ent, &obj.scd_file);
     entries.push(file_ent);
 
     // HAS の scdout0 相当: 関数/.bf/.ef の雛形を追加する。

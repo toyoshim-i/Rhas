@@ -127,15 +127,15 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     pass2::pass2(&mut records, &mut sym);
 
     // ---- Pass 3: コード生成 → ObjectCode ----
-    let source_file = if ctx.opts.make_sym_deb && !ctx.scd_file.is_empty() {
+    let prn_enable = ctx.opts.make_prn;
+    let max_align = ctx.max_align;
+    let (mut obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file.clone(), prn_enable, max_align);
+    obj.has_debug_info = ctx.opts.make_sym_deb;
+    obj.scd_file = if ctx.opts.make_sym_deb && !ctx.scd_file.is_empty() {
         ctx.scd_file.clone()
     } else {
         source_file
     };
-    let prn_enable = ctx.opts.make_prn;
-    let max_align = ctx.max_align;
-    let (mut obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file, prn_enable, max_align);
-    obj.has_debug_info = ctx.opts.make_sym_deb;
     obj.request_files = ctx.request_files.clone();
 
     // ---- HLK バイナリ生成 ----

@@ -215,7 +215,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_scd_scl_rejects_out_of_range` | `-g` 有効時に `.scl` が範囲外値を拒否すること |
 | `test_scd_directives_are_ignored_without_g` | `-g` 無効時は SCD 疑似命令を無視すること |
 | `test_scd_file_sets_debug_source_name` | `-g` 有効時に `.file` がSCD用ソースファイル名を更新すること |
-| `test_scd_file_reflects_b204_filename` | `-g` + `.file` 指定時に B204 のファイル名文字列へ反映されること |
+| `test_scd_file_does_not_affect_b204_filename` | `-g` + `.file` 指定時でも B204 は入力ソースファイル名を維持すること |
 | `test_scd_records_are_emitted_in_pass1` | SCD疑似命令が Pass1 で専用 `TempRecord` に変換されること |
 | `test_scd_events_are_collected_in_object` | SCD `TempRecord` が Pass3 で `ObjectCode.scd_events` に収集されること |
 | `test_scd_val_constant_is_preserved_in_endef_snapshot` | `.val` の定数式が `.endef` スナップショットに `section=-1` として保持されること |
@@ -294,7 +294,7 @@ diff $ORIG_O $RHAS_O
 | 2026-03-01 | `.fpid` の定数受理・範囲検証・負値時FPU無効化を実装 | 回帰なし（golden 17/17, integration 46/46, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD疑似命令（`.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim`）の構文/値検証を実装 | 回帰なし（golden 17/17, integration 50/50, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD疑似命令 `.file` を実装（SCD用ファイル名ワーク更新） | 回帰なし（golden 17/17, integration 51/51, MS5比較 17一致/0差分） |
-| 2026-03-01 | `-g` 時の B204 ファイル名へ `.file` を反映 | 回帰なし（golden 17/17, integration 52/52, MS5比較 17一致/0差分） |
+| 2026-03-01 | `-g` 時の `.file` と B204 の役割分離（B204は入力ソース名を維持） | 回帰なし（golden 17/17, integration 58/58, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD疑似命令の `TempRecord` 化（`.ln/.val/.tag/.endef/.scl -1`）を実装 | 回帰なし（golden 17/17, integration 53/53, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCDイベントを `ObjectCode.scd_events` に収集（Pass3） | 回帰なし（golden 17/17, integration 54/54, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD `.val` の値/セクションを `.endef` スナップショットへ伝播 | 回帰なし（golden 17/17, integration 55/55, MS5比較 17一致/0差分） |

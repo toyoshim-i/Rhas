@@ -100,7 +100,7 @@ rhas -h
 | PRN リストファイル出力 | ✅ 完了 | |
 | `-c4` 拡張最適化（`ADD #1-8` → `ADDQ` 等） | ✅ 実装済み | ゴールデン `addq_opt` / MS5比較で検証済み |
 | FPU 命令（68881/68882） | 📋 計画中 | |
-| SCD デバッグ情報（`-g`） | 🚧 進行中 | `.file/.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim` の構文/値検証 + `TempRecord`化 + `ObjectCode.scd_events` 収集 + `$0000` 後ろの SCD フッタ出力骨格まで実装。`B204`のファイル名に`.file`を反映。HAS 完全一致へ調整中 |
+| SCD デバッグ情報（`-g`） | 🚧 進行中 | `.file/.ln/.def/.endef/.val/.scl/.type/.tag/.line/.size/.dim` の構文/値検証 + `TempRecord`化 + `ObjectCode.scd_events` 収集 + `$0000` 後ろの SCD フッタ出力骨格まで実装。`.file` はSCD側に反映し、`B204` は入力ソース名を維持。HAS 完全一致へ調整中 |
 
 ---
 

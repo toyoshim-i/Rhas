@@ -110,6 +110,8 @@ pub struct ObjectCode {
     pub source_name: Vec<u8>,
     /// ソースファイル名（拡張子あり、$B204 レコード用）
     pub source_file: Vec<u8>,
+    /// SCD 用ソースファイル名（`.file`。未指定時は source_file と同じ）
+    pub scd_file: Vec<u8>,
     /// セクション情報（常に4セクション: text/data/bss/stack）
     pub sections: Vec<SectionInfo>,
     /// 外部シンボル
@@ -131,9 +133,11 @@ pub struct ObjectCode {
 impl ObjectCode {
     pub fn new(source_name: Vec<u8>) -> Self {
         let source_file = source_name.clone();
+        let scd_file = source_file.clone();
         ObjectCode {
             source_name,
             source_file,
+            scd_file,
             sections: Vec::new(),
             ext_syms: Vec::new(),
             request_files: Vec::new(),

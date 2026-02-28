@@ -743,12 +743,19 @@ fn test_scd_file_sets_debug_source_name() {
     assert_eq!(ctx.scd_file, b"main.c".to_vec());
 }
 
-/// `-g` + `.file` 指定時、B204文字列は `.file` 名を使う。
+/// `-g` + `.file` 指定時でも、B204文字列は入力ソースファイル名を使う。
 #[test]
-fn test_scd_file_reflects_b204_filename() {
+fn test_scd_file_does_not_affect_b204_filename() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\tnop\n").expect("write");
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let expected_file = f
+        .path()
+        .file_name()
+        .expect("filename")
+        .to_string_lossy()
+        .into_owned();
+    let expected_pat = format!("*{}*", expected_file);
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -757,10 +764,14 @@ fn test_scd_file_reflects_b204_filename() {
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let result = rhas::pass::assemble(&mut ctx).expect("assemble");
-    let pat = b"*main.c*";
+    let pat = expected_pat.as_bytes();
     assert!(
         result.obj_bytes.windows(pat.len()).any(|w| w == pat),
-        "B204 payload should contain *main.c*"
+        "B204 payload should contain input source filename"
+    );
+    assert!(
+        !result.obj_bytes.windows(b"*main.c*".len()).any(|w| w == b"*main.c*"),
+        "B204 payload should not be replaced by .file name"
     );
 }
 
