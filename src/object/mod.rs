@@ -71,11 +71,11 @@ pub struct ExternalSymbol {
     pub name:  Vec<u8>,
 }
 
-/// SCDデバッグイベント（MS6途中段階）
+/// SCDデバッグイベント
 #[derive(Debug, Clone)]
 pub enum ScdEvent {
     Ln { line: u16, location: u32, section: u8 },
-    Val { expr: crate::expr::Rpn },
+    Val { value: u32, section: i16 },
     Tag { name: Vec<u8> },
     Endef {
         name: Vec<u8>,
@@ -128,7 +128,7 @@ pub struct ObjectCode {
     pub max_align: u8,
     /// HLK コード本体（20xx セクション切り替え + 10xx コードブロック）
     pub code_body: Vec<u8>,
-    /// 収集済みSCDイベント（最終出力形式への変換はMS6で実装）
+    /// 収集済みSCDイベント
     pub scd_events: Vec<ScdEvent>,
 }
 

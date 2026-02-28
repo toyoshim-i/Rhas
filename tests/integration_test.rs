@@ -1284,6 +1284,64 @@ fn test_scd_bb_eb_updates_bb_next_chain() {
     assert_eq!(bb_next, eb_idx.map(|v| v + 1));
 }
 
+/// HAS互換: `.val` は Pass3 で再評価され、forward 参照でも Endef 値へ反映される。
+#[test]
+fn test_scd_val_forward_symbol_is_resolved_in_footer() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(
+        b"\t.file\t\"main.c\"\n\
+\t.def\tfwdv\n\
+\t.val\ttarget\n\
+\t.endef\n\
+\tnop\n\
+target:\n\
+\tnop\n",
+    )
+    .expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+
+    let end_pos = (0..bytes.len().saturating_sub(14))
+        .find(|&i| {
+            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
+                return false;
+            }
+            let p = i + 2;
+            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
+            p + 12 + line_len + scd_len + exname_len == bytes.len()
+        })
+        .expect("0000 terminator");
+    let p = end_pos + 2;
+    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+    let scd_base = p + 12 + line_len;
+    let scd_count = scd_len / 36;
+
+    let mut found = false;
+    for i in 0..scd_count {
+        let e = scd_base + i * 36;
+        let name = &bytes[e..e + 8];
+        if name.starts_with(b"fwdv") {
+            let value = u32::from_be_bytes([bytes[e + 8], bytes[e + 9], bytes[e + 10], bytes[e + 11]]);
+            let section = i16::from_be_bytes([bytes[e + 12], bytes[e + 13]]);
+            assert_eq!(value, 2);
+            assert_eq!(section, 1);
+            found = true;
+            break;
+        }
+    }
+    assert!(found, "forward .val SCD entry should exist");
+}
+
 /// `.request` は `$E001` レコードとして出力される。
 #[test]
 fn test_request_emits_e001_record() {

@@ -736,7 +736,15 @@ pub fn pass3(
                 obj.scd_events.push(ScdEvent::Ln { line: *line, location, section });
             }
             TempRecord::ScdVal { rpn } => {
-                obj.scd_events.push(ScdEvent::Val { expr: rpn.clone() });
+                // HAS互換: .val はオブジェクト生成段階で式評価した値を保持する。
+                let (value, section) = match ctx.eval(rpn) {
+                    Ok(v) => {
+                        let sec = if v.section == 0 { -1 } else { v.section as i16 };
+                        (v.value as u32, sec)
+                    }
+                    Err(_) => (0, -2),
+                };
+                obj.scd_events.push(ScdEvent::Val { value, section });
             }
             TempRecord::ScdTag { name } => {
                 obj.scd_events.push(ScdEvent::Tag { name: name.clone() });

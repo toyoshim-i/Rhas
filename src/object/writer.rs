@@ -151,6 +151,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     let mut open_tag_defs: Vec<usize> = Vec::new();
     let mut tag_def_by_name: std::collections::HashMap<Vec<u8>, u32> = std::collections::HashMap::new();
     let mut pending_tag_name: Option<Vec<u8>> = None;
+    let mut pending_val: Option<(u32, i16)> = None;
     for ev in &obj.scd_events {
         match ev {
             ScdEvent::Ln { line, location, section } => {
@@ -159,19 +160,23 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                     lines.push((*location, *line));
                 }
             }
+            ScdEvent::Val { value, section } => {
+                pending_val = Some((*value, *section));
+            }
             ScdEvent::Tag { name } => {
                 pending_tag_name = Some(name.clone());
             }
             ScdEvent::Endef { name, attrib, value, section, scl, type_code, size, dim, is_long, .. } => {
+                let (out_value, out_section_raw) = pending_val.unwrap_or((*value, *section));
                 // HAS互換: enumメンバ（scl=16）は存在しないセクション(-2)へ補正する。
-                let out_section = if *scl == 16 { -2 } else { *section };
+                let out_section = if *scl == 16 { -2 } else { out_section_raw };
                 let tag_ref = pending_tag_name
                     .as_ref()
                     .and_then(|n| tag_def_by_name.get(n))
                     .copied()
                     .unwrap_or(0);
                 let mut ent = ScdEntry {
-                    value: *value,
+                    value: out_value,
                     section: out_section,
                     type_code: *type_code,
                     scl: *scl,
@@ -188,6 +193,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 let cur = entries.len() - 1;
                 let cur_num = cur as u32;
                 pending_tag_name = None;
+                pending_val = None;
 
                 // HAS互換: 関数定義開始(0x21)は .scl -1 でサイズ確定させる。
                 if *attrib == 0x21 {
@@ -220,6 +226,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 }
             }
             ScdEvent::FuncEnd { location, section } => {
+                pending_val = None;
                 if *section == 1 {
                     if let Some(idx) = open_func_defs.pop() {
                         let next_num = entries.len() as u32;
@@ -229,7 +236,6 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                     }
                 }
             }
-            _ => {}
         }
     }
     // HAS 互換: `-g` のみ（`.file` 未使用）では先頭にダミー行番号エントリを持つ。
