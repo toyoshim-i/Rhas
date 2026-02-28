@@ -41,6 +41,12 @@ enum EaExtKind {
     Complex(Rpn),
 }
 
+#[derive(Clone)]
+struct FoldExpr {
+    name: Option<Vec<u8>>,
+    offset: i32,
+}
+
 // ----------------------------------------------------------------
 // Pass3 内部状態
 // ----------------------------------------------------------------
@@ -321,37 +327,74 @@ fn token_as_const(tok: &RPNToken, sym: &SymbolTable) -> Option<i32> {
     }
 }
 
-/// RPN が「単一 XREF ± 定数」パターンかチェック。2つのパターンを認識する:
-///   Pattern 1: [SymbolRef(ext), <const>, Op(Add/Sub), End]  ← ext + const
-///   Pattern 2: [<const>, SymbolRef(ext), Op(Add), End]      ← const + ext（可換）
-/// 定数は ValueByte / ValueWord / Value / 定数 SymbolRef のいずれでもよい
-fn is_external_with_offset<'a>(rpn: &'a Rpn, sym: &SymbolTable) -> Option<(&'a Vec<u8>, i32)> {
-    if rpn.len() == 4 {
-        // Pattern 1: [SymbolRef(ext), const, Add/Sub, End]
-        if let (RPNToken::SymbolRef(name), tok, RPNToken::Op(op), RPNToken::End) =
-            (&rpn[0], &rpn[1], &rpn[2], &rpn[3])
-        {
-            if let Some(n) = token_as_const(tok, sym) {
-                match op {
-                    Operator::Add => return Some((name, n)),
-                    Operator::Sub => return Some((name, -n)),
-                    _ => {}
+/// RPN が「単一 XREF + 定数オフセット」に簡約できるかチェック。
+///
+/// 例:
+/// - `sym + 4`
+/// - `4 + sym`
+/// - `sym + (16*4)`  // 定数部分は先に畳み込む
+fn is_external_with_offset(rpn: &Rpn, sym: &SymbolTable) -> Option<(Vec<u8>, i32)> {
+    let mut stack: Vec<FoldExpr> = Vec::new();
+
+    for tok in rpn {
+        match tok {
+            RPNToken::End => break,
+            RPNToken::Value(v) => stack.push(FoldExpr { name: None, offset: *v as i32 }),
+            RPNToken::ValueWord(v) => stack.push(FoldExpr { name: None, offset: *v as i32 }),
+            RPNToken::ValueByte(v) => stack.push(FoldExpr { name: None, offset: *v as i32 }),
+            RPNToken::SymbolRef(name) => {
+                if let Some(v) = sym.lookup_sym(name).and_then(sym_to_eval).filter(|v| v.is_constant()) {
+                    stack.push(FoldExpr { name: None, offset: v.value });
+                } else {
+                    stack.push(FoldExpr { name: Some(name.clone()), offset: 0 });
                 }
             }
-        }
-        // Pattern 2: [const, SymbolRef(ext), Add, End]  （加算は可換なので const + ext = ext + const）
-        if let (tok, RPNToken::SymbolRef(name), RPNToken::Op(Operator::Add), RPNToken::End) =
-            (&rpn[0], &rpn[1], &rpn[2], &rpn[3])
-        {
-            if let Some(n) = token_as_const(tok, sym) {
-                // tok が定数として解決でき、name が定数でない（外部参照）場合のみ
-                if token_as_const(&RPNToken::SymbolRef(name.clone()), sym).is_none() {
-                    return Some((name, n));
-                }
+            RPNToken::Op(op) => {
+                let rhs = stack.pop()?;
+                let lhs = stack.pop()?;
+                let merged = match op {
+                    Operator::Add => fold_add(lhs, rhs)?,
+                    Operator::Sub => fold_sub(lhs, rhs)?,
+                    Operator::Mul => fold_mul(lhs, rhs)?,
+                    _ => return None,
+                };
+                stack.push(merged);
             }
+            _ => return None,
         }
     }
-    None
+    let out = stack.pop()?;
+    if !stack.is_empty() {
+        return None;
+    }
+    out.name.map(|n| (n, out.offset))
+}
+
+fn fold_add(lhs: FoldExpr, rhs: FoldExpr) -> Option<FoldExpr> {
+    match (lhs.name, rhs.name) {
+        (None, None) => Some(FoldExpr { name: None, offset: lhs.offset + rhs.offset }),
+        (Some(n), None) => Some(FoldExpr { name: Some(n), offset: lhs.offset + rhs.offset }),
+        (None, Some(n)) => Some(FoldExpr { name: Some(n), offset: lhs.offset + rhs.offset }),
+        (Some(_), Some(_)) => None,
+    }
+}
+
+fn fold_sub(lhs: FoldExpr, rhs: FoldExpr) -> Option<FoldExpr> {
+    match (lhs.name, rhs.name) {
+        (None, None) => Some(FoldExpr { name: None, offset: lhs.offset - rhs.offset }),
+        (Some(n), None) => Some(FoldExpr { name: Some(n), offset: lhs.offset - rhs.offset }),
+        _ => None,
+    }
+}
+
+fn fold_mul(lhs: FoldExpr, rhs: FoldExpr) -> Option<FoldExpr> {
+    match (lhs.name, rhs.name) {
+        (None, None) => Some(FoldExpr { name: None, offset: lhs.offset * rhs.offset }),
+        // (sym + k) * 1 は恒等
+        (Some(n), None) if rhs.offset == 1 => Some(FoldExpr { name: Some(n), offset: lhs.offset }),
+        (None, Some(n)) if lhs.offset == 1 => Some(FoldExpr { name: Some(n), offset: rhs.offset }),
+        _ => None,
+    }
 }
 
 /// RPN 内の全 SymbolRef に対して try_register_xdef を呼ぶ（B2xx 順序の先行登録）
@@ -1130,5 +1173,27 @@ fn val_to_bytes(v: i32, size: u8) -> Vec<u8> {
             vec![(l>>24) as u8, (l>>16) as u8, (l>>8) as u8, l as u8]
         }
         _ => vec![],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::expr::rpn::{Operator, RPNToken};
+
+    #[test]
+    fn test_is_external_with_offset_mul_add_const_fold() {
+        let sym = SymbolTable::new(false);
+        let rpn = vec![
+            RPNToken::SymbolRef(b"extsym".to_vec()),
+            RPNToken::Value(16),
+            RPNToken::Value(4),
+            RPNToken::Op(Operator::Mul),
+            RPNToken::Op(Operator::Add),
+            RPNToken::End,
+        ];
+        let got = is_external_with_offset(&rpn, &sym).expect("ext + 16*4");
+        assert_eq!(got.0, b"extsym".to_vec());
+        assert_eq!(got.1, 64);
     }
 }
