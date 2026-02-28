@@ -286,3 +286,134 @@ zsh /private/tmp/has_test/compare.sh
 cargo test insn_move        # テスト名でフィルタ
 cargo test --test golden_test rofst_disp
 ```
+
+---
+
+## 今後の課題
+
+### MS5 残差（4ファイル）
+
+`-c4 -u` 指定時に HAS060.X との差異が残っているファイル。いずれも根本原因は未解明。
+
+| ファイル | 差分 | 推定原因 |
+|---|---|---|
+| `doasm.o` | +170 bytes | 分岐最適化カスケード（ADD→ADDQ 変換後のラベルオフセット変化が隣接分岐サイズに波及） |
+| `pseudo.o` | +52 bytes | 不明。ADD→ADDQ 対象命令が存在するはずだが変化なし |
+| `file.o` | +6 bytes | 分岐カスケード残差 |
+| `objgen.o` | +4 bytes | 分岐カスケード残差 |
+
+### 最適化フラグ別ゴールデンテスト
+
+`-c4`（`addq_opt`）は `opt_adda_suba` しかカバーしていない。
+残り 11 フラグの動作をテストするゴールデンファイルを整備する。
+
+各フラグはパス1 でのコード変換であり、生成オブジェクトのバイト列が変わるため
+ゴールデンテスト形式が最適（HAS060.X と rhas の出力を 1:1 比較）。
+
+| フラグ | 対象変換 | テストファイル案 | 状態 |
+|---|---|---|---|
+| `opt_adda_suba` | `ADD/SUB #1-8, <ea>` → `ADDQ/SUBQ` | `addq_opt.s` ✅ | 実装済・テストあり |
+| `opt_clr` | `CLR <ea>` 最適化（CLR→AND/MOVEQ 等？） | `clr_opt.s` | 未テスト |
+| `opt_movea` | `MOVEA <ea>,An` 最適化（サイズ縮小等） | `movea_opt.s` | 未テスト |
+| `opt_cmpa` | `CMPA <ea>,An` → `CMP <ea>,An`（.l のみ） | `cmpa_opt.s` | 未テスト |
+| `opt_lea` | `LEA (d,An),An` → `ADDA/SUBA #d,An` 等 | `lea_opt.s` | 未テスト |
+| `opt_asl` | `ASL #1,Dn` → `ADD Dn,Dn`（1ビット左シフト） | `asl_opt.s` | 未テスト |
+| `opt_cmp0` | `CMP #0, <ea>` → `TST <ea>` | `cmp0_opt.s` | 未テスト |
+| `opt_move0` | `MOVE #0, <ea>` → `CLR <ea>` | `move0_opt.s` | 未テスト |
+| `opt_cmpi0` | `CMPI #0, <ea>` → `TST <ea>` | `cmpi0_opt.s` | 未テスト |
+| `opt_sub_addi0` | `SUB/ADD #0, <ea>` → 削除（NOP相当） | `subaddi0_opt.s` | 未テスト |
+| `opt_bsr` | `BSR label` → `BSR.s label`（短形式）| `bsr_opt.s` | 未テスト |
+| `opt_jmp_jsr` | `JMP/JSR (An)` → `JMP/JSR (An)` 最適化 | `jmpjsr_opt.s` | 未テスト |
+
+各テストファイルは `_opt` サフィックスを付け `golden_test_opt!` マクロで登録する。
+フラグ個別の検証が必要な場合は `assemble_file_c4` を参考に特定フラグのみ有効にした
+ヘルパー関数を `golden_test.rs` に追加する。
+
+### エラーメッセージ比較テスト
+
+オリジナル HAS060.X が出力するエラーメッセージと rhas のエラーメッセージを体系的にテストする。
+
+#### 出力先の違い
+
+| | オリジナル HAS060.X | rhas |
+|---|---|---|
+| エラー出力先 | **標準出力** (stdout) | **標準エラー** (stderr) |
+| 理由 | Human68k の慣習（コンソールは stdout） | Unix 慣習に従う |
+
+テスト実装では **rhas の stderr を検査** する。
+HAS との文字列一致は不要で、rhas 単体で内容が期待通りかを確認する方針。
+
+#### テスト方式
+
+```
+tests/error_test.rs  ← 新規作成予定
+```
+
+- インメモリアセンブル（`assemble_src_expect_err(b"...")`）で `Err` を受け取る
+- `AssemblyError` の `ErrorCode` 種別と、フォーマットされたメッセージ文字列を検証する
+- 標準エラーへの出力は CLI レイヤー（`main.rs`）のテストとして別途検討
+
+#### カバー対象エラーコード一覧（`src/error.rs` の `ErrorCode` 全種）
+
+| カテゴリ | ErrorCode | 発生させ方 |
+|---|---|---|
+| **強制エラー** | `Forced` | `.fail` ディレクティブ |
+| **シンボル再定義** | `Redef` | 同名ラベルを 2 回定義 |
+| | `RedefPredefine` | プレデファインシンボルへの代入 |
+| | `RedefSet` | `.set` 以外で定義済みシンボルを `.set` で上書き |
+| | `RedefOffsym` | `.offsym` 以外で定義済みオフセットシンボルを再定義 |
+| **命令解釈** | `BadOpe` | 存在しない命令名（例: `foo d0,d1`） |
+| | `BadOpeLocal` | ローカルラベルの不正記述（例: `0@`） |
+| | `BadOpeLocalLen` | ローカルラベルが桁数超過 |
+| **シンボル種別** | `IlSymRegsym` | `.equ` でレジスタリストシンボルを参照 |
+| | `IlSymRegister` | レジスタ名を通常シンボルとして参照 |
+| | `IlSymPredefXdef` | プレデファインシンボルを `.xdef` |
+| | `IlSymPredefXref` | プレデファインシンボルを `.xref` |
+| | `IlSymPredefGlobl` | プレデファインシンボルを `.globl` |
+| | `IlSymLookfor` | シンボル定義と参照方法の矛盾 |
+| **式解析** | `Expr` | 構文エラーのある式（例: `1+`） |
+| | `ExprEa` | 実効アドレスとして解釈不能（例: `(1,2,3,4)`） |
+| | `ExprCannotScale` | スケール不可の EA にスケール指定（68000モードで） |
+| | `ExprScaleFactor` | スケールファクタ値不正（例: `d0.l*3`） |
+| | `ExprFullFormat` | フルフォーマット EA（68000モードで） |
+| | `ExprImmediate` | 即値が解釈できない |
+| **レジスタ** | `Reg` | 使用不可レジスタ |
+| | `RegOpc` | `opc` が使えない文脈 |
+| **アドレッシング** | `IlAdr` | 使用不可アドレッシングモード（例: `add.b (a0)+,(a1)+`） |
+| **サイズ** | `IlSizeOp` / `IlSize` 他 | 各命令に不正なサイズサフィックス |
+| | `IlSizeAn` | `move.b d0,a0`（An へのバイトアクセス） |
+| | `IlSizeSftRotMem` | メモリへの `.b`/`.l` シフト |
+| | `IlSizeBitMem` | メモリへのビット操作に `.w`/`.l` |
+| **オペランド** | `IlOpr` | 不正オペランド形式 |
+| | `IlOprTooMany` | オペランド数過多（例: `nop d0`） |
+| | `IlOprDsNegative` | `.ds` の引数が負数 |
+| **未定義シンボル** | `UndefSym` | 未定義シンボルを `-u` なしで使用 |
+| | `UndefSymLocal` | 未定義ローカルラベル参照 |
+| **演算** | `DivZero` | 式評価中の 0 除算 |
+| | `Overflow` | 即値オーバーフロー |
+| | `IlQuickAddSubQ` | `ADDQ/SUBQ` の即値が 1-8 の範囲外 |
+| | `IlQuickMoveQ` | `MOVEQ` の即値が -128〜127 の範囲外 |
+| | `IlQuickSftRot` | シフト数が 1-8 の範囲外 |
+| **CPU機能** | `FeatureCpu` | 現在の `.cpu` 設定で使えない命令 |
+| | `FeatureXref` | `.xref` 不可 CPU モードでの外部参照 |
+| **マクロ** | `NoSymMacro` | `.macro` にシンボル名なし |
+| | `MisMacExitm` | マクロ外の `.exitm` |
+| | `MisMacEndm` | `.macro` なしの `.endm` |
+| | `MisMacEof` | `.endm` 未閉じ |
+| | `MacNest` | マクロ展開のネスト超過 |
+| | `TooManyLocSym` | 1 マクロ内のローカルシンボル数超過 |
+| **条件分岐** | `MisIfElse` | `.if` なしの `.else` |
+| | `MisIfElseif` | `.if` なしの `.elseif` |
+| | `MisIfEndif` | `.if` なしの `.endif` |
+| | `MisIfElseElseif` | `.else` 後の `.elseif` |
+| | `MisIfEof` | `.endif` 未閉じ |
+| **インクルード** | `TooIncld` | `.include` ネスト超過（8段） |
+| | `NoFile` | `.include` 対象ファイルが見つからない |
+| **文字列** | `TermDoubleQuote` | ダブルクォート未閉じ |
+| | `TermSingleQuote` | シングルクォート未閉じ |
+| | `TermBracket` | 括弧未閉じ |
+| **その他** | `IlInt` | 整数リテラル不正 |
+| | `OffsymAlign` | `.offsym` のアラインメント不正 |
+
+現在エラーテスト専用ファイルは存在しない。
+`tests/error_test.rs` を作成してカバー率を上げることを目標とする。
