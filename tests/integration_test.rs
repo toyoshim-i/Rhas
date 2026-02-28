@@ -683,6 +683,68 @@ fn test_prn_auto_page_break_by_line_limit() {
     assert!(prn.contains(&0x0C), "auto page break should emit formfeed");
 }
 
+/// `.page -1` は自動改ページを無効化する。
+#[test]
+fn test_prn_page_minus1_disables_auto_page_break() {
+    let mut src = Vec::<u8>::new();
+    src.extend_from_slice(b"\t.page\t-1\n");
+    for _ in 0..20 {
+        src.extend_from_slice(b"\tnop\n");
+    }
+
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(&src).expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let prn_file = NamedTempFile::new().expect("prn tempfile");
+    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+
+    let mut opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_prn: true,
+        prn_file: Some(prn_path.clone()),
+        ..Default::default()
+    };
+    opts.prn_page_lines = 10;
+    opts.prn_no_page_ff = false;
+
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx).expect("assemble");
+
+    assert_eq!(ctx.opts.prn_page_lines, u16::MAX, ".page -1 should disable auto page break");
+    let prn = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&prn_path).unwrap()
+    )).expect("read prn");
+    assert!(!prn.contains(&0x0C), "no formfeed expected when auto page break disabled");
+}
+
+/// `.page +` は明示改ページとしてフォームフィードを出力する。
+#[test]
+fn test_prn_page_plus_emits_formfeed() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\tnop\n\t.page\t+\n\tnop\n").expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let prn_file = NamedTempFile::new().expect("prn tempfile");
+    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+
+    let mut opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_prn: true,
+        prn_file: Some(prn_path.clone()),
+        ..Default::default()
+    };
+    opts.prn_no_page_ff = false;
+
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx).expect("assemble");
+
+    let prn = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&prn_path).unwrap()
+    )).expect("read prn");
+    assert!(prn.contains(&0x0C), "formfeed should be emitted for .page +");
+}
+
 // ─── -c4 最適化 ──────────────────────────────────────────────────────────────
 
 #[test]
