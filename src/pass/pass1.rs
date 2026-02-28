@@ -1708,7 +1708,11 @@ fn handle_pseudo(
 
         // ---- .request ----
         InsnHandler::Request => {
-            // 出力に .request ファイル名を記録 → 現時点では無視
+            skip_spaces(line, pos);
+            let fname = parse_filename(line, pos);
+            if !fname.is_empty() {
+                p1.ctx.request_files.push(fname);
+            }
         }
 
         // ---- .end ----

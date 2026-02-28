@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 26件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 27件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイートを実行
@@ -156,7 +156,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 
 ---
 
-## 3. 統合テスト（26件）
+## 3. 統合テスト（27件）
 
 `tests/integration_test.rs` — 3パス全体を通した end-to-end 検証。
 
@@ -186,6 +186,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_irpc` | `.irpc param, str` の各文字展開 |
 | `test_prn_list_file` | `-p` オプションで PRN リストファイルが生成される |
 | `test_g_option_emits_b204_record` | `-g` オプションで `$B204` レコードが出力される |
+| `test_request_emits_e001_record` | `.request` が `$E001` レコードとして出力される |
 | `test_bra_to_next_is_suppressed` | 直後ラベルへの `BRA` が pass2 でサプレスされること |
 | `test_c4_cmpi0_to_tst` | `-c4` で `CMPI #0,Dn` が `TST Dn` に最適化されること |
 | `test_c4_movea_l_imm_to_w` | `-c4` で `MOVEA.L #d16,An` が `MOVEA.W` へ縮小されること |

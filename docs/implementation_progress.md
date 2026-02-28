@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 26件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 27件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -315,9 +315,14 @@
   - `src/pass/mod.rs`: `-g` オプションを `ObjectCode` へ伝播
   - `src/object/writer.rs`: `.align` 未使用でも `-g` なら `$B204` を出力
   - `tests/integration_test.rs`: `test_g_option_emits_b204_record` を追加
+- `.request` の `$E001` 出力を実装
+  - `src/pass/pass1.rs`: `.request` ファイル名を収集
+  - `src/pass/mod.rs`: 収集した request ファイル名を `ObjectCode` へ伝播
+  - `src/object/writer.rs`: `$E001` レコードを出力
+  - `tests/integration_test.rs`: `test_request_emits_e001_record` を追加
 - 検証結果
   - `cargo test --test golden_test`: 17/17 通過
-  - `cargo test --test integration_test`: 26/26 通過
+  - `cargo test --test integration_test`: 27/27 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 
 ### 2026-02-24

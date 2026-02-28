@@ -456,6 +456,16 @@ fn test_g_option_emits_b204_record() {
     assert!(found, "B204 record should exist when -g is enabled");
 }
 
+/// `.request` は `$E001` レコードとして出力される。
+#[test]
+fn test_request_emits_e001_record() {
+    let result = assemble_src(b"\t.request\t\"libfoo.r\"\n\tnop\n");
+    assert_eq!(result.obj.request_files, vec![b"libfoo.r".to_vec()]);
+
+    let found = result.obj_bytes.windows(2).any(|w| w == [0xE0, 0x01]);
+    assert!(found, "E001 record should exist when .request is used");
+}
+
 // ─── -c4 最適化 ──────────────────────────────────────────────────────────────
 
 #[test]

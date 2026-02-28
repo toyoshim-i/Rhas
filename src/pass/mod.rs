@@ -128,6 +128,7 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     let max_align = ctx.max_align;
     let (mut obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file, prn_enable, max_align);
     obj.has_debug_info = ctx.opts.make_sym_deb;
+    obj.request_files = ctx.request_files.clone();
 
     // ---- HLK バイナリ生成 ----
     let obj_bytes = write_hlk(&obj);

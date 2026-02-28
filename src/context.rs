@@ -122,6 +122,10 @@ pub struct AssemblyContext {
     pub if_skip_nest: u16,
     /// .if の不成立部スキップ中（ISIFSKIP）
     pub is_if_skip: bool,
+
+    // ---- requestファイル ----
+    /// `.request` で収集したファイル名（$E001 レコード出力用）
+    pub request_files: Vec<Vec<u8>>,
 }
 
 impl AssemblyContext {
@@ -156,6 +160,8 @@ impl AssemblyContext {
             if_nest: 0,
             if_skip_nest: 0,
             is_if_skip: false,
+
+            request_files: Vec::new(),
         }
     }
 

@@ -40,6 +40,13 @@ pub fn write_hlk(obj: &ObjectCode) -> Vec<u8> {
         push_str_even(&mut out, sect.name().as_bytes());
     }
 
+    // ---- $E001: requestファイル ----
+    for req in &obj.request_files {
+        out.push(0xE0);
+        out.push(0x01);
+        push_str_even(&mut out, req);
+    }
+
     // ---- $B204: アラインメント情報（.align 使用時 / -g 指定時）----
     if obj.has_align || obj.has_debug_info {
         out.push(0xB2);
