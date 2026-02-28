@@ -189,6 +189,22 @@ CONST\t.equ\t42\n\
     assert_eq!(&text.bytes, &[0x70, 42], "moveq #42,d0");
 }
 
+/// `*` を使う .equ は行頭ロケーションで評価される。
+#[test]
+fn test_equ_location_counter_uses_line_top() {
+    let src = b"\
+base:\n\
+\tnop\n\
+ofs\t.equ\t(*)-base\n\
+\taddq.l\t#ofs,(sp)\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1)
+        .expect("text section missing");
+    // ofs = 2 なので addq.l #2,(sp) = 0x5497
+    assert_eq!(text.bytes, [0x4E, 0x71, 0x54, 0x97]);
+}
+
 /// セクション切り替え
 #[test]
 fn test_section_switch() {
@@ -222,6 +238,42 @@ fn test_dc_directives() {
         text.bytes,
         [1, 2, 3, 0x01, 0x00, 0x01, 0x02, 0x03, 0x04]
     );
+}
+
+/// ラベル差分を含む .dc は Pass3 で最終ラベル値を使って評価される。
+#[test]
+fn test_dc_label_diff_recomputed_after_pass2() {
+    let src = b"\
+tbl:\n\
+\t.dc.w\tlbl-tbl\n\
+\tbra\tend\n\
+\tnop\n\
+lbl:\n\
+\tnop\n\
+end:\n\
+\tnop\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(text.bytes, [0x00, 0x06, 0x60, 0x04, 0x4E, 0x71, 0x4E, 0x71, 0x4E, 0x71]);
+}
+
+/// Pass1 の DeferToLinker 再エンコードで動的 .equ 値を早期固定しない。
+#[test]
+fn test_addq_immediate_from_dynamic_equ_not_frozen_in_pass1() {
+    let src = b"\
+base:\n\
+\tbne\ttarget\n\
+ofs\t.equ\t(*)-base\n\
+\taddq.l\t#ofs,(sp)\n\
+target:\n\
+\tnop\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    // bne.w -> bne.s に短縮されるため ofs は 4 ではなく 2。
+    // bne.s target ; addq.l #2,(sp) ; nop
+    assert_eq!(text.bytes, [0x66, 0x02, 0x54, 0x97, 0x4E, 0x71]);
 }
 
 /// .ds.w はテキストセクションで予約レコード ($3000) を生成する（実バイトなし）

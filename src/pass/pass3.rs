@@ -615,6 +615,9 @@ pub fn pass3(
             TempRecord::LabelDef { .. } => {
                 // シンボル値は Pass2 で確定済み → 何もしない
             }
+            TempRecord::EquDef { .. } => {
+                // .equ/.set はシンボルテーブル更新のみ
+            }
 
             TempRecord::SectChange { id } => {
                 // code_buf をフラッシュし、BSS系の DSB ペンディングを出力してからセクション切り替え

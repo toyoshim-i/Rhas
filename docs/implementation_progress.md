@@ -234,7 +234,7 @@
 - `TempRecord::LineInfo`: パス3でのPRN行追跡用中間レコード
 - `src/pass/mod.rs`: シンボルファイル生成（`format_sym_file`）
 - `ctx.max_align` → `obj.has_align/max_align` 伝播修正（`$B204`レコード用）
-- 18 integration tests（PRN生成 + `-c4` 最適化検証含む）通過
+- 25 integration tests（PRN生成 + `-c4` 最適化 + `.equ/.set`/Pass2回帰検証含む）通過
 
 ---
 
@@ -246,7 +246,7 @@
 | MS2 | 68000全整数命令エンコード + ラベル・外部参照解決 | ✅ 完了 |
 | MS3 | 疑似命令・最適化込みで `HANOI.S` が通る | ✅ 完了（76866 バイト、エラーなし） |
 | MS4 | マクロ処理込みで `K_MACRO.MAC` が通る | ✅ 完了（エラーなし、構造化マクロライブラリ全定義処理）|
-| MS5 | 実X68000プログラムのビルドがオリジナルと完全一致 | 🔄 進行中（17ファイル中16一致、1差分） |
+| MS5 | 実X68000プログラムのビルドがオリジナルと完全一致 | ✅ 完了（17ファイル中17一致） |
 | MS6 | FPU/ColdFire/SCD/PRN全機能 | ⬜ |
 
 ---
@@ -297,11 +297,22 @@
 - Pass3 外部式判定の一般化（ROFST化）
   - `src/pass/pass3.rs`: `is_external_with_offset` を定数畳み込み付きに拡張（`sym + (16*4)` などを `xref + offset` として扱う）
   - `src/pass/pass3.rs` unit test 追加: `test_is_external_with_offset_mul_add_const_fold`
+- `.equ/.set` とマクロローカルラベルの見直し
+  - `src/pass/temp.rs`: `TempRecord::EquDef` を追加
+  - `src/pass/pass2.rs`: `.equ/.set` を反復再評価してラベル再配置後の値に追従
+  - `src/pass/pass1.rs`: 行頭 `*` の評価位置同期、ロケーション依存 `.equ/.set` を `NoDet` 扱い
+  - `src/pass/pass1.rs`: マクロ定義収集時に `@name` ローカルラベル置換を常時実施（引数なしマクロ含む）
+  - `src/pass/pass1.rs`: `.dc` のシンボル/ロケーション依存式は Pass3 で最終評価するよう変更
+  - `tests/integration_test.rs`: 追加
+    - `test_equ_location_counter_uses_line_top`
+    - `test_dc_label_diff_recomputed_after_pass2`
+- 動的 `.equ` を含む命令の早期 `Const` 固定を抑制
+  - `src/pass/pass1.rs`: `DeferToLinker` 再エンコード時、動的参照を含むEAは `DeferredInsn` のまま保持
+  - `tests/integration_test.rs`: `test_addq_immediate_from_dynamic_equ_not_frozen_in_pass1` を追加
 - 検証結果
   - `cargo test --test golden_test`: 17/17 通過
-  - `cargo test --test integration_test`: 22/22 通過
-  - `tests/compare_ms5_simple.sh`: 16一致 / 1差分（`doasm +164`）
-  - `pseudo.o` は一致化。残差は `doasm` のみ。
+  - `cargo test --test integration_test`: 25/25 通過
+  - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 
 ### 2026-02-24
 

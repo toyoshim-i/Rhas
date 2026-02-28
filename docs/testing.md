@@ -6,12 +6,12 @@ rhas のテストは 3 層で構成される。
 
 | スイート | 場所 | 件数 | 目的 |
 |---|---|---|---|
-| ユニットテスト | `src/**` 内 `#[cfg(test)]` | 180件 | 個別モジュールの正確性 |
+| ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 22件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 25件 | 3パス全体のエンドツーエンド |
 
 ```
-cargo test          # 全スイート（215件）を実行
+cargo test          # 全スイートを実行
 cargo test --test golden_test        # ゴールデンテストのみ
 cargo test --test integration_test  # 統合テストのみ
 ```
@@ -156,7 +156,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 
 ---
 
-## 3. 統合テスト（22件）
+## 3. 統合テスト（25件）
 
 `tests/integration_test.rs` — 3パス全体を通した end-to-end 検証。
 
@@ -167,9 +167,16 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_ms1_move_b_d0_d1` | `move.b d0,d1` が `0x12 0x00` にエンコードされ、HLK 構造が正しい |
 | `test_multiple_instructions` | 複数命令のアセンブル（MOVE + ADD） |
 | `test_label_and_bra` | ラベル定義と BRA 命令の PC 相対オフセット計算 |
+| `test_numeric_local_label_forward` | 数値ローカルラベル `1f` の前方解決 |
+| `test_numeric_local_label_backward` | 数値ローカルラベル `1b` の後方解決 |
+| `test_numeric_local_label_does_not_touch_hex_literal` | 数値ラベル展開が16進リテラルを壊さないこと |
+| `test_pass2_updates_labels_after_deferred_size_change` | Pass2 で DeferredInsn サイズ変化がラベルへ反映されること |
 | `test_equ_symbol` | `.equ` シンボル定義と即値置換 |
+| `test_equ_location_counter_uses_line_top` | `*` を使う `.equ` が行頭ロケーションで評価されること |
 | `test_section_switch` | `.text` → `.data` → `.bss` セクション切り替えと各セクションサイズ |
 | `test_dc_directives` | `.dc.b` `.dc.w` `.dc.l` のバイト出力 |
+| `test_dc_label_diff_recomputed_after_pass2` | `.dc` のラベル差分が最終ラベル値で再評価されること |
+| `test_addq_immediate_from_dynamic_equ_not_frozen_in_pass1` | 動的 `.equ` を含む `ADDQ` 即値が Pass1 で早期固定されないこと |
 | `test_ds_directive` | `.ds.b` のバイトカウント記録 |
 | `test_conditional_asm` | `.ifdef` / `.ifndef` / `.else` / `.endif` の条件分岐 |
 | `test_macro_no_args` | 引数なしマクロ定義・展開 |
@@ -206,7 +213,7 @@ diff $ORIG_O $RHAS_O
 | ファイル | 状態 | 差分 | 原因 |
 |---|---|---|---|
 | commitlog.o | ✅ 一致 | 0 | — |
-| doasm.o | ⚠️ 差異あり | +164 bytes | 残差（分岐最適化カスケード他） |
+| doasm.o | ✅ 一致 | 0 | `.equ/.set` 再評価 + マクロローカルラベル修正で解消 |
 | eamode.o | ✅ 一致 | 0 | — |
 | encode.o | ✅ 一致 | 0 | — |
 | error2.o | ✅ 一致 | 0 | — |
@@ -223,7 +230,7 @@ diff $ORIG_O $RHAS_O
 | symbol.o | ✅ 一致 | 0 | — |
 | work.o | ✅ 一致 | 0 | — |
 
-16 ファイル一致、1 ファイル差異（error.o / main.o / misc.o は参照ファイルなし）
+17 ファイル一致、0 ファイル差異（error.o / main.o / misc.o は参照ファイルなし）
 
 ### 修正履歴（MS5 改善）
 
@@ -237,6 +244,7 @@ diff $ORIG_O $RHAS_O
 | 2026-02-28 | 数値ローカルラベル `1f/1b` 展開を実装 | 回帰なし（golden 17/17, integration 21/21）、MS5差分は 15一致/2差分へ改善 |
 | 2026-02-28 | 数値ローカルラベル展開をリテラル/文字列に対して安全化 | 回帰なし（golden 17/17, integration 22/22）、MS5差分は 15一致/2差分のまま |
 | 2026-02-28 | Pass3 の外部式判定を一般化（`sym + 16*4` → ROFST） | `pseudo.o` 一致化、MS5差分は 16一致/1差分へ改善 |
+| 2026-02-28 | `.equ/.set` の Pass2 再評価 + マクロ `@name` ローカルラベル展開修正 | `doasm.o` 一致化、MS5差分は 17一致/0差分 |
 
 ---
 
@@ -301,13 +309,9 @@ cargo test --test golden_test rofst_disp
 
 ## 今後の課題
 
-### MS5 残差（1ファイル）
+### MS5 残差（0ファイル）
 
-`-c4 -u` 指定時に HAS060.X との差異が残っているファイル。いずれも根本原因は未解明。
-
-| ファイル | 差分 | 推定原因 |
-|---|---|---|
-| `doasm.o` | +164 bytes | 分岐最適化カスケード（残差） |
+`-c4 -u` 指定時の `compare_ms5_simple.sh` は 17/17 一致。
 
 ### 最適化フラグ別ゴールデンテスト
 

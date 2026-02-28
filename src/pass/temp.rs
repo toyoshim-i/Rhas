@@ -54,6 +54,9 @@ pub enum TempRecord {
     /// ラベル定義記録（Pass2 でロケーション値の更新に使う）
     LabelDef { name: Vec<u8>, section: u8, offset: u32 },
 
+    /// .equ/.set 定義（Pass2 で再評価して値を追従させる）
+    EquDef { name: Vec<u8>, rpn: Rpn },
+
     /// セクション変更（.text/.data/.bss/.stack）
     SectChange { id: u8 },
 

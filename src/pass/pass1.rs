@@ -359,6 +359,10 @@ fn parse_line(
     p1: &mut P1Ctx<'_>,
     source: &mut SourceStack,
 ) {
+    // `*` (RPNToken::Location) は「行頭ロケーション」を参照するため、
+    // 各行解析の開始時点で loc_top を現在ロケーションに同期する。
+    p1.ctx.loc_top = p1.location();
+
     // 匿名ローカルラベル（@@: / @b / @f）の事前展開
     let (processed_buf, is_anon_def) = preprocess_anon_labels(line, p1.local_anon_count);
     if is_anon_def {
@@ -1043,24 +1047,32 @@ fn handle_real_insn(
             records.push(TempRecord::Const(bytes));
         }
         Err(InsnError::DeferToLinker) => {
-            // シンボル参照あり → シンボルテーブルで定数解決を試みる
-            let resolved: Vec<EffectiveAddress> = ops.iter()
-                .map(|ea| resolve_ea_const_for_size(ea, p1.sym))
-                .collect();
-            match encode_insn(opcode, handler, enc_size, &resolved) {
-                Ok(bytes) => {
-                    // パス1で全シンボルが解決できた → 定数として確定（.set変数等）
-                    p1.advance(bytes.len() as u32);
-                    records.push(TempRecord::Const(bytes));
+            // シンボル参照あり → 現時点で定数解決できるものは確定する
+            // （.set の時系列値を保持するため）。未確定は Pass3 に延期。
+            let can_freeze_now = ops.iter().all(|ea| !ea_has_dynamic_ref(ea, p1.sym));
+            if can_freeze_now {
+                let resolved: Vec<EffectiveAddress> = ops.iter()
+                    .map(|ea| resolve_ea_const_for_size(ea, p1.sym))
+                    .collect();
+                match encode_insn(opcode, handler, enc_size, &resolved) {
+                    Ok(bytes) => {
+                        p1.advance(bytes.len() as u32);
+                        records.push(TempRecord::Const(bytes));
+                    }
+                    Err(_) => {
+                        let byte_size = estimate_insn_size(opcode, handler, enc_size, &ops);
+                        p1.advance(byte_size);
+                        records.push(TempRecord::DeferredInsn {
+                            base: opcode, handler, size: enc_size, ops, byte_size,
+                        });
+                    }
                 }
-                Err(_) => {
-                    // 未解決のシンボル残存 → パス3に延期
-                    let byte_size = estimate_insn_size(opcode, handler, enc_size, &ops);
-                    p1.advance(byte_size);
-                    records.push(TempRecord::DeferredInsn {
-                        base: opcode, handler, size: enc_size, ops, byte_size,
-                    });
-                }
+            } else {
+                let byte_size = estimate_insn_size(opcode, handler, enc_size, &ops);
+                p1.advance(byte_size);
+                records.push(TempRecord::DeferredInsn {
+                    base: opcode, handler, size: enc_size, ops, byte_size,
+                });
             }
         }
         Err(e) => {
@@ -1192,6 +1204,39 @@ fn resolve_ea_const_for_size(ea: &EffectiveAddress, sym: &SymbolTable) -> Effect
         }
         _ => ea.clone(),
     }
+}
+
+fn ea_has_dynamic_ref(ea: &EffectiveAddress, sym: &SymbolTable) -> bool {
+    match ea {
+        EffectiveAddress::Immediate(rpn)
+        | EffectiveAddress::AbsShort(rpn)
+        | EffectiveAddress::AbsLong(rpn) => rpn_has_dynamic_ref(rpn, sym),
+        EffectiveAddress::AddrRegDisp { disp, .. }
+        | EffectiveAddress::PcDisp(disp) => rpn_has_dynamic_ref(&disp.rpn, sym),
+        EffectiveAddress::AddrRegIdx { disp, .. }
+        | EffectiveAddress::PcIdx { disp, .. } => rpn_has_dynamic_ref(&disp.rpn, sym),
+        _ => false,
+    }
+}
+
+fn rpn_has_dynamic_ref(rpn: &Rpn, sym: &SymbolTable) -> bool {
+    for tok in rpn {
+        match tok {
+            RPNToken::Location | RPNToken::CurrentLoc => return true,
+            RPNToken::SymbolRef(name) => {
+                match sym.lookup_sym(name) {
+                    Some(Symbol::Value { section, attrib, .. }) => {
+                        if *attrib < DefAttrib::Define || *section != 0 {
+                            return true;
+                        }
+                    }
+                    _ => return true,
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 /// EA の拡張ワードバイト数（おおよその見積もり）
@@ -1438,15 +1483,39 @@ fn handle_pseudo(
             skip_spaces(line, pos);
             if let Some(ref name) = label {
                 if let Ok(rpn) = parse_expr(line, pos) {
+                    records.push(TempRecord::EquDef { name: name.clone(), rpn: rpn.clone() });
                     if let Some(v) = p1.eval_const(&rpn) {
+                        let attrib = match handler {
+                            // .set は時系列値としてその時点で確定させる
+                            InsnHandler::Set => DefAttrib::Define,
+                            // .equ はロケーション依存式なら後段で再評価
+                            _ => {
+                                if is_dynamic_equ_expr(&rpn, p1.sym) {
+                                    DefAttrib::NoDet
+                                } else {
+                                    DefAttrib::Define
+                                }
+                            }
+                        };
                         let sym = Symbol::Value {
-                            attrib:     DefAttrib::Define,
+                            attrib,
                             ext_attrib: ExtAttrib::None,
                             section:    v.section,
                             org_num:    0,
                             first:      FirstDef::Other,
                             opt_count:  0,
                             value:      v.value,
+                        };
+                        p1.sym.define(name.clone(), sym);
+                    } else {
+                        let sym = Symbol::Value {
+                            attrib:     DefAttrib::NoDet,
+                            ext_attrib: ExtAttrib::None,
+                            section:    0,
+                            org_num:    0,
+                            first:      FirstDef::Other,
+                            opt_count:  0,
+                            value:      0,
                         };
                         p1.sym.define(name.clone(), sym);
                     }
@@ -1994,24 +2063,35 @@ fn parse_dc(
                     };
                     if let Some(elem_rpns) = regsym_elems {
                         for elem_rpn in &elem_rpns {
-                            if let Some(v) = p1.eval_const(elem_rpn) {
+                            if is_literal_only_rpn(elem_rpn) {
+                                if let Some(v) = p1.eval_const(elem_rpn) {
+                                    let bytes = val_to_bytes(v.value, byte_size);
+                                    p1.advance(bytes.len() as u32);
+                                    records.push(TempRecord::Const(bytes));
+                                    continue;
+                                }
+                            }
+                            {
+                                p1.advance(byte_size as u32);
+                                records.push(TempRecord::Data { size: byte_size, rpn: elem_rpn.clone() });
+                            }
+                        }
+                    } else {
+                        if is_literal_only_rpn(&rpn) {
+                            if let Some(v) = p1.eval_const(&rpn) {
+                                // リテラルのみの式は Pass1 で確定
                                 let bytes = val_to_bytes(v.value, byte_size);
                                 p1.advance(bytes.len() as u32);
                                 records.push(TempRecord::Const(bytes));
                             } else {
                                 p1.advance(byte_size as u32);
-                                records.push(TempRecord::Data { size: byte_size, rpn: elem_rpn.clone() });
+                                records.push(TempRecord::Data { size: byte_size, rpn });
                             }
+                        } else {
+                            // シンボル/ロケーション依存式は Pass3 で最終評価する
+                            p1.advance(byte_size as u32);
+                            records.push(TempRecord::Data { size: byte_size, rpn });
                         }
-                    } else if let Some(v) = p1.eval_const(&rpn) {
-                        // 定数 → Const
-                        let bytes = val_to_bytes(v.value, byte_size);
-                        p1.advance(bytes.len() as u32);
-                        records.push(TempRecord::Const(bytes));
-                    } else {
-                        // 未解決 → Data
-                        p1.advance(byte_size as u32);
-                        records.push(TempRecord::Data { size: byte_size, rpn });
                     }
                 }
                 Err(_) => break,
@@ -2039,6 +2119,37 @@ fn val_to_bytes(v: i32, size: u8) -> Vec<u8> {
         }
         _ => vec![],
     }
+}
+
+fn is_literal_only_rpn(rpn: &Rpn) -> bool {
+    rpn.iter().all(|tok| matches!(
+        tok,
+        RPNToken::ValueByte(_)
+        | RPNToken::ValueWord(_)
+        | RPNToken::Value(_)
+        | RPNToken::Op(_)
+        | RPNToken::End
+    ))
+}
+
+fn is_dynamic_equ_expr(rpn: &Rpn, sym: &SymbolTable) -> bool {
+    for tok in rpn {
+        match tok {
+            RPNToken::Location | RPNToken::CurrentLoc => return true,
+            RPNToken::SymbolRef(name) => {
+                match sym.lookup_sym(name) {
+                    Some(Symbol::Value { section, attrib, .. }) => {
+                        if *attrib < DefAttrib::Define || *section != 0 {
+                            return true;
+                        }
+                    }
+                    _ => return true,
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 // ----------------------------------------------------------------
@@ -2259,8 +2370,8 @@ fn collect_macro_body(
                 template.push(b'\n');
             }
             _ => {
-                // 通常行: 仮引数を `\xFF param_idx` マーカーに変換して保存
-                if nest_depth == 0 && !params.is_empty() {
+                // 通常行: 仮引数置換と @ローカルラベル置換を保存時に行う
+                if nest_depth == 0 {
                     let converted = convert_line_params(line, params, &mut local_count, &mut name_map);
                     template.extend_from_slice(&converted);
                 } else {
@@ -2322,6 +2433,15 @@ fn convert_line_params(
         // '@' → ローカルラベル置換（マクロ定義中）
         // 同じ名前の @name は常に同じ lno に対応する（name_map で追跡）
         if b == b'@' && i + 1 < line.len() && line[i+1] != b'@' {
+            let next = line[i + 1];
+            let after = i + 2;
+            let is_anon_ref = matches!(next, b'b' | b'B' | b'f' | b'F')
+                && (after >= line.len() || !is_anon_ident_cont(line[after]));
+            if is_anon_ref {
+                out.push(b);
+                i += 1;
+                continue;
+            }
             // @name をローカルラベルとして番号付きマーカーに変換
             i += 1;
             let start = i;
@@ -2533,7 +2653,7 @@ fn collect_body_from_slice(
     sym: &SymbolTable,
     ctx: &AssemblyContext,
 ) -> (Vec<u8>, u16, usize) {
-    collect_body_from_slice_impl(slice, sym, ctx, &[], false)
+    collect_body_from_slice_impl(slice, sym, ctx, &[], true)
 }
 
 /// パラメータ変換付きのスライスからボディ収集（.irp/.irpc 用）
@@ -2586,7 +2706,7 @@ fn collect_body_from_slice_impl(
                 body.push(b'\n');
             }
             _ => {
-                if do_param_convert && !params.is_empty() {
+                if do_param_convert {
                     let converted = convert_line_params(line, params, &mut local_count, &mut name_map);
                     body.extend_from_slice(&converted);
                 } else {

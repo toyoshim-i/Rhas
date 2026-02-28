@@ -56,6 +56,20 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
                     update_symbol(sym, name, *section, new_offset as i32);
                 }
             }
+            TempRecord::EquDef { name, rpn } => {
+                let loc = loc_ctr[cur_sect];
+                let sect = cur_sect as u8 + 1;
+                if let Some(ev) = eval_rpn_with_sym(sym, rpn, loc, sect) {
+                    if let Some(Symbol::Value { value, section, .. }) = sym.lookup_sym(name) {
+                        if *value != ev.value || *section != ev.section {
+                            changed = true;
+                        }
+                    } else {
+                        changed = true;
+                    }
+                    update_symbol(sym, name, ev.section, ev.value);
+                }
+            }
             TempRecord::Org { value } => {
                 loc_ctr[cur_sect] = *value;
             }
