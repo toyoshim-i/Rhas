@@ -359,6 +359,33 @@ fn test_comm_symbol_is_visible_in_sym_file() {
     assert!(sym_str.contains("00000010"), "size value should be present");
 }
 
+/// .offsym <expr> は .offset <expr> と同様に絶対セクションのロケーションを設定する。
+#[test]
+fn test_offsym_without_symbol_behaves_like_offset() {
+    let src = b"\
+\t.offsym\t16\n\
+A:\n\
+\t.text\n\
+\tmoveq\t#A,d0\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(text.bytes, [0x70, 0x10]);
+}
+
+/// .offsym <expr>,<sym> はシンボルへ初期値を与え、絶対値として参照できる。
+#[test]
+fn test_offsym_with_symbol_sets_symbol_value() {
+    let src = b"\
+\t.offsym\t32,BASE\n\
+\t.text\n\
+\tmoveq\t#BASE,d0\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(text.bytes, [0x70, 0x20]);
+}
+
 /// .if/.endif 条件アセンブル
 #[test]
 fn test_conditional_asm() {

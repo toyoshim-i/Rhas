@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 40件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 42件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -287,8 +287,11 @@
 - `.sym` 出力で `.comm` 系シンボルの表示を改善
   - `src/pass/mod.rs`: `.comm/.rcomm/.rlcomm` を `UNDEF` ではなくサイズ付きで出力（`COMM/RCOM/RLCM`）
   - `tests/integration_test.rs`: `test_comm_symbol_is_visible_in_sym_file` を追加
+- `.offsym` の基本挙動を実装
+  - `src/pass/pass1.rs`: `.offsym <expr>` を `.offset` 同等として処理、`.offsym <expr>,<sym>` で初期値シンボル定義を追加
+  - `tests/integration_test.rs`: `test_offsym_without_symbol_behaves_like_offset` / `test_offsym_with_symbol_sets_symbol_value` を追加
 - 検証結果（最新）
-  - `cargo test --test integration_test`: 40/40 通過
+  - `cargo test --test integration_test`: 42/42 通過
   - `cargo test --test golden_test`: 17/17 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 

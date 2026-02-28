@@ -2068,7 +2068,70 @@ fn handle_pseudo(
         }
 
         // ---- .offsym ----
-        InsnHandler::OffsymPs => {}
+        InsnHandler::OffsymPs => {
+            // 最低限の互換挙動:
+            // - .offsym <expr>        : .offset <expr> と同等
+            // - .offsym <expr>,<sym>  : オフセット開始 + シンボルへ初期値を与える
+            skip_spaces(line, pos);
+            let init = if *pos < line.len() {
+                if let Ok(rpn) = parse_expr(line, pos) {
+                    p1.eval_const(&rpn).map(|v| v.value).unwrap_or(0)
+                } else {
+                    p1.error(".offsym の初期値式が不正です");
+                    return;
+                }
+            } else {
+                p1.error(".offsym の初期値がありません");
+                return;
+            };
+
+            skip_spaces(line, pos);
+            if *pos < line.len() && line[*pos] == b',' {
+                *pos += 1;
+                skip_spaces(line, pos);
+                let name = read_ident(line, pos);
+                if name.is_empty() {
+                    p1.error(".offsym のシンボル名がありません");
+                    return;
+                }
+                match p1.sym.lookup_sym_mut(&name) {
+                    Some(Symbol::Value { attrib, section, first, value, ext_attrib, .. }) => {
+                        if *first != FirstDef::Offsym && *attrib >= DefAttrib::Define && p1.ctx.opts.ow_offsym {
+                            p1.error(".offsym 以外で定義済みのシンボルは上書きできません");
+                            return;
+                        }
+                        *attrib = DefAttrib::Define;
+                        *ext_attrib = ExtAttrib::None;
+                        *section = 0;
+                        *first = FirstDef::Offsym;
+                        *value = init;
+                    }
+                    Some(_) => {
+                        p1.error(".offsym シンボル型が不正です");
+                        return;
+                    }
+                    None => {
+                        let sym = Symbol::Value {
+                            attrib:     DefAttrib::Define,
+                            ext_attrib: ExtAttrib::None,
+                            section:    0,
+                            org_num:    0,
+                            first:      FirstDef::Offsym,
+                            opt_count:  0,
+                            value:      init,
+                        };
+                        p1.sym.define(name, sym);
+                    }
+                }
+                skip_spaces(line, pos);
+            }
+
+            if *pos < line.len() && line[*pos] != b';' {
+                p1.error(".offsym のオペランドが不正です");
+                return;
+            }
+            p1.ctx.set_offset_mode(init as u32);
+        }
 
         // ---- FP 等（未実装）----
         InsnHandler::FpId | InsnHandler::Pragma => {}

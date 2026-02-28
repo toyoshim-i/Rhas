@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 40件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 42件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイートを実行
@@ -156,7 +156,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 
 ---
 
-## 3. 統合テスト（40件）
+## 3. 統合テスト（42件）
 
 `tests/integration_test.rs` — 3パス全体を通した end-to-end 検証。
 
@@ -204,6 +204,8 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_common_symbol_directives_emit_ext_symbols` | `.comm/.rcomm/.rlcomm` が `$B2FE/$B2FD/$B2FC` 外部シンボルとして出力されること |
 | `test_comm_rejects_non_positive_size` | `.comm` のサイズが 0 以下だとエラーになること |
 | `test_comm_symbol_is_visible_in_sym_file` | `.comm` シンボルが `.sym` に `COMM + サイズ値` として出力されること |
+| `test_offsym_without_symbol_behaves_like_offset` | `.offsym <expr>` が `.offset <expr>` と同等に動作すること |
+| `test_offsym_with_symbol_sets_symbol_value` | `.offsym <expr>,<sym>` がシンボルへ初期値を与えること |
 
 ---
 
@@ -270,6 +272,7 @@ diff $ORIG_O $RHAS_O
 | 2026-02-28 | `.page -1` と `.page +` の境界挙動をテスト追加で固定 | 回帰なし（golden 17/17, integration 36/36, MS5比較 17一致/0差分） |
 | 2026-02-28 | `prn_no_page_ff` の全改ページ抑制（明示/自動）をテスト追加で固定 | 回帰なし（golden 17/17, integration 37/37, MS5比較 17一致/0差分） |
 | 2026-03-01 | `.comm/.rcomm/.rlcomm` 本実装 + `.sym` 表示改善の統合テストを追加 | 回帰なし（golden 17/17, integration 40/40, MS5比較 17一致/0差分） |
+| 2026-03-01 | `.offsym` 基本挙動（`.offset` 同等 + 初期値シンボル）を実装 | 回帰なし（golden 17/17, integration 42/42, MS5比較 17一致/0差分） |
 
 ---
 
