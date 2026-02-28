@@ -126,6 +126,9 @@ pub struct AssemblyContext {
     // ---- requestファイル ----
     /// `.request` で収集したファイル名（$E001 レコード出力用）
     pub request_files: Vec<Vec<u8>>,
+    // ---- PRN制御 ----
+    /// PRNリストへの行出力可否（.list/.nlist で制御）
+    pub prn_listing: bool,
 }
 
 impl AssemblyContext {
@@ -162,6 +165,7 @@ impl AssemblyContext {
             is_if_skip: false,
 
             request_files: Vec::new(),
+            prn_listing: true,
         }
     }
 

@@ -164,7 +164,13 @@ pub fn pass1(
                 // HAS はインクルード終了時にセクション変更レコードを出力しない
             }
             ReadResult::Line(line) => {
-                if p1.ctx.opts.make_prn {
+                let list_ctrl = detect_prn_list_control(&line, &p1);
+                let mut emit_line_info = p1.ctx.opts.make_prn && p1.ctx.prn_listing;
+                // `.nlist` は当該行から listing を停止する。
+                if matches!(list_ctrl, Some(false)) {
+                    emit_line_info = false;
+                }
+                if emit_line_info {
                     let line_num = source.current().line;
                     records.push(TempRecord::LineInfo { line_num, text: line.clone(), is_macro: false });
                 }
@@ -175,6 +181,41 @@ pub fn pass1(
     }
 
     records
+}
+
+/// 行を先読みし、`.list/.nlist` の PRN 制御擬似命令かどうか判定する。
+/// 戻り値: `Some(true)=.list`, `Some(false)=.nlist`, `None=その他`
+fn detect_prn_list_control(line: &[u8], p1: &P1Ctx<'_>) -> Option<bool> {
+    if line.is_empty() { return None; }
+    if line.first() == Some(&b'*') || line.first() == Some(&b';') { return None; }
+
+    let mut pos = 0usize;
+    if line[0] != b' ' && line[0] != b'\t' {
+        let _ = parse_label(line, &mut pos);
+    }
+    skip_spaces(line, &mut pos);
+    if pos >= line.len() || line[pos] == b';' {
+        return None;
+    }
+
+    let (mnem, _) = parse_mnemonic(line, &mut pos);
+    if mnem.is_empty() {
+        return None;
+    }
+
+    let handler = p1.sym.lookup_cmd(&mnem, p1.cpu_type())
+        .and_then(|s| {
+            if let Symbol::Opcode { handler, .. } = s {
+                Some(*handler)
+            } else {
+                None
+            }
+        });
+    match handler {
+        Some(InsnHandler::List) => Some(true),
+        Some(InsnHandler::Nlist) => Some(false),
+        _ => None,
+    }
 }
 
 // ----------------------------------------------------------------
@@ -1750,8 +1791,14 @@ fn handle_pseudo(
             records.push(TempRecord::Cpu { number: 68060, cpu_type: cpuconst::C060 });
         }
 
-        // ---- リスト制御（無視）----
-        InsnHandler::List | InsnHandler::Nlist | InsnHandler::Lall | InsnHandler::Sall
+        // ---- リスト制御 ----
+        InsnHandler::List => {
+            p1.ctx.prn_listing = true;
+        }
+        InsnHandler::Nlist => {
+            p1.ctx.prn_listing = false;
+        }
+        InsnHandler::Lall | InsnHandler::Sall
         | InsnHandler::Width | InsnHandler::Page | InsnHandler::Title | InsnHandler::SubTtl => {}
 
         // ---- .fail ----

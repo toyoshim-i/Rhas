@@ -466,6 +466,34 @@ fn test_request_emits_e001_record() {
     assert!(found, "E001 record should exist when .request is used");
 }
 
+/// `.nlist` 区間は PRN に出力されず、`.list` で再開される。
+#[test]
+fn test_prn_nlist_and_list() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.nlist\n\tmove.b\td0,d1\n\t.list\n\tnop\n").expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let prn_file = NamedTempFile::new().expect("prn tempfile");
+    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_prn: true,
+        prn_file: Some(prn_path.clone()),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx).expect("assemble");
+
+    let prn_content = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&prn_path).unwrap()
+    )).expect("read prn file");
+    let prn_str = String::from_utf8_lossy(&prn_content);
+
+    assert!(!prn_str.contains("1200"), "nlist section should be hidden");
+    assert!(prn_str.contains("4E71"), "list section should be visible");
+}
+
 // ─── -c4 最適化 ──────────────────────────────────────────────────────────────
 
 #[test]
