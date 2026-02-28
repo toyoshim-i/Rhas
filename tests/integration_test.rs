@@ -949,6 +949,80 @@ fn test_scd_scl_minus1_suppresses_endef_record() {
     assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { .. })));
 }
 
+/// HAS互換: `.type` は 0x20/0x30 のときのみロングテーブル化する。
+#[test]
+fn test_scd_type_long_table_only_for_function_or_array() {
+    let rec_short = pass1_records(
+        b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.type\t$0010\n\t.endef\n",
+        true,
+    );
+    assert!(rec_short.iter().any(|r| matches!(
+        r,
+        rhas::pass::temp::TempRecord::ScdEndef { name, is_long, .. }
+            if name.as_slice() == b"foo" && !*is_long
+    )));
+
+    let rec_long = pass1_records(
+        b"\t.file\t\"main.c\"\n\t.def\tbar\n\t.type\t$0020\n\t.endef\n",
+        true,
+    );
+    assert!(rec_long.iter().any(|r| matches!(
+        r,
+        rhas::pass::temp::TempRecord::ScdEndef { name, is_long, .. }
+            if name.as_slice() == b"bar" && *is_long
+    )));
+}
+
+/// HAS互換: `.scl 16`（enumメンバ）の `.endef` は section=-2 で出力される。
+#[test]
+fn test_scd_enum_member_forces_section_minus2_in_footer() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(
+        b"\t.file\t\"main.c\"\n\t.def\tenumv\n\t.val\t.\n\t.scl\t16\n\t.endef\n\tnop\n",
+    )
+    .expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+
+    let end_pos = (0..bytes.len().saturating_sub(14))
+        .find(|&i| {
+            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
+                return false;
+            }
+            let p = i + 2;
+            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
+            p + 12 + line_len + scd_len + exname_len == bytes.len()
+        })
+        .expect("0000 terminator");
+    let p = end_pos + 2;
+    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+    let scd_base = p + 12 + line_len;
+    let scd_count = scd_len / 36;
+
+    let mut found = false;
+    for i in 0..scd_count {
+        let e = scd_base + i * 36;
+        let name = &bytes[e..e + 8];
+        if name.starts_with(b"enumv") {
+            let section = i16::from_be_bytes([bytes[e + 12], bytes[e + 13]]);
+            assert_eq!(section, -2);
+            found = true;
+            break;
+        }
+    }
+    assert!(found, "enumv SCD entry should exist");
+}
+
 /// `.request` は `$E001` レコードとして出力される。
 #[test]
 fn test_request_emits_e001_record() {

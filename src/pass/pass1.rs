@@ -2117,7 +2117,10 @@ fn handle_pseudo(
                         return;
                     }
                     p1.ctx.scd_temp.type_code = value as u16;
-                    if (value & 0x0030) != 0 {
+                    // HAS互換: ロングテーブル化は .type の 0x30 ビット群が
+                    // 0x20(関数) または 0x30(配列) の場合のみ行う。
+                    let kind = value & 0x0030;
+                    if kind == 0x0020 || kind == 0x0030 {
                         p1.ctx.scd_temp.is_long = true;
                     }
                 }

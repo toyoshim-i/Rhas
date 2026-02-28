@@ -154,9 +154,11 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 }
             }
             ScdEvent::Endef { name, value, section, scl, type_code, size, dim, is_long, .. } => {
+                // HAS互換: enumメンバ（scl=16）は存在しないセクション(-2)へ補正する。
+                let out_section = if *scl == 16 { -2 } else { *section };
                 let mut ent = ScdEntry {
                     value: *value,
-                    section: *section,
+                    section: out_section,
                     type_code: *type_code,
                     scl: *scl,
                     len: if *is_long { 1 } else { 0 },
