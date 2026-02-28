@@ -72,10 +72,18 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     let mut lines: Vec<(u32, u16)> = Vec::new();
     let mut entries: Vec<ScdEntry> = Vec::new();
     let text_size = obj.sections.first().map(|s| s.size).unwrap_or(0);
+    let mut exname_data: Vec<u8> = Vec::new();
+    if obj.source_file.len() > 8 {
+        exname_data.extend_from_slice(&obj.source_file);
+        exname_data.push(0);
+        if (exname_data.len() & 1) != 0 {
+            exname_data.push(0);
+        }
+    }
 
     // HAS の既定エントリに合わせ、.file/.text/.data/.bss を最小構成で出力する。
     let mut file_ent = ScdEntry {
-        value: 0,
+        value: if exname_data.is_empty() { 0 } else { 14 },
         section: -2,
         scl: 0x67,
         len: 1,
@@ -170,7 +178,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
 
     let line_len = (lines.len() as u32) * 6;
     let scd_len = (entries.len() as u32) * 36;
-    let exname_len = 0u32;
+    let exname_len = exname_data.len() as u32;
     out.extend_from_slice(&line_len.to_be_bytes());
     out.extend_from_slice(&scd_len.to_be_bytes());
     out.extend_from_slice(&exname_len.to_be_bytes());
@@ -182,6 +190,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     for ent in &entries {
         push_scd_entry(out, ent);
     }
+    out.extend_from_slice(&exname_data);
 }
 
 /// ObjectCode → HLK バイナリを生成する

@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 57件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 58件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -337,8 +337,11 @@
   - `src/object/writer.rs`: `-g` 時に関数・`.bf`・`.ef` エントリを自動生成
   - `tests/integration_test.rs`: `test_g_option_scd_footer_contains_bf_ef_entries` を追加
   - HAS 直接比較（簡易サンプル）: サイズ差分が `-152` → `-44` へ改善
+- SCD の延長名（exname）領域出力を追加
+  - `src/object/writer.rs`: `.file` が8文字超の場合に `EXNAMELEN` と末尾 exname データを出力
+  - `tests/integration_test.rs`: `test_g_option_scd_footer_emits_exname_for_long_filename` を追加
 - 検証結果（最新）
-  - `cargo test --test integration_test`: 57/57 通過
+  - `cargo test --test integration_test`: 58/58 通過
   - `cargo test --test golden_test`: 17/17 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 

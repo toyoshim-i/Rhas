@@ -849,6 +849,29 @@ fn test_g_option_scd_footer_contains_bf_ef_entries() {
     assert!(result.obj_bytes.windows(4).any(|w| w == b".ef\0"));
 }
 
+/// 8文字超の `.file` 名は SCD フッタの exname 領域へ出力される。
+#[test]
+fn test_g_option_scd_footer_emits_exname_for_long_filename() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.file\t\"scdtest.s\"\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let bytes = &result.obj_bytes;
+    let end_pos = bytes
+        .windows(2)
+        .position(|w| w == [0x00, 0x00])
+        .expect("0000 terminator");
+    let p = end_pos + 2;
+    let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]);
+    assert!(exname_len >= 10);
+}
+
 /// `.val` の定数式は Endef に section=-1 として保持される。
 #[test]
 fn test_scd_val_constant_is_preserved_in_endef_snapshot() {
