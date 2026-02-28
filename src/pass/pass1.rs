@@ -972,6 +972,7 @@ fn handle_real_insn(
         InsnHandler::FMove
             | InsnHandler::FMoveM
             | InsnHandler::FMoveCr
+            | InsnHandler::FSinCos
             | InsnHandler::FArith
             | InsnHandler::FCmp
             | InsnHandler::FTst
@@ -1420,6 +1421,71 @@ fn parse_operands(
         Some(EffectiveAddress::Immediate(vec![RPNToken::ValueWord(mask), RPNToken::End]))
     }
 
+    fn parse_fp_pair_token(
+        line: &[u8],
+        pos: &mut usize,
+        sym: &SymbolTable,
+        cpu_type: u16,
+    ) -> Option<EffectiveAddress> {
+        let saved = *pos;
+
+        let parse_fp = |s: &[u8]| -> Option<u8> {
+            match sym.lookup_reg(s, cpu_type) {
+                Some(Symbol::Register { regno, .. }) if (reg::FP0..=reg::FP7).contains(regno) => {
+                    Some(*regno - reg::FP0)
+                }
+                _ => None,
+            }
+        };
+
+        // FPc
+        let start_c = *pos;
+        let mut end_c = start_c;
+        if end_c >= line.len() || !line[end_c].is_ascii_alphabetic() {
+            return None;
+        }
+        while end_c < line.len() && (line[end_c].is_ascii_alphanumeric() || line[end_c] == b'_') {
+            end_c += 1;
+        }
+        let fp_c = match parse_fp(&line[start_c..end_c]) {
+            Some(v) => v,
+            None => return None,
+        };
+
+        // :
+        let mut p = end_c;
+        skip_spaces(line, &mut p);
+        if p >= line.len() || line[p] != b':' {
+            *pos = saved;
+            return None;
+        }
+        p += 1;
+        skip_spaces(line, &mut p);
+
+        // FPs
+        let start_s = p;
+        let mut end_s = start_s;
+        if end_s >= line.len() || !line[end_s].is_ascii_alphabetic() {
+            *pos = saved;
+            return None;
+        }
+        while end_s < line.len() && (line[end_s].is_ascii_alphanumeric() || line[end_s] == b'_') {
+            end_s += 1;
+        }
+        let fp_s = match parse_fp(&line[start_s..end_s]) {
+            Some(v) => v,
+            None => {
+                *pos = saved;
+                return None;
+            }
+        };
+
+        *pos = end_s;
+        // 0x8000 を FPc:FPs の識別マーカーとして使用。
+        let encoded = 0x8000u16 | ((fp_c as u16) << 4) | (fp_s as u16);
+        Some(EffectiveAddress::Immediate(vec![RPNToken::ValueWord(encoded), RPNToken::End]))
+    }
+
     fn parse_fp_register_token(
         line: &[u8],
         pos: &mut usize,
@@ -1468,9 +1534,11 @@ fn parse_operands(
             .map(Ok)
             .unwrap_or_else(|| parse_fp_reg_list_token(line, &mut pos, sym, cpu_type)
             .map(Ok)
+            .unwrap_or_else(|| parse_fp_pair_token(line, &mut pos, sym, cpu_type)
+            .map(Ok)
             .unwrap_or_else(|| parse_fp_register_token(line, &mut pos, sym, cpu_type)
             .map(Ok)
-            .unwrap_or_else(|| parse_ea(line, &mut pos, sym, cpu_type))))
+            .unwrap_or_else(|| parse_ea(line, &mut pos, sym, cpu_type)))))
         {
             Ok(ea) => ops.push(ea),
             Err(_) => break,

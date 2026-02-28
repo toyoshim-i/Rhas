@@ -653,6 +653,9 @@ static OPCODE_TABLE: &[OpcodeEntry] = &[
     OpcodeEntry::op("fmovecr",  InsnHandler::FMoveCr,  0x5C00, CpuMask(
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
     ), sz::X, sz::NONE),
+    OpcodeEntry::op("fsincos",  InsnHandler::FSinCos,  0x0030, CpuMask(
+        crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
+    ), SizeFlags(sz::B.0|sz::W.0|sz::L.0|sz::S.0|sz::D.0|sz::X.0|sz::P.0), sz::NONE),
     OpcodeEntry::op("fsave",    InsnHandler::FSave,    0xF300, CpuMask(
         crate::options::cpu::C040|crate::options::cpu::C060|crate::options::cpu::CFPP
     ), sz::NONE, sz::NONE),

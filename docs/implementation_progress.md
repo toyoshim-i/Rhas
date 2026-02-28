@@ -31,6 +31,7 @@
 ### MS6 関連（完了済み部分）
 - `.offsym` / `.fpid`
 - FPU コア命令（`fnop/fsave/frestore/fmove/fmovecr/fadd/fsub/fmul/fdiv/fcmp/ftst`）
+- `fsincos`（`FPn`/EA ソース + `FPc:FPs` 宛先）
 - FPU レジスタオペランド（`FPn/FPCR/FPSR/FPIAR`）と CPID 反映
 - FMOVEM（制御レジスタ単体/複合指定 + FPn 静的/動的レジスタリスト）
 - FPU 分岐系（`fbcc` / `fdbcc` 全条件バリアント）
@@ -48,7 +49,7 @@
 | MS6拡張比較（19） | ✅ 全一致 |
 
 ## 検証残タスク
-- 優先度Bの残りは FPU 未実装/未確定群（`fmovem` 禁止形式の境界、`fsincos`）の仕様確定と互換テスト化。
+- 優先度Bの残りは `fmovem` 禁止形式の境界（エラーメッセージ比較）の仕様確定と互換テスト化。
 
 ## 直近コミット（ドキュメント時点）
 - `3bb7f62` Align SCD `.file` exname threshold to 14+ chars

@@ -669,6 +669,36 @@ fn test_fmovem_fpctrl_list_encoding() {
     );
 }
 
+/// FSINCOS のエンコード（FPn/EA ソース + FPc:FPs 宛先）。
+#[test]
+fn test_fsincos_encoding() {
+    let src = b"\
+\t.68040\n\
+\t.fpid\t3\n\
+\tfsincos.x\tfp0,fp1:fp2\n\
+\tfsincos.x\t(a0),fp1:fp2\n\
+\tfsincos.l\td0,fp3:fp4\n\
+\tfsincos.x\tfp0,fp5:fp6\n\
+\tfsincos.x\tfp3,fp1:fp2\n\
+\tfsincos.x\tfp0,fp0:fp1\n\
+\tfsincos.x\tfp0,fp1:fp0\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(
+        text.bytes,
+        [
+            0xF6, 0x00, 0x01, 0x31,
+            0xF6, 0x10, 0x49, 0x31,
+            0xF6, 0x00, 0x42, 0x33,
+            0xF6, 0x00, 0x03, 0x35,
+            0xF6, 0x00, 0x0D, 0x31,
+            0xF6, 0x00, 0x00, 0xB0,
+            0xF6, 0x00, 0x00, 0x31,
+        ]
+    );
+}
+
 /// FBcc / FDBcc の基本エンコード（.w/.l と CPID 反映）。
 #[test]
 fn test_fbcc_fdbcc_encoding() {

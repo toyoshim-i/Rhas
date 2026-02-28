@@ -338,6 +338,7 @@ pub enum InsnHandler {
     FMove,       // FMOVE
     FMoveM,      // FMOVEM (control-register subset)
     FMoveCr,     // FMOVECR
+    FSinCos,     // FSINCOS
     FArith,      // FADD/FSUB/FMUL/FDIV
     FCmp,        // FCMP
     FTst,        // FTST

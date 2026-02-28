@@ -327,6 +327,47 @@ fn encode_fmovem(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
     Ok(out)
 }
 
+fn encode_fsincos(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    let size = if matches!(size, SizeCode::Word) { SizeCode::None } else { size };
+    if operands.len() != 2 {
+        return Err(InsnError::OperandCount);
+    }
+    let pair = match &operands[1] {
+        // pass1 で FPc:FPs を 0x8000 | (FPc<<4) | FPs の Immediate に変換している。
+        EffectiveAddress::Immediate(rpn) => {
+            let raw = eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u16;
+            if (raw & 0x8000) == 0 {
+                return Err(InsnError::InvalidOperand);
+            }
+            let fp_c = ((raw >> 4) & 0x7) as u16;
+            let fp_s = (raw & 0x7) as u16;
+            ((fp_s >> 1) << 8) | (0x0030u16 | fp_c | ((fp_s & 1) << 7))
+        }
+        _ => return Err(InsnError::InvalidOperand),
+    };
+
+    let cpid = base & 0x0E00;
+    let mut out = Vec::new();
+    match &operands[0] {
+        EffectiveAddress::FpReg(src) => {
+            if !matches!(size, SizeCode::None | SizeCode::Extend) {
+                return Err(InsnError::InvalidSize);
+            }
+            let w2 = ((*src as u16) << 10) | pair;
+            push_word(&mut out, 0xF000 | cpid);
+            push_word(&mut out, w2);
+        }
+        ea => {
+            let sc = if matches!(size, SizeCode::None) { 2 } else { fpu_size_code(size)? };
+            let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
+            push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
+            push_word(&mut out, 0x4000 | (sc << 10) | pair);
+            out.extend_from_slice(&enc.ext_bytes);
+        }
+    }
+    Ok(out)
+}
+
 /// RPN を定数評価する（シンボル参照があれば None）
 fn eval_const(rpn: &Rpn) -> Option<i32> {
     if rpn.is_empty() {
@@ -1811,6 +1852,7 @@ pub fn encode_insn(
         InsnHandler::FMove        => encode_fmove(base_opcode, size, operands),
         InsnHandler::FMoveM       => encode_fmovem(base_opcode, size, operands),
         InsnHandler::FMoveCr      => encode_fmovecr(base_opcode, size, operands),
+        InsnHandler::FSinCos      => encode_fsincos(base_opcode, size, operands),
         InsnHandler::FArith       => encode_fop2(base_opcode, size, operands),
         InsnHandler::FCmp         => encode_fop2(base_opcode, size, operands),
         InsnHandler::FTst         => encode_ftst(base_opcode, size, operands),
