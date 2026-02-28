@@ -140,7 +140,7 @@
 | 条件 | ✅ 完了 | `.if` `.iff` `.ifdef` `.ifndef` `.else` `.elseif` `.endif` |
 | ファイル | ✅ 完了 | `.include` `.insert` `.request` |
 | 制御 | ✅ 完了 | `.end` `.cpu` `.fail` |
-| リスト制御 | ✅ 完了 | `.list/.nlist` と `.sall/.lall` で PRN 行出力を制御、`.width` で行幅指定（他は no-op） |
+| リスト制御 | ✅ 完了 | `.list/.nlist` と `.sall/.lall` で PRN 行出力を制御、`.width/.title/.subttl` を PRN へ反映 |
 
 **参照ファイル**: `external/has060xx/src/pseudo.s`
 
@@ -234,7 +234,7 @@
 - `TempRecord::LineInfo`: パス3でのPRN行追跡用中間レコード
 - `src/pass/mod.rs`: シンボルファイル生成（`format_sym_file`）
 - `ctx.max_align` → `obj.has_align/max_align` 伝播修正（`$B204`レコード用）
-- 30 integration tests（PRN生成 + `.list/.nlist` + `.sall/.lall` + `.width` + `-c4` 最適化 + `.equ/.set`/Pass2回帰 + `-g`検証を含む）通過
+- 31 integration tests（PRN生成 + `.list/.nlist` + `.sall/.lall` + `.width/.title/.subttl` + `-c4` 最適化 + `.equ/.set`/Pass2回帰 + `-g`検証を含む）通過
 
 ---
 
@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 30件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 31件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -333,9 +333,14 @@
   - `src/pass/prn.rs`: `line_width/code_width` を受け取る可変フォーマッタ化
   - `src/pass/mod.rs`: `Options.prn_width/prn_code_width` を `format_prn` へ伝播
   - `tests/integration_test.rs`: `test_prn_width_directive_limits_line_width` を追加
+- PRN `.title/.subttl` 反映を実装
+  - `src/pass/pass1.rs`: `.title/.subttl` 文字列を解析して `AssemblyContext` へ保持
+  - `src/pass/prn.rs`: PRN先頭に `TITLE/SUBTTL` ヘッダ行を出力
+  - `src/pass/mod.rs`: `ctx.prn_title/ctx.prn_subttl` を `format_prn` へ伝播
+  - `tests/integration_test.rs`: `test_prn_title_and_subttl_are_reflected` を追加
 - 検証結果
   - `cargo test --test golden_test`: 17/17 通過
-  - `cargo test --test integration_test`: 30/30 通過
+  - `cargo test --test integration_test`: 31/31 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 
 ### 2026-02-24

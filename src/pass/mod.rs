@@ -137,7 +137,8 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     if ctx.opts.make_prn && !prn_lines.is_empty() {
         let prn_bytes = prn::format_prn(
             &prn_lines,
-            &source_name,
+            &ctx.prn_title,
+            &ctx.prn_subttl,
             ctx.opts.prn_width as usize,
             ctx.opts.prn_code_width as usize,
         );

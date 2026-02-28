@@ -131,6 +131,10 @@ pub struct AssemblyContext {
     pub prn_listing: bool,
     /// PRNリストでマクロ展開行を出力するか（.lall/.sall で制御）
     pub prn_macro_listing: bool,
+    /// `.title` で指定されたPRNタイトル文字列
+    pub prn_title: Vec<u8>,
+    /// `.subttl` で指定されたPRNサブタイトル文字列
+    pub prn_subttl: Vec<u8>,
 }
 
 impl AssemblyContext {
@@ -169,6 +173,8 @@ impl AssemblyContext {
             request_files: Vec::new(),
             prn_listing: true,
             prn_macro_listing: false,
+            prn_title: Vec::new(),
+            prn_subttl: Vec::new(),
         }
     }
 

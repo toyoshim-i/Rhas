@@ -1824,7 +1824,13 @@ fn handle_pseudo(
                 }
             }
         }
-        InsnHandler::Page | InsnHandler::Title | InsnHandler::SubTtl => {}
+        InsnHandler::Page => {}
+        InsnHandler::Title => {
+            p1.ctx.prn_title = parse_prn_text(line, pos);
+        }
+        InsnHandler::SubTtl => {
+            p1.ctx.prn_subttl = parse_prn_text(line, pos);
+        }
 
         // ---- .fail ----
         InsnHandler::Fail => {
@@ -2319,6 +2325,34 @@ fn parse_filename(line: &[u8], pos: &mut usize) -> Vec<u8> {
         }
         line[start..*pos].to_vec()
     }
+}
+
+/// PRN用文字列（.title/.subttl）を読む。
+/// 先頭空白を飛ばし、引用符付きなら中身、そうでなければ行末/コメント手前まで。
+fn parse_prn_text(line: &[u8], pos: &mut usize) -> Vec<u8> {
+    skip_spaces(line, pos);
+    if *pos >= line.len() {
+        return Vec::new();
+    }
+
+    let mut s = if line[*pos] == b'"' || line[*pos] == b'\'' {
+        parse_string_or_ident(line, pos)
+    } else {
+        let start = *pos;
+        while *pos < line.len() && line[*pos] != b';' {
+            *pos += 1;
+        }
+        line[start..*pos].to_vec()
+    };
+
+    while let Some(&b) = s.last() {
+        if b == b' ' || b == b'\t' {
+            s.pop();
+        } else {
+            break;
+        }
+    }
+    s
 }
 
 // ----------------------------------------------------------------

@@ -24,10 +24,17 @@ const DEFAULT_PRN_CODE_WIDTH: usize = 16;   // コード部文字数 (8バイト
 const DEFAULT_PRN_LINE_WIDTH: usize = 136;  // 全体幅
 
 /// PRNリストをバイト列として生成する
-pub fn format_prn(lines: &[PrnLine], title: &[u8], line_width: usize, code_width: usize) -> Vec<u8> {
+pub fn format_prn(
+    lines: &[PrnLine],
+    title: &[u8],
+    subttl: &[u8],
+    line_width: usize,
+    code_width: usize,
+) -> Vec<u8> {
     let mut out = Vec::new();
     let line_width = line_width.max(80);
     let code_width = code_width.max(4);
+    append_header(&mut out, title, subttl, line_width);
 
     for line in lines {
         format_prn_line(&mut out, line, title, line_width, code_width);
@@ -98,6 +105,25 @@ fn format_prn_line(out: &mut Vec<u8>, entry: &PrnLine, _title: &[u8], line_width
     }
 }
 
+fn append_header(out: &mut Vec<u8>, title: &[u8], subttl: &[u8], line_width: usize) {
+    fn append_one(out: &mut Vec<u8>, prefix: &[u8], text: &[u8], width: usize) {
+        if text.is_empty() {
+            return;
+        }
+        let mut line = Vec::with_capacity(width);
+        line.extend_from_slice(prefix);
+        line.extend_from_slice(text);
+        if line.len() > width {
+            line.truncate(width);
+        }
+        out.extend_from_slice(&line);
+        out.push(b'\n');
+    }
+
+    append_one(out, b"; TITLE: ", title, line_width);
+    append_one(out, b"; SUBTTL: ", subttl, line_width);
+}
+
 /// バイト列を16進文字列に変換
 fn bytes_to_hex(bytes: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(bytes.len() * 2);
@@ -124,7 +150,13 @@ mod tests {
             text: b"        move.b  d0,d1".to_vec(),
             is_macro: false,
         };
-        let out = format_prn(&[line], b"test", DEFAULT_PRN_LINE_WIDTH, DEFAULT_PRN_CODE_WIDTH);
+        let out = format_prn(
+            &[line],
+            b"",
+            b"",
+            DEFAULT_PRN_LINE_WIDTH,
+            DEFAULT_PRN_CODE_WIDTH,
+        );
         let s = String::from_utf8_lossy(&out);
         // Check structure: "    1 00000000  1200            ..."
         assert!(s.contains("    1 00000000 "));
@@ -143,7 +175,13 @@ mod tests {
             text: b"        long instruction".to_vec(),
             is_macro: false,
         };
-        let out = format_prn(&[line], b"test", DEFAULT_PRN_LINE_WIDTH, DEFAULT_PRN_CODE_WIDTH);
+        let out = format_prn(
+            &[line],
+            b"",
+            b"",
+            DEFAULT_PRN_LINE_WIDTH,
+            DEFAULT_PRN_CODE_WIDTH,
+        );
         let s = String::from_utf8_lossy(&out);
         // Should have 2 lines (first 8 bytes + last 2 bytes)
         assert_eq!(s.lines().count(), 2);
@@ -159,9 +197,29 @@ mod tests {
             text: b"        macro_call".to_vec(),
             is_macro: true,
         };
-        let out = format_prn(&[line], b"test", DEFAULT_PRN_LINE_WIDTH, DEFAULT_PRN_CODE_WIDTH);
+        let out = format_prn(
+            &[line],
+            b"",
+            b"",
+            DEFAULT_PRN_LINE_WIDTH,
+            DEFAULT_PRN_CODE_WIDTH,
+        );
         let s = String::from_utf8_lossy(&out);
         // '*' marker for macro
         assert!(s.contains('*'));
+    }
+
+    #[test]
+    fn test_format_title_header() {
+        let out = format_prn(
+            &[],
+            b"MyTitle",
+            b"MySub",
+            DEFAULT_PRN_LINE_WIDTH,
+            DEFAULT_PRN_CODE_WIDTH,
+        );
+        let s = String::from_utf8_lossy(&out);
+        assert!(s.contains("MyTitle"));
+        assert!(s.contains("MySub"));
     }
 }

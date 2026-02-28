@@ -556,6 +556,34 @@ fn test_prn_width_directive_limits_line_width() {
     assert!(max_len <= 80, "PRN line should be clipped to width 80, got {}", max_len);
 }
 
+/// `.title/.subttl` で指定した文字列が PRN ヘッダに反映される。
+#[test]
+fn test_prn_title_and_subttl_are_reflected() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.title\t\"MainTitle\"\n\t.subttl\t\"PartA\"\n\tnop\n").expect("write");
+    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let prn_file = NamedTempFile::new().expect("prn tempfile");
+    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(src_path),
+        make_prn: true,
+        prn_file: Some(prn_path.clone()),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx).expect("assemble");
+
+    let prn_content = std::fs::read(std::path::Path::new(
+        std::str::from_utf8(&prn_path).unwrap()
+    )).expect("read prn file");
+    let prn_str = String::from_utf8_lossy(&prn_content);
+
+    assert!(prn_str.contains("MainTitle"), "title should appear in PRN");
+    assert!(prn_str.contains("PartA"), "subttl should appear in PRN");
+}
+
 // ─── -c4 最適化 ──────────────────────────────────────────────────────────────
 
 #[test]
