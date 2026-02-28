@@ -5,8 +5,8 @@
 
 ## 現在の前提（2026-03-01）
 - `cargo test`: pass
-- `golden_test`: 22/22 pass
-- `integration_test`: 84/84 pass
+- `golden_test`: 23/23 pass
+- `integration_test`: 85/85 pass
 - `error_message_test`: 5/5 pass
 - MS6（FPU/SCD/残互換機能）実装済み
 
@@ -28,8 +28,9 @@
 1. FPU 命令の未実装群の仕様確定とテスト化（着手中）
 - 第1段: `fmovem` 制御レジスタ転送（`fpcr/fpsr/fpiar` ↔ メモリ）を実装・固定化済み
 - 第1.5段: `fmovem` FPn 静的リスト（`fp0/fp1` 形式）を実装・固定化済み
+- 第1.8段: `fmovem` FPn 動的リスト（`Dn` マスク）を実装・固定化済み
 - 第2段: `fbcc` / `fdbcc` 全条件バリアントを実装・固定化済み
-- 残: `fmovem` の動的レジスタリスト系（`Dn` マスク）、`fsincos`
+- 残: `fmovem` の FPCR 複合指定境界（受理/拒否条件の最終確認）、`fsincos`
 - 方針: 先に HAS060.X 側の最小ケースを確定し、その後実装
 
 2. SCD の追加境界ケース ✅

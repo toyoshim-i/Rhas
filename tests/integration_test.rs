@@ -625,6 +625,30 @@ fn test_fmovem_fpreg_list_encoding() {
     );
 }
 
+/// FMOVEM FPn 動的リスト（Dn マスク）のエンコード。
+#[test]
+fn test_fmovem_fpreg_dynamic_list_encoding() {
+    let src = b"\
+\t.68040\n\
+\t.fpid\t3\n\
+\tfmovem.x\td0,(a0)\n\
+\tfmovem.x\t(a0),d0\n\
+\tfmovem.x\td0,-(a0)\n\
+\tfmovem.x\t(a0)+,d0\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(
+        text.bytes,
+        [
+            0xF6, 0x10, 0xF8, 0x00, // fmovem.x d0,(a0)
+            0xF6, 0x10, 0xD8, 0x00, // fmovem.x (a0),d0
+            0xF6, 0x20, 0xE8, 0x00, // fmovem.x d0,-(a0)
+            0xF6, 0x18, 0xD8, 0x00, // fmovem.x (a0)+,d0
+        ]
+    );
+}
+
 /// FBcc / FDBcc の基本エンコード（.w/.l と CPID 反映）。
 #[test]
 fn test_fbcc_fdbcc_encoding() {

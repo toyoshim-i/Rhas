@@ -217,4 +217,5 @@ golden_test_opt!(c4_core_opt);
 golden_test!(fpu_core);
 golden_test!(fmovem_ctrl);
 golden_test!(fmovem_list);
+golden_test!(fmovem_dyn);
 golden_test!(fpu_branch);

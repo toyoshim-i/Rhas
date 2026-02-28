@@ -295,6 +295,21 @@ fn encode_fmovem(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
             push_word(&mut out, 0xD000 | mask);
             out.extend_from_slice(&enc.ext_bytes);
         }
+        // fmovem <dn>,<ea> (FPn -> mem, dynamic list)
+        (EffectiveAddress::DataReg(dn), ea) => {
+            let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
+            push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
+            let base = if matches!(ea, EffectiveAddress::AddrRegPreDec(_)) { 0xE800u16 } else { 0xF800u16 };
+            push_word(&mut out, base | ((*dn as u16) << 4));
+            out.extend_from_slice(&enc.ext_bytes);
+        }
+        // fmovem <ea>,<dn> (mem -> FPn, dynamic list)
+        (ea, EffectiveAddress::DataReg(dn)) => {
+            let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
+            push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
+            push_word(&mut out, 0xD800u16 | ((*dn as u16) << 4));
+            out.extend_from_slice(&enc.ext_bytes);
+        }
         _ => return Err(InsnError::InvalidOperand),
     }
     Ok(out)

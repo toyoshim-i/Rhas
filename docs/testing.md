@@ -6,8 +6,8 @@ rhas のテストは以下の 3 層で構成する。
 | スイート | 場所 | 件数 | 目的 |
 |---|---|---:|---|
 | ユニットテスト | `src/**` | 多数 | モジュール単体の正確性 |
-| ゴールデンテスト | `tests/golden_test.rs` | 22 | HAS060.X とのバイト一致 |
-| 統合テスト | `tests/integration_test.rs` | 84 | 3パス全体の振る舞い検証 |
+| ゴールデンテスト | `tests/golden_test.rs` | 23 | HAS060.X とのバイト一致 |
+| 統合テスト | `tests/integration_test.rs` | 85 | 3パス全体の振る舞い検証 |
 | エラーメッセージ比較 | `tests/error_message_test.rs` | 5 | 失敗時メッセージ互換の固定 |
 
 ## 実行コマンド
@@ -35,6 +35,7 @@ cargo test --test error_message_test
 - FPU コア (`fpu_core`)
 - FMOVEM 制御レジスタ転送 (`fmovem_ctrl`)
 - FMOVEM FPn 静的リスト (`fmovem_list`)
+- FMOVEM FPn 動的リスト (`fmovem_dyn`)
 - FPU 条件分岐/ループ (`fpu_branch`)
 - `-c4` 拡張最適化主要ケース (`c4_core_opt`)
 
@@ -54,8 +55,8 @@ SCD まわりで現在固定している仕様:
 - SCD フッタの SCD エントリ列は `len` 依存の可変長
 
 ## 現在の結果（2026-03-01）
-- `cargo test --test integration_test --quiet`: 84/84 pass
-- `cargo test --test golden_test --quiet`: 22/22 pass
+- `cargo test --test integration_test --quiet`: 85/85 pass
+- `cargo test --test golden_test --quiet`: 23/23 pass
 - `cargo test --test error_message_test --quiet`: 5/5 pass
 - `./tests/compare_ms5_simple.sh`: 17/17 一致
 - `./tests/compare_ms6_extended.sh`: 19/19 一致

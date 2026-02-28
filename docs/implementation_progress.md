@@ -32,7 +32,7 @@
 - `.offsym` / `.fpid`
 - FPU コア命令（`fnop/fsave/frestore/fmove/fmovecr/fadd/fsub/fmul/fdiv/fcmp/ftst`）
 - FPU レジスタオペランド（`FPn/FPCR/FPSR/FPIAR`）と CPID 反映
-- FMOVEM（制御レジスタ転送 + FPn 静的レジスタリスト）
+- FMOVEM（制御レジスタ転送 + FPn 静的/動的レジスタリスト）
 - FPU 分岐系（`fbcc` / `fdbcc` 全条件バリアント）
 - SCD の HAS 互換2モード（`-g` と `.file` モード）
 - SCD フッタ（可変長エントリ、`.file` 長名/`SCDFILENUM`、`next` チェイン、`.val` 再評価）
@@ -41,14 +41,14 @@
 | スイート | 状態 |
 |---|---|
 | ユニット | ✅ 全通過 |
-| 統合（84） | ✅ 全通過 |
-| ゴールデン（22） | ✅ 全通過 |
+| 統合（85） | ✅ 全通過 |
+| ゴールデン（23） | ✅ 全通過 |
 | エラーメッセージ比較（5） | ✅ 全通過 |
 | MS5簡易比較（17） | ✅ 全一致 |
 | MS6拡張比較（19） | ✅ 全一致 |
 
 ## 検証残タスク
-- 優先度Bの残りは FPU 未実装群（`fmovem` 動的レジスタリスト、`fsincos`）の仕様確定と互換テスト化。
+- 優先度Bの残りは FPU 未実装/未確定群（`fmovem` FPCR 複合指定境界、`fsincos`）の仕様確定と互換テスト化。
 
 ## 直近コミット（ドキュメント時点）
 - `3bb7f62` Align SCD `.file` exname threshold to 14+ chars

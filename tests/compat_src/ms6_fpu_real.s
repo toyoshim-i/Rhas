@@ -25,3 +25,7 @@
 	fmovem.x	(a0),fp0/fp1
 	fmovem.x	fp0/fp1,-(a0)
 	fmovem.x	(a0)+,fp0/fp1
+	fmovem.x	d0,(a0)
+	fmovem.x	(a0),d0
+	fmovem.x	d0,-(a0)
+	fmovem.x	(a0)+,d0
