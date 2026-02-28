@@ -52,10 +52,10 @@
 - 優先度A/Bで管理していた MS6 由来の互換検証残タスクは完了。
 
 ## 直近コミット（ドキュメント時点）
-- `3bb7f62` Align SCD `.file` exname threshold to 14+ chars
-- `811d1e4` Emit HAS-style default SCD line entry for `-g` only
-- `7274d6a` Match HAS SCD directive gating behind `.file`
-- `c466dd0` Fix `.file` behavior split between SCD footer and B204
+- `9fff931` Refresh README and backlog status for completed MS6 coverage
+- `3357147` Add FSINCOS golden fixture and update test metrics
+- `69b16e0` Enforce FMOVEM size constraints and add boundary error tests
+- `c7f52bd` Implement FSINCOS encoding compatibility and coverage
 
 ## 参照
 - [README](../README.md)
