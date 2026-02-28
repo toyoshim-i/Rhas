@@ -6,8 +6,8 @@
 ## 現在の前提（2026-03-01）
 - `cargo test`: pass
 - `golden_test`: 24/24 pass
-- `integration_test`: 86/86 pass
-- `error_message_test`: 5/5 pass
+- `integration_test`: 87/87 pass
+- `error_message_test`: 6/6 pass
 - MS6（FPU/SCD/残互換機能）実装済み
 
 ## 優先度A（次に必ず実施）
@@ -25,14 +25,14 @@
 - 目的: 「失敗時の互換性」を固定
 
 ## 優先度B（継続的に追加）
-1. FPU 命令の未実装群の仕様確定とテスト化（着手中）
+1. FPU 命令の仕様確定とテスト化（完了）
 - 第1段: `fmovem` 制御レジスタ転送（`fpcr/fpsr/fpiar` ↔ メモリ）を実装・固定化済み
 - 第1.2段: `fmovem` 制御レジスタ複合指定（`fpcr/fpsr`）を実装・固定化済み
 - 第1.5段: `fmovem` FPn 静的リスト（`fp0/fp1` 形式）を実装・固定化済み
 - 第1.8段: `fmovem` FPn 動的リスト（`Dn` マスク）を実装・固定化済み
 - 第2段: `fbcc` / `fdbcc` 全条件バリアントを実装・固定化済み
 - 第2.5段: `fsincos`（`FPn`/EA ソース + `FPc:FPs` 宛先）を実装・固定化済み
-- 残: `fmovem` の境界（禁止形式のエラーメッセージ比較）
+- 第3段: `fmovem` のサイズ境界（禁止形式）のエラーメッセージ比較を実装・固定化済み
 - 方針: 先に HAS060.X 側の最小ケースを確定し、その後実装
 
 2. SCD の追加境界ケース ✅

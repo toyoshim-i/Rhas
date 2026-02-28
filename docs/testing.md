@@ -8,7 +8,7 @@ rhas のテストは以下の 3 層で構成する。
 | ユニットテスト | `src/**` | 多数 | モジュール単体の正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 24 | HAS060.X とのバイト一致 |
 | 統合テスト | `tests/integration_test.rs` | 87 | 3パス全体の振る舞い検証 |
-| エラーメッセージ比較 | `tests/error_message_test.rs` | 5 | 失敗時メッセージ互換の固定 |
+| エラーメッセージ比較 | `tests/error_message_test.rs` | 6 | 失敗時メッセージ互換の固定 |
 
 ## 実行コマンド
 ```bash
@@ -58,7 +58,7 @@ SCD まわりで現在固定している仕様:
 ## 現在の結果（2026-03-01）
 - `cargo test --test integration_test --quiet`: 87/87 pass
 - `cargo test --test golden_test --quiet`: 24/24 pass
-- `cargo test --test error_message_test --quiet`: 5/5 pass
+- `cargo test --test error_message_test --quiet`: 6/6 pass
 - `./tests/compare_ms5_simple.sh`: 17/17 一致
 - `./tests/compare_ms6_extended.sh`: 19/19 一致
 

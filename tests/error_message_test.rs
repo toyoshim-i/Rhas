@@ -71,3 +71,23 @@ fn test_error_message_fpid_boundary() {
     assert!(stderr.contains(".fpid の値は 0..7 で指定してください"));
     assert!(stdout.contains("エラーが 1 個ありました"));
 }
+
+#[test]
+fn test_error_message_fmovem_size_boundaries() {
+    let out = run_rhas(
+        b"\t.68040\n\
+\t.fpid\t3\n\
+\tfmovem.l\tfp0/fp1,(a0)\n\
+\tfmovem.x\tfpcr,(a0)\n\
+\tfmovem.l\td0,(a0)\n\
+\tfmovem.b\tfp0/fp1,(a0)\n\
+\tfmovem.b\tfpcr,(a0)\n",
+    );
+    assert!(!out.status.success(), "assemble should fail");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+
+    assert_eq!(stderr.matches("命令のエンコードに失敗しました: InvalidSize").count(), 5);
+    assert!(stdout.contains("エラーが 5 個ありました"));
+}

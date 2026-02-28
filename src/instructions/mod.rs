@@ -250,6 +250,9 @@ fn encode_fmovem(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
     match (&operands[0], &operands[1]) {
         // fmovem fpcr/fpsr/fpiar,<ea>
         (EffectiveAddress::FpCtrlReg(reg), ea) => {
+            if !matches!(size, SizeCode::None | SizeCode::Long) {
+                return Err(InsnError::InvalidSize);
+            }
             let mask = match reg {
                 0 => 0x1000u16, // FPCR
                 1 => 0x0800u16, // FPSR
@@ -263,6 +266,9 @@ fn encode_fmovem(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
         }
         // fmovem <ea>,fpcr/fpsr/fpiar
         (ea, EffectiveAddress::FpCtrlReg(reg)) => {
+            if !matches!(size, SizeCode::None | SizeCode::Long) {
+                return Err(InsnError::InvalidSize);
+            }
             let mask = match reg {
                 0 => 0x1000u16, // FPCR
                 1 => 0x0800u16, // FPSR
@@ -281,8 +287,14 @@ fn encode_fmovem(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
             push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
             let ctrl_mask = raw & 0x1C00;
             let ext = if ctrl_mask != 0 {
+                if !matches!(size, SizeCode::None | SizeCode::Long) {
+                    return Err(InsnError::InvalidSize);
+                }
                 0xA000u16 | ctrl_mask
             } else {
+                if !matches!(size, SizeCode::None | SizeCode::Extend) {
+                    return Err(InsnError::InvalidSize);
+                }
                 let mask = raw & 0x00FF;
                 if matches!(ea, EffectiveAddress::AddrRegPreDec(_)) {
                     0xE000u16 | ((mask as u8).reverse_bits() as u16)
@@ -300,8 +312,14 @@ fn encode_fmovem(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
             push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
             let ctrl_mask = raw & 0x1C00;
             let ext = if ctrl_mask != 0 {
+                if !matches!(size, SizeCode::None | SizeCode::Long) {
+                    return Err(InsnError::InvalidSize);
+                }
                 0x8000u16 | ctrl_mask
             } else {
+                if !matches!(size, SizeCode::None | SizeCode::Extend) {
+                    return Err(InsnError::InvalidSize);
+                }
                 0xD000u16 | (raw & 0x00FF)
             };
             push_word(&mut out, ext);
@@ -309,6 +327,9 @@ fn encode_fmovem(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
         }
         // fmovem <dn>,<ea> (FPn -> mem, dynamic list)
         (EffectiveAddress::DataReg(dn), ea) => {
+            if !matches!(size, SizeCode::None | SizeCode::Extend) {
+                return Err(InsnError::InvalidSize);
+            }
             let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
             push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
             let base = if matches!(ea, EffectiveAddress::AddrRegPreDec(_)) { 0xE800u16 } else { 0xF800u16 };
@@ -317,6 +338,9 @@ fn encode_fmovem(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
         }
         // fmovem <ea>,<dn> (mem -> FPn, dynamic list)
         (ea, EffectiveAddress::DataReg(dn)) => {
+            if !matches!(size, SizeCode::None | SizeCode::Extend) {
+                return Err(InsnError::InvalidSize);
+            }
             let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
             push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
             push_word(&mut out, 0xD800u16 | ((*dn as u16) << 4));
