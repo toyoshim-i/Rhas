@@ -71,6 +71,24 @@ pub struct ExternalSymbol {
     pub name:  Vec<u8>,
 }
 
+/// SCDデバッグイベント（MS6途中段階）
+#[derive(Debug, Clone)]
+pub enum ScdEvent {
+    Ln { line: u16, loc_expr: crate::expr::Rpn },
+    Val { expr: crate::expr::Rpn },
+    Tag { name: Vec<u8> },
+    Endef {
+        name: Vec<u8>,
+        attrib: u8,
+        scl: u8,
+        type_code: u16,
+        size: u32,
+        dim: [u16; 4],
+        is_long: bool,
+    },
+    FuncEnd,
+}
+
 /// 旧 SymKind 互換エイリアス（既存テストとの互換性維持）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -104,6 +122,8 @@ pub struct ObjectCode {
     pub max_align: u8,
     /// HLK コード本体（20xx セクション切り替え + 10xx コードブロック）
     pub code_body: Vec<u8>,
+    /// 収集済みSCDイベント（最終出力形式への変換はMS6で実装）
+    pub scd_events: Vec<ScdEvent>,
 }
 
 impl ObjectCode {
@@ -119,6 +139,7 @@ impl ObjectCode {
             has_debug_info: false,
             max_align: 0,
             code_body: Vec::new(),
+            scd_events: Vec::new(),
         }
     }
 }

@@ -779,6 +779,25 @@ fn test_scd_records_are_emitted_in_pass1() {
     assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { name, .. } if name.as_slice() == b"foo")));
 }
 
+/// SCD疑似命令は Pass3 で ObjectCode.scd_events に収集される。
+#[test]
+fn test_scd_events_are_collected_in_object() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.ln\t7,*\n\t.def\tfoo\n\t.val\t.\n\t.endef\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    assert!(result.obj.scd_events.iter().any(|e| matches!(e, rhas::object::ScdEvent::Ln { line, .. } if *line == 7)));
+    assert!(result.obj.scd_events.iter().any(|e| matches!(e, rhas::object::ScdEvent::Val { .. })));
+    assert!(result.obj.scd_events.iter().any(|e| matches!(e, rhas::object::ScdEvent::Endef { name, .. } if name.as_slice() == b"foo")));
+}
+
 /// `.request` は `$E001` レコードとして出力される。
 #[test]
 fn test_request_emits_e001_record() {

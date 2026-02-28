@@ -8,7 +8,7 @@ use crate::expr::{eval_rpn, Rpn};
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::{Operator, RPNToken};
 use crate::instructions::encode_insn;
-use crate::object::{ExternalSymbol, ObjectCode, SectionInfo, sym_kind};
+use crate::object::{ExternalSymbol, ObjectCode, ScdEvent, SectionInfo, sym_kind};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol::types::{DefAttrib, ExtAttrib, InsnHandler, SizeCode};
 use super::prn::PrnLine;
@@ -728,12 +728,28 @@ pub fn pass3(
             TempRecord::LineInfo { line_num, text, is_macro } => {
                 ctx.prn_start(*line_num, text.clone(), *is_macro);
             }
-            TempRecord::ScdLn { .. }
-            | TempRecord::ScdVal { .. }
-            | TempRecord::ScdTag { .. }
-            | TempRecord::ScdEndef { .. }
-            | TempRecord::ScdFuncEnd => {
-                // MS6段階: SCDレコードはPass1で保持し、出力本体は後続ステップで実装する。
+            TempRecord::ScdLn { line, loc } => {
+                obj.scd_events.push(ScdEvent::Ln { line: *line, loc_expr: loc.clone() });
+            }
+            TempRecord::ScdVal { rpn } => {
+                obj.scd_events.push(ScdEvent::Val { expr: rpn.clone() });
+            }
+            TempRecord::ScdTag { name } => {
+                obj.scd_events.push(ScdEvent::Tag { name: name.clone() });
+            }
+            TempRecord::ScdEndef { name, attrib, scl, type_code, size, dim, is_long } => {
+                obj.scd_events.push(ScdEvent::Endef {
+                    name: name.clone(),
+                    attrib: *attrib,
+                    scl: *scl,
+                    type_code: *type_code,
+                    size: *size,
+                    dim: *dim,
+                    is_long: *is_long,
+                });
+            }
+            TempRecord::ScdFuncEnd => {
+                obj.scd_events.push(ScdEvent::FuncEnd);
             }
         }
     }
