@@ -1978,11 +1978,12 @@ fn handle_pseudo(
         InsnHandler::FileScd | InsnHandler::Def | InsnHandler::Endef | InsnHandler::Val | InsnHandler::Scl
         | InsnHandler::TypeScd | InsnHandler::Tag | InsnHandler::Ln | InsnHandler::Line
         | InsnHandler::SizeScd | InsnHandler::Dim => {
-            // -g 無効時は HAS 同様に SCD 疑似命令を実質無視する。
-            if !p1.ctx.opts.make_sym_deb {
+            // HAS互換:
+            // -g 指定時（MAKESYMDEB=true）は SCD 疑似命令を無視する。
+            if p1.ctx.opts.make_sym_deb {
                 return;
             }
-            // HAS 互換: `.file` で SCD モード有効化されるまで、SCD 疑似命令は無視する。
+            // HAS 互換: `.file` で SCD モード有効化されるまで、.file 以外は無視する。
             if handler != InsnHandler::FileScd && !p1.ctx.scd_enabled {
                 return;
             }

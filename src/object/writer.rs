@@ -98,8 +98,17 @@ fn push_scd_entry(out: &mut Vec<u8>, e: &ScdEntry) {
     out.extend_from_slice(&e.tail.to_be_bytes()); // 未使用
 }
 
+fn push_scd_entry_var(out: &mut Vec<u8>, e: &ScdEntry) {
+    let mut full = Vec::with_capacity(36);
+    push_scd_entry(&mut full, e);
+    let bytes = (usize::from(e.len) + 1) * 18;
+    out.extend_from_slice(&full[..bytes.min(full.len())]);
+}
+
 fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
-    if !obj.has_debug_info {
+    let debug_mode = obj.has_debug_info;
+    let scd_mode = obj.scd_enabled;
+    if !debug_mode && !scd_mode {
         return;
     }
 
@@ -107,12 +116,15 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     let mut entries: Vec<ScdEntry> = Vec::new();
     let text_size = obj.sections.first().map(|s| s.size).unwrap_or(0);
     let mut exname_data: Vec<u8> = Vec::new();
-    // HAS互換: `.file` 使用時は 14文字超で exname を使う。
-    // `.file` 未使用（-gのみ）では入力ソース名を exname 側へ常に出力する。
-    let use_exname = if obj.scd_enabled {
+    // HAS互換:
+    // - SCD疑似命令モード(.file)では 14文字超で exname を使う。
+    // - -g モードでは exname を常に生成する。
+    let use_exname = if debug_mode {
+        true
+    } else if scd_mode {
         obj.scd_file.len() > 14
     } else {
-        true
+        false
     };
     if use_exname {
         // HAS互換: exname 領域は先頭ワードを 0 で始める。
@@ -126,7 +138,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
 
     // HAS の既定エントリに合わせ、.file/.text/.data/.bss を最小構成で出力する。
     let mut file_ent = ScdEntry {
-        value: if exname_data.is_empty() { 0 } else { 14 },
+        value: 0, // 後段で GLBDEFNUM 相当値を設定する
         section: -2,
         scl: 0x67,
         len: 1,
@@ -137,46 +149,48 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     set_file_bytes(&mut file_ent, &obj.scd_file, scd_file_num);
     entries.push(file_ent);
 
-    // HAS の scdout0 相当: 関数/.bf/.ef の雛形を追加する。
-    let mut func_ent = ScdEntry {
-        value: 0,
-        section: 1,
-        type_code: 0x0020,
-        scl: 0x03,
-        len: 1,
-        size: text_size,
-        next: 8,
-        ..Default::default()
-    };
-    if exname_data.is_empty() {
-        fill_scd_name(&mut func_ent.name, &obj.source_name);
-    } else {
-        // HAS互換: 関数名は exname へのオフセット参照（先頭エントリ=2）。
-        func_ent.name[4..8].copy_from_slice(&2u32.to_be_bytes());
+    if debug_mode {
+        // HAS の scdout0 相当: -g 時のみ関数/.bf/.ef の雛形を追加する。
+        let mut func_ent = ScdEntry {
+            value: 0,
+            section: 1,
+            type_code: 0x0020,
+            scl: 0x03,
+            len: 1,
+            size: text_size,
+            next: 8,
+            ..Default::default()
+        };
+        if exname_data.is_empty() {
+            fill_scd_name(&mut func_ent.name, &obj.source_name);
+        } else {
+            // HAS互換: 関数名は exname へのオフセット参照（先頭エントリ=2）。
+            func_ent.name[4..8].copy_from_slice(&2u32.to_be_bytes());
+        }
+        entries.push(func_ent);
+
+        let mut bf_ent = ScdEntry {
+            value: 0,
+            section: 1,
+            scl: 0x65,
+            len: 1,
+            size: 1 << 16,
+            next: 6,
+            ..Default::default()
+        };
+        fill_scd_name(&mut bf_ent.name, b".bf");
+        entries.push(bf_ent);
+
+        let mut ef_ent = ScdEntry {
+            value: text_size,
+            section: 1,
+            scl: 0x65,
+            len: 1,
+            ..Default::default()
+        };
+        fill_scd_name(&mut ef_ent.name, b".ef");
+        entries.push(ef_ent);
     }
-    entries.push(func_ent);
-
-    let mut bf_ent = ScdEntry {
-        value: 0,
-        section: 1,
-        scl: 0x65,
-        len: 1,
-        size: 1 << 16,
-        next: 6,
-        ..Default::default()
-    };
-    fill_scd_name(&mut bf_ent.name, b".bf");
-    entries.push(bf_ent);
-
-    let mut ef_ent = ScdEntry {
-        value: text_size,
-        section: 1,
-        scl: 0x65,
-        len: 1,
-        ..Default::default()
-    };
-    fill_scd_name(&mut ef_ent.name, b".ef");
-    entries.push(ef_ent);
 
     let mut offset = 0u32;
     for (name, sect, idx) in [(b".text".as_slice(), 1i16, 0usize), (b".data".as_slice(), 2, 1), (b".bss".as_slice(), 3, 2)] {
@@ -294,20 +308,35 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
             }
         }
     }
-    // HAS 互換: SCD 行番号テーブルは先頭にダミー行番号エントリを持つ。
-    lines.insert(0, (2, 0));
-    // .text の size は行番号データ数。
-    if let Some(text) = entries.iter_mut().find(|e| &e.name[..5] == b".text") {
-        text.size = lines.len() as u32;
-    }
-    // .ef の line count 相当を埋める（move.w 相当: 上位16bit）。
-    if let Some(ef) = entries.iter_mut().find(|e| &e.name[..3] == b".ef") {
-        let max_line = lines.iter().map(|(_, l)| *l as u32).max().unwrap_or(0);
-        ef.size = max_line << 16;
+    if debug_mode {
+        // HAS 互換: -g の行番号テーブルは先頭にダミー行番号エントリを持つ。
+        lines.insert(0, (2, 0));
+        // .text の size は行番号データ数。
+        if let Some(text) = entries.iter_mut().find(|e| &e.name[..5] == b".text") {
+            text.size = lines.len() as u32;
+        }
+        // .ef の line count 相当を埋める（move.w 相当: 上位16bit）。
+        if let Some(ef) = entries.iter_mut().find(|e| &e.name[..3] == b".ef") {
+            let max_line = lines.iter().map(|(_, l)| *l as u32).max().unwrap_or(0);
+            ef.size = max_line << 16;
+        }
     }
 
+    // HAS の GLBDEFNUM 相当: .file 以外の非セクションエントリ長(単位) + 8
+    // （.file/.text/.data/.bss の 4 エントリ分 = 8 単位）。
+    let mut user_units = 0u32;
+    for e in entries.iter().skip(1) {
+        if e.scl != 0x78 {
+            user_units += u32::from(e.len) + 1;
+        }
+    }
+    entries[0].value = 8 + user_units;
+
     let line_len = (lines.len() as u32) * 6;
-    let scd_len = (entries.len() as u32) * 36;
+    let scd_len: u32 = entries
+        .iter()
+        .map(|e| ((u32::from(e.len) + 1) * 18) as u32)
+        .sum();
     let exname_len = exname_data.len() as u32;
     out.extend_from_slice(&line_len.to_be_bytes());
     out.extend_from_slice(&scd_len.to_be_bytes());
@@ -318,7 +347,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
         out.extend_from_slice(&line.to_be_bytes());
     }
     for ent in &entries {
-        push_scd_entry(out, ent);
+        push_scd_entry_var(out, ent);
     }
     out.extend_from_slice(&exname_data);
 }

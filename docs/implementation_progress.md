@@ -34,12 +34,15 @@
 - SCD 疑似命令の構文/値検証
 - SCD TempRecord 化と Pass3 収集
 - `$0000` 後の SCD フッタ出力（line/scd/exname）
-- `func/.bf/.ef` 自動エントリ
+- `-g` モードでの `func/.bf/.ef` 自動エントリ
 - `.file` と `B204` の役割分離
-- SCD フッタ `.file` 名を入力ソース名で固定（`.file` 疑似命令名は未使用）
-- SCD 疑似命令の有効化条件（`.file` 必須）
+- SCD フッタ `.file` 名のモード分岐
+- `-g`: 入力ソース名を使用
+- `.file` モード（`-g` なし）: `.file` 指定名を使用
+- SCD 疑似命令の有効化条件（`-g` では無効 / `-g` なしで `.file` 必須）
 - `-g` のみ時の SCD デフォルト行エントリ
 - exname 条件を 14文字超へ調整
+- SCD エントリ列の可変長出力（`len` 依存）
 - `.type` のロング判定を HAS 互換（0x20/0x30 のみ）へ修正
 - `.scl 16`（enum メンバ）の section を SCD 出力時に `-2` へ補正
 - `.endef` の attrib 自動決定（function/tag/extern/static）を HAS 互換化

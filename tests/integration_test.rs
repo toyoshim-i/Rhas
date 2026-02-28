@@ -61,6 +61,40 @@ fn pass1_records(src: &[u8], make_sym_deb: bool) -> Vec<rhas::pass::temp::TempRe
     rhas::pass::pass1::pass1(&mut source, &mut ctx, &mut sym)
 }
 
+fn find_scd_footer(bytes: &[u8]) -> (usize, usize, usize, usize) {
+    let end_pos = (0..bytes.len().saturating_sub(14))
+        .find(|&i| {
+            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
+                return false;
+            }
+            let p = i + 2;
+            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
+            p + 12 + line_len + scd_len + exname_len == bytes.len()
+        })
+        .expect("0000 terminator");
+    let p = end_pos + 2;
+    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
+    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
+    let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
+    (p, line_len, scd_len, exname_len)
+}
+
+fn scd_entry_offsets(bytes: &[u8], p: usize, line_len: usize, scd_len: usize) -> Vec<usize> {
+    let scd_base = p + 12 + line_len;
+    let mut out = Vec::new();
+    let mut cur = scd_base;
+    let end = scd_base + scd_len;
+    while cur < end {
+        out.push(cur);
+        let len = bytes[cur + 17] as usize;
+        cur += (len + 1) * 18;
+    }
+    assert_eq!(cur, end, "SCD entry stream length mismatch");
+    out
+}
+
 // ─── MS1: 最小アセンブル ─────────────────────────────────────────────────────
 
 /// move.b d0,d1 が 0x1200 にエンコードされ、正しい HLK ファイルが出力される。
@@ -696,7 +730,7 @@ fn test_g_only_emits_default_scd_line_entry() {
     assert_eq!(line1, 1);
 }
 
-/// SCD有効時（-g）に `.ln` は行番号を保持し、2番目オペランド式も受理する。
+/// SCD有効時（`.file` モード）に `.ln` は行番号を保持し、2番目オペランド式も受理する。
 #[test]
 fn test_scd_ln_alias_updates_line_state() {
     let mut f = NamedTempFile::new().expect("tempfile");
@@ -705,7 +739,7 @@ fn test_scd_ln_alias_updates_line_state() {
 
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
@@ -722,7 +756,7 @@ fn test_scd_ln_wraps_to_u16() {
 
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
@@ -730,7 +764,7 @@ fn test_scd_ln_wraps_to_u16() {
     assert_eq!(ctx.scd_ln, 70000u32 as u16);
 }
 
-/// SCD有効時（-g）の `.dim` は定数4要素までを受理して一時バッファへ反映する。
+/// SCD有効時（`.file` モード）の `.dim` は定数4要素までを受理して一時バッファへ反映する。
 #[test]
 fn test_scd_dim_updates_temp_buffer() {
     let mut f = NamedTempFile::new().expect("tempfile");
@@ -739,7 +773,7 @@ fn test_scd_dim_updates_temp_buffer() {
 
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
@@ -757,7 +791,7 @@ fn test_scd_line_wraps_to_u16_in_temp_size() {
 
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
@@ -766,7 +800,7 @@ fn test_scd_line_wraps_to_u16_in_temp_size() {
     assert_eq!(ctx.scd_temp.size, (70000u32 as u16) as u32);
 }
 
-/// SCD有効時（-g）の `.scl` は範囲外値を拒否する。
+/// SCD有効時（`.file` モード）の `.scl` は範囲外値を拒否する。
 #[test]
 fn test_scd_scl_rejects_out_of_range() {
     let mut f = NamedTempFile::new().expect("tempfile");
@@ -775,7 +809,7 @@ fn test_scd_scl_rejects_out_of_range() {
 
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
@@ -786,7 +820,7 @@ fn test_scd_scl_rejects_out_of_range() {
     }
 }
 
-/// SCD無効時（-gなし）は SCD 疑似命令を無視する。
+/// HAS互換: `-g` 指定時は SCD 疑似命令を無視する。
 #[test]
 fn test_scd_directives_are_ignored_without_g() {
     let mut f = NamedTempFile::new().expect("tempfile");
@@ -823,7 +857,7 @@ fn test_scd_footer_uses_input_source_filename() {
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let result = rhas::pass::assemble(&mut ctx).expect("assemble");
-    assert_eq!(ctx.scd_file, b"main.c".to_vec(), "directive value is kept in context");
+    assert_eq!(ctx.scd_file, b"".to_vec(), "directive should be ignored in -g mode");
     assert_eq!(result.obj.scd_file, expected_file, "footer name should be input source filename");
 }
 
@@ -864,7 +898,7 @@ fn test_scd_file_does_not_affect_b204_filename() {
 fn test_scd_records_are_emitted_in_pass1() {
     let records = pass1_records(
         b"\t.file\t\"main.c\"\n\t.ln\t12,*\n\t.def\tfoo\n\t.val\t.\n\t.tag\tbar\n\t.scl\t-1\n\t.endef\n",
-        true,
+        false,
     );
     assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdLn { line, .. } if *line == 12)));
     assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdVal { rpn }
@@ -886,7 +920,7 @@ fn test_scd_events_are_collected_in_object() {
 
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
@@ -908,7 +942,7 @@ fn test_g_option_emits_scd_footer_after_terminator() {
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
@@ -975,7 +1009,7 @@ fn test_g_option_scd_footer_emits_exname_for_long_source_filename() {
 fn test_scd_val_constant_is_preserved_in_endef_snapshot() {
     let records = pass1_records(
         b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.val\t4\n\t.endef\n",
-        true,
+        false,
     );
     assert!(records.iter().any(|r| matches!(
         r,
@@ -987,7 +1021,7 @@ fn test_scd_val_constant_is_preserved_in_endef_snapshot() {
 /// HAS互換: `-g` だけでは SCD疑似命令は有効化されず、`.file` が必要。
 #[test]
 fn test_scd_directives_require_file_directive() {
-    let records = pass1_records(b"\t.ln\t123,*\n\t.def\tfoo\n\t.endef\n", true);
+    let records = pass1_records(b"\t.ln\t123,*\n\t.def\tfoo\n\t.endef\n", false);
     assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdLn { .. })));
     assert!(!records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { .. })));
 }
@@ -997,7 +1031,7 @@ fn test_scd_directives_require_file_directive() {
 fn test_scd_scl_minus1_suppresses_endef_record() {
     let records = pass1_records(
         b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.scl\t-1\n\t.endef\n",
-        true,
+        false,
     );
     assert!(records.iter().any(|r| matches!(
         r,
@@ -1011,7 +1045,7 @@ fn test_scd_scl_minus1_suppresses_endef_record() {
 fn test_scd_type_long_table_only_for_function_or_array() {
     let rec_short = pass1_records(
         b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.type\t$0010\n\t.endef\n",
-        true,
+        false,
     );
     assert!(rec_short.iter().any(|r| matches!(
         r,
@@ -1021,7 +1055,7 @@ fn test_scd_type_long_table_only_for_function_or_array() {
 
     let rec_long = pass1_records(
         b"\t.file\t\"main.c\"\n\t.def\tbar\n\t.type\t$0020\n\t.endef\n",
-        true,
+        false,
     );
     assert!(rec_long.iter().any(|r| matches!(
         r,
@@ -1041,34 +1075,18 @@ fn test_scd_enum_member_forces_section_minus2_in_footer() {
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let result = rhas::pass::assemble(&mut ctx).expect("assemble");
     let bytes = &result.obj_bytes;
 
-    let end_pos = (0..bytes.len().saturating_sub(14))
-        .find(|&i| {
-            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
-                return false;
-            }
-            let p = i + 2;
-            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
-            p + 12 + line_len + scd_len + exname_len == bytes.len()
-        })
-        .expect("0000 terminator");
-    let p = end_pos + 2;
-    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-    let scd_base = p + 12 + line_len;
-    let scd_count = scd_len / 36;
+    let (p, line_len, scd_len, _) = find_scd_footer(bytes);
+    let offsets = scd_entry_offsets(bytes, p, line_len, scd_len);
 
     let mut found = false;
-    for i in 0..scd_count {
-        let e = scd_base + i * 36;
+    for e in offsets {
         let name = &bytes[e..e + 8];
         if name.starts_with(b"enumv") {
             let section = i16::from_be_bytes([bytes[e + 12], bytes[e + 13]]);
@@ -1085,7 +1103,7 @@ fn test_scd_enum_member_forces_section_minus2_in_footer() {
 fn test_scd_endef_derives_attrib_from_type_and_scl() {
     let function = pass1_records(
         b"\t.file\t\"main.c\"\n\t.def\tfunc\n\t.type\t$20\n\t.endef\n",
-        true,
+        false,
     );
     assert!(function.iter().any(|r| matches!(
         r,
@@ -1095,7 +1113,7 @@ fn test_scd_endef_derives_attrib_from_type_and_scl() {
 
     let tag = pass1_records(
         b"\t.file\t\"main.c\"\n\t.def\ttag1\n\t.scl\t10\n\t.endef\n",
-        true,
+        false,
     );
     assert!(tag.iter().any(|r| matches!(
         r,
@@ -1105,7 +1123,7 @@ fn test_scd_endef_derives_attrib_from_type_and_scl() {
 
     let ext = pass1_records(
         b"\t.file\t\"main.c\"\n\t.def\textv\n\t.scl\t2\n\t.endef\n",
-        true,
+        false,
     );
     assert!(ext.iter().any(|r| matches!(
         r,
@@ -1115,7 +1133,7 @@ fn test_scd_endef_derives_attrib_from_type_and_scl() {
 
     let local = pass1_records(
         b"\t.file\t\"main.c\"\n\t.def\tlocv\n\t.endef\n",
-        true,
+        false,
     );
     assert!(local.iter().any(|r| matches!(
         r,
@@ -1143,34 +1161,18 @@ fn test_scd_funcend_updates_function_size_in_footer() {
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let result = rhas::pass::assemble(&mut ctx).expect("assemble");
     let bytes = &result.obj_bytes;
 
-    let end_pos = (0..bytes.len().saturating_sub(14))
-        .find(|&i| {
-            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
-                return false;
-            }
-            let p = i + 2;
-            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
-            p + 12 + line_len + scd_len + exname_len == bytes.len()
-        })
-        .expect("0000 terminator");
-    let p = end_pos + 2;
-    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-    let scd_base = p + 12 + line_len;
-    let scd_count = scd_len / 36;
+    let (p, line_len, scd_len, _) = find_scd_footer(bytes);
+    let offsets = scd_entry_offsets(bytes, p, line_len, scd_len);
 
     let mut found = false;
-    for i in 0..scd_count {
-        let e = scd_base + i * 36;
+    for e in offsets {
         let name = &bytes[e..e + 8];
         if name.starts_with(b"func") {
             let type_code = u16::from_be_bytes([bytes[e + 14], bytes[e + 15]]);
@@ -1210,28 +1212,12 @@ fn test_scd_tag_links_to_existing_tag_definition() {
     let result = rhas::pass::assemble(&mut ctx).expect("assemble");
     let bytes = &result.obj_bytes;
 
-    let end_pos = (0..bytes.len().saturating_sub(14))
-        .find(|&i| {
-            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
-                return false;
-            }
-            let p = i + 2;
-            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
-            p + 12 + line_len + scd_len + exname_len == bytes.len()
-        })
-        .expect("0000 terminator");
-    let p = end_pos + 2;
-    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-    let scd_base = p + 12 + line_len;
-    let scd_count = scd_len / 36;
+    let (p, line_len, scd_len, _) = find_scd_footer(bytes);
+    let offsets = scd_entry_offsets(bytes, p, line_len, scd_len);
 
     let mut mytag_idx = None;
     let mut var_tag = None;
-    for i in 0..scd_count {
-        let e = scd_base + i * 36;
+    for (i, e) in offsets.iter().copied().enumerate() {
         let name = &bytes[e..e + 8];
         if name.starts_with(b"mytag") {
             mytag_idx = Some(i as u32);
@@ -1257,7 +1243,7 @@ fn test_scd_unresolved_tag_suppresses_endef_entry() {
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
@@ -1292,27 +1278,11 @@ fn test_scd_file_entry_moves_short_extension_for_long_filename() {
     let result = rhas::pass::assemble(&mut ctx).expect("assemble");
     let bytes = &result.obj_bytes;
 
-    let end_pos = (0..bytes.len().saturating_sub(14))
-        .find(|&i| {
-            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
-                return false;
-            }
-            let p = i + 2;
-            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
-            p + 12 + line_len + scd_len + exname_len == bytes.len()
-        })
-        .expect("0000 terminator");
-    let p = end_pos + 2;
-    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-    let scd_base = p + 12 + line_len;
-    let scd_count = scd_len / 36;
+    let (p, line_len, scd_len, _) = find_scd_footer(bytes);
+    let offsets = scd_entry_offsets(bytes, p, line_len, scd_len);
 
     let mut found = false;
-    for i in 0..scd_count {
-        let e = scd_base + i * 36;
+    for e in offsets {
         if bytes[e..e + 8].starts_with(b".file") {
             let file14 = &bytes[e + 18..e + 32];
             assert_eq!(&file14[12..14], b".s");
@@ -1340,36 +1310,20 @@ fn test_scd_bb_eb_updates_bb_next_chain() {
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let result = rhas::pass::assemble(&mut ctx).expect("assemble");
     let bytes = &result.obj_bytes;
 
-    let end_pos = (0..bytes.len().saturating_sub(14))
-        .find(|&i| {
-            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
-                return false;
-            }
-            let p = i + 2;
-            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
-            p + 12 + line_len + scd_len + exname_len == bytes.len()
-        })
-        .expect("0000 terminator");
-    let p = end_pos + 2;
-    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-    let scd_base = p + 12 + line_len;
-    let scd_count = scd_len / 36;
+    let (p, line_len, scd_len, _) = find_scd_footer(bytes);
+    let offsets = scd_entry_offsets(bytes, p, line_len, scd_len);
 
     let mut bb_idx = None;
     let mut bb_next = None;
     let mut eb_idx = None;
-    for i in 0..scd_count {
-        let e = scd_base + i * 36;
+    for (i, e) in offsets.iter().copied().enumerate() {
         let name = &bytes[e..e + 8];
         if name.starts_with(b".bb") {
             bb_idx = Some(i as u32);
@@ -1399,34 +1353,18 @@ target:\n\
     let path = f.path().to_str().expect("path").as_bytes().to_vec();
     let opts = rhas::options::Options {
         source_file: Some(path),
-        make_sym_deb: true,
+        make_sym_deb: false,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let result = rhas::pass::assemble(&mut ctx).expect("assemble");
     let bytes = &result.obj_bytes;
 
-    let end_pos = (0..bytes.len().saturating_sub(14))
-        .find(|&i| {
-            if bytes[i] != 0x00 || bytes[i + 1] != 0x00 {
-                return false;
-            }
-            let p = i + 2;
-            let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-            let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-            let exname_len = u32::from_be_bytes([bytes[p + 8], bytes[p + 9], bytes[p + 10], bytes[p + 11]]) as usize;
-            p + 12 + line_len + scd_len + exname_len == bytes.len()
-        })
-        .expect("0000 terminator");
-    let p = end_pos + 2;
-    let line_len = u32::from_be_bytes([bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]]) as usize;
-    let scd_len = u32::from_be_bytes([bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]]) as usize;
-    let scd_base = p + 12 + line_len;
-    let scd_count = scd_len / 36;
+    let (p, line_len, scd_len, _) = find_scd_footer(bytes);
+    let offsets = scd_entry_offsets(bytes, p, line_len, scd_len);
 
     let mut found = false;
-    for i in 0..scd_count {
-        let e = scd_base + i * 36;
+    for e in offsets {
         let name = &bytes[e..e + 8];
         if name.starts_with(b"fwdv") {
             let value = u32::from_be_bytes([bytes[e + 8], bytes[e + 9], bytes[e + 10], bytes[e + 11]]);
