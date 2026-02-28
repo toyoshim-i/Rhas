@@ -968,7 +968,7 @@ fn handle_real_insn(
     if matches!(handler, InsnHandler::Clr)
         && p1.ctx.opts.opt_clr
         && enc_size == SizeCode::Long
-        && p1.ctx.opts.cpu_number < 68020
+        && p1.ctx.cpu_number < 68020
         && ops.len() == 1
         && matches!(ops[0], EffectiveAddress::DataReg(_))
     {
@@ -1059,6 +1059,25 @@ fn handle_real_insn(
         }
     }
 
+    // CMPA #0,An → TST.L An（68020+）
+    if matches!(handler, InsnHandler::CmpA)
+        && p1.ctx.opts.opt_cmpa
+        && enc_size == SizeCode::Long
+        && p1.ctx.cpu_number >= 68020
+        && ops.len() == 2
+        && matches!(ops[1], EffectiveAddress::AddrReg(_))
+    {
+        if let EffectiveAddress::Immediate(rpn) = &ops[0] {
+            if let Some(ev) = p1.eval_const(rpn) {
+                if ev.section == 0 && ev.value == 0 {
+                    handler = InsnHandler::Tst;
+                    opcode = 0x4A00;
+                    ops = vec![ops[1].clone()];
+                }
+            }
+        }
+    }
+
     // CMPA.L #d16,An → CMPA.W #d16,An
     if matches!(handler, InsnHandler::CmpA)
         && p1.ctx.opts.opt_cmpa
@@ -1088,9 +1107,13 @@ fn handle_real_insn(
                     return;
                 }
                 EffectiveAddress::AddrRegDisp { an: src_an, disp }
-                    if src_an == dst_an && disp.size.is_none() =>
+                    if src_an == dst_an =>
                 {
-                    if let Some(d) = disp.const_val {
+                    let disp_const = disp.const_val.or_else(|| {
+                        p1.eval_const(&disp.rpn)
+                            .and_then(|ev| if ev.section == 0 { Some(ev.value) } else { None })
+                    });
+                    if let Some(d) = disp_const {
                         if d == 0 {
                             return;
                         }
@@ -1114,7 +1137,7 @@ fn handle_real_insn(
     // ASL #1,Dn → ADD Dn,Dn（68060以外）
     if matches!(handler, InsnHandler::Asl)
         && p1.ctx.opts.opt_asl
-        && p1.ctx.opts.cpu_number < 68060
+        && p1.ctx.cpu_number < 68060
         && ops.len() == 2
     {
         if let (EffectiveAddress::Immediate(rpn), EffectiveAddress::DataReg(dn)) = (&ops[0], &ops[1]) {

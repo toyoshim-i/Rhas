@@ -5,21 +5,22 @@
 
 ## 現在の前提（2026-03-01）
 - `cargo test`: pass
-- `golden_test`: 17/17 pass
-- `integration_test`: 75/75 pass
+- `golden_test`: 19/19 pass
+- `integration_test`: 78/78 pass
+- `error_message_test`: 5/5 pass
 - MS6（FPU/SCD/残互換機能）実装済み
 
 ## 優先度A（次に必ず実施）
-1. FPU ゴールデン比較を追加
+1. FPU ゴールデン比較を追加 ✅
 - 対象: `fmove/fadd/fsub/fmul/fdiv/fcmp/ftst/fmovecr/fnop/fsave/frestore`
 - 条件: `.fpid` 0..7、サイズ有無（デフォルト含む）、EA バリエーション（Dn/An/(An)/即値）
 - 目的: HAS060.X とのバイト一致を統合テスト以外でも固定
 
-2. `-c4` 最適化の未カバーケース追加
+2. `-c4` 最適化の未カバーケース追加 ✅
 - 対象: 既存ゴールデンで未網羅の最適化フラグ組み合わせ
 - 目的: 最適化回帰の早期検知
 
-3. エラーメッセージ比較テスト整備
+3. エラーメッセージ比較テスト整備 ✅
 - 対象: サイズ不正、オペランド不正、式不正、SCD/FPU 境界
 - 目的: 「失敗時の互換性」を固定
 

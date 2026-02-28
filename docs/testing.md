@@ -6,14 +6,16 @@ rhas のテストは以下の 3 層で構成する。
 | スイート | 場所 | 件数 | 目的 |
 |---|---|---:|---|
 | ユニットテスト | `src/**` | 多数 | モジュール単体の正確性 |
-| ゴールデンテスト | `tests/golden_test.rs` | 17 | HAS060.X とのバイト一致 |
-| 統合テスト | `tests/integration_test.rs` | 75 | 3パス全体の振る舞い検証 |
+| ゴールデンテスト | `tests/golden_test.rs` | 19 | HAS060.X とのバイト一致 |
+| 統合テスト | `tests/integration_test.rs` | 78 | 3パス全体の振る舞い検証 |
+| エラーメッセージ比較 | `tests/error_message_test.rs` | 5 | 失敗時メッセージ互換の固定 |
 
 ## 実行コマンド
 ```bash
 cargo test
 cargo test --test golden_test
 cargo test --test integration_test
+cargo test --test error_message_test
 ./tests/compare_ms5_simple.sh
 ```
 
@@ -29,6 +31,8 @@ cargo test --test integration_test
 - 疑似命令（データ/シンボル/セクション/条件/マクロ）
 - 式演算
 - ROFST と最適化 (`addq_opt`)
+- FPU コア (`fpu_core`)
+- `-c4` 拡張最適化主要ケース (`c4_core_opt`)
 
 ## 統合テストの主対象
 - オブジェクト構造 (`$D000/$C0xx/$B2xx/$E001/$0000`)
@@ -46,8 +50,9 @@ SCD まわりで現在固定している仕様:
 - SCD フッタの SCD エントリ列は `len` 依存の可変長
 
 ## 現在の結果（2026-03-01）
-- `cargo test --test integration_test --quiet`: 75/75 pass
-- `cargo test --test golden_test --quiet`: 17/17 pass
+- `cargo test --test integration_test --quiet`: 78/78 pass
+- `cargo test --test golden_test --quiet`: 19/19 pass
+- `cargo test --test error_message_test --quiet`: 5/5 pass
 - `./tests/compare_ms5_simple.sh`: 17/17 一致
 
 ## テスト追加ルール

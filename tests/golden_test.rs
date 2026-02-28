@@ -210,3 +210,8 @@ golden_test!(expr_ops);
 
 golden_test!(rofst_disp);
 golden_test_opt!(addq_opt);
+golden_test_opt!(c4_core_opt);
+
+// ─── FPU tests ────────────────────────────────────────────────────────────────
+
+golden_test!(fpu_core);

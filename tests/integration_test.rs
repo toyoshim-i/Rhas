@@ -1798,3 +1798,30 @@ fn test_c4_asl_imm1_to_add() {
     // ADD.W D2,D2 = 0xD442
     assert_eq!(text.bytes, [0xD4, 0x42]);
 }
+
+#[test]
+fn test_c4_clr_l_does_not_optimize_on_68020_plus() {
+    let src = b"\t.68040\n\tclr.l\td0\n";
+    let result = assemble_src_c4(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    // 68020+ では CLR.L Dn は MOVEQ #0,Dn に変換しない
+    assert_eq!(text.bytes, [0x42, 0x80]);
+}
+
+#[test]
+fn test_c4_cmpa_zero_to_tst_on_68020_plus() {
+    let src = b"\t.68040\n\tcmpa.l\t#0,a2\n";
+    let result = assemble_src_c4(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    // CMPA.L #0,A2 -> TST.L A2
+    assert_eq!(text.bytes, [0x4A, 0x8A]);
+}
+
+#[test]
+fn test_c4_lea_disp_to_addq() {
+    let src = b"\tlea\t(4,a4),a4\n";
+    let result = assemble_src_c4(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    // LEA (4,A4),A4 -> ADDQ.W #4,A4
+    assert_eq!(text.bytes, [0x58, 0x4C]);
+}
