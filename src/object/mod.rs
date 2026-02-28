@@ -80,6 +80,8 @@ pub enum ScdEvent {
     Endef {
         name: Vec<u8>,
         attrib: u8,
+        value: u32,
+        section: i16,
         scl: u8,
         type_code: u16,
         size: u32,

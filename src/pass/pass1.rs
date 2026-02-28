@@ -2013,6 +2013,8 @@ fn handle_pseudo(
                     records.push(TempRecord::ScdEndef {
                         name: p1.ctx.scd_temp.name.clone(),
                         attrib: p1.ctx.scd_temp.attrib,
+                        value: p1.ctx.scd_temp.value,
+                        section: p1.ctx.scd_temp.section,
                         scl: p1.ctx.scd_temp.scl,
                         type_code: p1.ctx.scd_temp.type_code,
                         size: p1.ctx.scd_temp.size,
@@ -2055,6 +2057,13 @@ fn handle_pseudo(
                     if *pos < line.len() && line[*pos] != b';' {
                         p1.error(".val のオペランドが不正です");
                         return;
+                    }
+                    if let Some(ev) = p1.eval_const(&rpn) {
+                        p1.ctx.scd_temp.value = ev.value as u32;
+                        p1.ctx.scd_temp.section = if ev.section == 0 { -1 } else { ev.section as i16 };
+                    } else {
+                        // 非定数でも未定義シンボルでなければ section/value は保持できる場合がある。
+                        // ここでは旧実装同様に未更新（必要なら Pass3 で ScdVal イベントを評価）。
                     }
                     records.push(TempRecord::ScdVal { rpn });
                 }

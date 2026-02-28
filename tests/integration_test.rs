@@ -776,7 +776,11 @@ fn test_scd_records_are_emitted_in_pass1() {
         if matches!(rpn.as_slice(), [rhas::expr::RPNToken::Location, rhas::expr::RPNToken::End]))));
     assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdTag { name } if name.as_slice() == b"bar")));
     assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdFuncEnd)));
-    assert!(records.iter().any(|r| matches!(r, rhas::pass::temp::TempRecord::ScdEndef { name, .. } if name.as_slice() == b"foo")));
+    assert!(records.iter().any(|r| matches!(
+        r,
+        rhas::pass::temp::TempRecord::ScdEndef { name, value, section, .. }
+            if name.as_slice() == b"foo" && *value == 0 && *section == 1
+    )));
 }
 
 /// SCD疑似命令は Pass3 で ObjectCode.scd_events に収集される。
@@ -795,7 +799,25 @@ fn test_scd_events_are_collected_in_object() {
     let result = rhas::pass::assemble(&mut ctx).expect("assemble");
     assert!(result.obj.scd_events.iter().any(|e| matches!(e, rhas::object::ScdEvent::Ln { line, .. } if *line == 7)));
     assert!(result.obj.scd_events.iter().any(|e| matches!(e, rhas::object::ScdEvent::Val { .. })));
-    assert!(result.obj.scd_events.iter().any(|e| matches!(e, rhas::object::ScdEvent::Endef { name, .. } if name.as_slice() == b"foo")));
+    assert!(result.obj.scd_events.iter().any(|e| matches!(
+        e,
+        rhas::object::ScdEvent::Endef { name, value, section, .. }
+            if name.as_slice() == b"foo" && *value == 0 && *section == 1
+    )));
+}
+
+/// `.val` の定数式は Endef に section=-1 として保持される。
+#[test]
+fn test_scd_val_constant_is_preserved_in_endef_snapshot() {
+    let records = pass1_records(
+        b"\t.def\tfoo\n\t.val\t4\n\t.endef\n",
+        true,
+    );
+    assert!(records.iter().any(|r| matches!(
+        r,
+        rhas::pass::temp::TempRecord::ScdEndef { name, value, section, .. }
+            if name.as_slice() == b"foo" && *value == 4 && *section == -1
+    )));
 }
 
 /// `.request` は `$E001` レコードとして出力される。

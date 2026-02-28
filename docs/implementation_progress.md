@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 54件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 55件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -323,8 +323,13 @@
   - `src/object/mod.rs`: `ScdEvent` と `ObjectCode.scd_events` を追加
   - `src/pass/pass3.rs`: SCD `TempRecord` を `ScdEvent` として `ObjectCode` に反映
   - `tests/integration_test.rs`: `test_scd_events_are_collected_in_object` を追加
+- SCD `.val` の値/セクションを `.endef` スナップショットへ反映
+  - `src/context.rs`: `ScdTemp` に `value/section` を追加（既定 `section=-2`）
+  - `src/pass/pass1.rs`: `.val` で `ScdTemp` を更新し、`.endef` 時に `ScdEndef` へ伝搬
+  - `src/pass/temp.rs` / `src/object/mod.rs` / `src/pass/pass3.rs`: `value/section` フィールドを追加
+  - `tests/integration_test.rs`: `test_scd_val_constant_is_preserved_in_endef_snapshot` を追加
 - 検証結果（最新）
-  - `cargo test --test integration_test`: 54/54 通過
+  - `cargo test --test integration_test`: 55/55 通過
   - `cargo test --test golden_test`: 17/17 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 

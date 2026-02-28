@@ -737,10 +737,12 @@ pub fn pass3(
             TempRecord::ScdTag { name } => {
                 obj.scd_events.push(ScdEvent::Tag { name: name.clone() });
             }
-            TempRecord::ScdEndef { name, attrib, scl, type_code, size, dim, is_long } => {
+            TempRecord::ScdEndef { name, attrib, value, section, scl, type_code, size, dim, is_long } => {
                 obj.scd_events.push(ScdEvent::Endef {
                     name: name.clone(),
                     attrib: *attrib,
+                    value: *value,
+                    section: *section,
                     scl: *scl,
                     type_code: *type_code,
                     size: *size,
