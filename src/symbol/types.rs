@@ -336,6 +336,7 @@ pub enum InsnHandler {
     CInvPushA,   // CINVA/CPUSHA cache_set
     // FPU (68881/68882)
     FMove,       // FMOVE
+    FMoveM,      // FMOVEM (control-register subset)
     FMoveCr,     // FMOVECR
     FArith,      // FADD/FSUB/FMUL/FDIV
     FCmp,        // FCMP

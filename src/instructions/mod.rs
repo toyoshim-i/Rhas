@@ -237,6 +237,47 @@ fn encode_fmove(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Res
     Ok(out)
 }
 
+fn encode_fmovem(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    if !matches!(size, SizeCode::None | SizeCode::Word) {
+        return Err(InsnError::InvalidSize);
+    }
+    if operands.len() != 2 {
+        return Err(InsnError::OperandCount);
+    }
+    let cpid = base & 0x0E00;
+    let mut out = Vec::new();
+    match (&operands[0], &operands[1]) {
+        // fmovem fpcr/fpsr/fpiar,<ea>
+        (EffectiveAddress::FpCtrlReg(reg), ea) => {
+            let mask = match reg {
+                0 => 0x1000u16, // FPCR
+                1 => 0x0800u16, // FPSR
+                2 => 0x0400u16, // FPIAR
+                _ => return Err(InsnError::InvalidOperand),
+            };
+            let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
+            push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
+            push_word(&mut out, 0xA000 | mask);
+            out.extend_from_slice(&enc.ext_bytes);
+        }
+        // fmovem <ea>,fpcr/fpsr/fpiar
+        (ea, EffectiveAddress::FpCtrlReg(reg)) => {
+            let mask = match reg {
+                0 => 0x1000u16, // FPCR
+                1 => 0x0800u16, // FPSR
+                2 => 0x0400u16, // FPIAR
+                _ => return Err(InsnError::InvalidOperand),
+            };
+            let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
+            push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
+            push_word(&mut out, 0x8000 | mask);
+            out.extend_from_slice(&enc.ext_bytes);
+        }
+        _ => return Err(InsnError::InvalidOperand),
+    }
+    Ok(out)
+}
+
 /// RPN を定数評価する（シンボル参照があれば None）
 fn eval_const(rpn: &Rpn) -> Option<i32> {
     if rpn.is_empty() {
@@ -1719,6 +1760,7 @@ pub fn encode_insn(
         InsnHandler::CInvPushA    => encode_cinvpush_a(base_opcode, operands),
         // ---- FPU ----
         InsnHandler::FMove        => encode_fmove(base_opcode, size, operands),
+        InsnHandler::FMoveM       => encode_fmovem(base_opcode, size, operands),
         InsnHandler::FMoveCr      => encode_fmovecr(base_opcode, size, operands),
         InsnHandler::FArith       => encode_fop2(base_opcode, size, operands),
         InsnHandler::FCmp         => encode_fop2(base_opcode, size, operands),

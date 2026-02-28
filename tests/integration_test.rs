@@ -573,6 +573,34 @@ fn test_fmove_default_size_is_extend_for_memory_forms() {
     );
 }
 
+/// FMOVEM (control registers) のエンコード。
+#[test]
+fn test_fmovem_control_register_encoding() {
+    let src = b"\
+\t.68040\n\
+\t.fpid\t3\n\
+\tfmovem\tfpcr,(a0)\n\
+\tfmovem\tfpsr,(a0)\n\
+\tfmovem\tfpiar,(a0)\n\
+\tfmovem\t(a0),fpcr\n\
+\tfmovem\t(a0),fpsr\n\
+\tfmovem\t(a0),fpiar\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text section");
+    assert_eq!(
+        text.bytes,
+        vec![
+            0xF6, 0x10, 0xB0, 0x00,
+            0xF6, 0x10, 0xA8, 0x00,
+            0xF6, 0x10, 0xA4, 0x00,
+            0xF6, 0x10, 0x90, 0x00,
+            0xF6, 0x10, 0x88, 0x00,
+            0xF6, 0x10, 0x84, 0x00,
+        ]
+    );
+}
+
 /// FMOVECR は .x 以外のサイズを受け付けない。
 #[test]
 fn test_fmovecr_rejects_non_extend_size() {

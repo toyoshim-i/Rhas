@@ -215,3 +215,4 @@ golden_test_opt!(c4_core_opt);
 // ─── FPU tests ────────────────────────────────────────────────────────────────
 
 golden_test!(fpu_core);
+golden_test!(fmovem_ctrl);

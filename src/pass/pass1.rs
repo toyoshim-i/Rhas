@@ -926,6 +926,7 @@ fn handle_real_insn(
     if matches!(
         handler,
         InsnHandler::FMove
+            | InsnHandler::FMoveM
             | InsnHandler::FMoveCr
             | InsnHandler::FArith
             | InsnHandler::FCmp
