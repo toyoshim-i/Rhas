@@ -127,6 +127,11 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     pass2::pass2(&mut records, &mut sym);
 
     // ---- Pass 3: コード生成 → ObjectCode ----
+    let source_file = if ctx.opts.make_sym_deb && !ctx.scd_file.is_empty() {
+        ctx.scd_file.clone()
+    } else {
+        source_file
+    };
     let prn_enable = ctx.opts.make_prn;
     let max_align = ctx.max_align;
     let (mut obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file, prn_enable, max_align);

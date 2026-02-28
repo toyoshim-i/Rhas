@@ -729,6 +729,27 @@ fn test_scd_file_sets_debug_source_name() {
     assert_eq!(ctx.scd_file, b"main.c".to_vec());
 }
 
+/// `-g` + `.file` 指定時、B204文字列は `.file` 名を使う。
+#[test]
+fn test_scd_file_reflects_b204_filename() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\t.file\t\"main.c\"\n\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        make_sym_deb: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let pat = b"*main.c*";
+    assert!(
+        result.obj_bytes.windows(pat.len()).any(|w| w == pat),
+        "B204 payload should contain *main.c*"
+    );
+}
+
 /// `.request` は `$E001` レコードとして出力される。
 #[test]
 fn test_request_emits_e001_record() {
