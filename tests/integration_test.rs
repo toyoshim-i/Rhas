@@ -410,6 +410,34 @@ fn test_offsym_with_symbol_rejects_alignment_directives() {
     }
 }
 
+/// `.offsym` の上書きはデフォルトで警告、`ow_offsym` 有効時はエラー。
+#[test]
+fn test_offsym_overwrite_warning_and_error_mode() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"X\t.equ\t1\n\t.offsym\t2,X\n\t.text\n\tmoveq\t#X,d0\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts_warn = rhas::options::Options {
+        source_file: Some(path.clone()),
+        ..Default::default()
+    };
+    let mut ctx_warn = rhas::context::AssemblyContext::new(opts_warn);
+    let result = rhas::pass::assemble(&mut ctx_warn).expect("assemble warn mode");
+    assert!(result.num_warnings >= 1, "overwrite should emit warning in default mode");
+
+    let mut opts_err = rhas::options::Options {
+        source_file: Some(path),
+        ..Default::default()
+    };
+    opts_err.ow_offsym = true;
+    let mut ctx_err = rhas::context::AssemblyContext::new(opts_err);
+    match rhas::pass::assemble(&mut ctx_err) {
+        Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
+        Err(other) => panic!("unexpected error: {:?}", other),
+        Ok(_) => panic!("assemble should fail when ow_offsym is enabled"),
+    }
+}
+
 /// .if/.endif 条件アセンブル
 #[test]
 fn test_conditional_asm() {

@@ -8,7 +8,7 @@ rhas のテストは 3 層で構成される。
 |---|---|---|---|
 | ユニットテスト | `src/**` 内 `#[cfg(test)]` | 多数 | 個別モジュールの正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 17件 | HAS060.X との出力一致検証 |
-| 統合テスト | `tests/integration_test.rs` | 43件 | 3パス全体のエンドツーエンド |
+| 統合テスト | `tests/integration_test.rs` | 44件 | 3パス全体のエンドツーエンド |
 
 ```
 cargo test          # 全スイートを実行
@@ -156,7 +156,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 
 ---
 
-## 3. 統合テスト（43件）
+## 3. 統合テスト（44件）
 
 `tests/integration_test.rs` — 3パス全体を通した end-to-end 検証。
 
@@ -207,6 +207,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_offsym_without_symbol_behaves_like_offset` | `.offsym <expr>` が `.offset <expr>` と同等に動作すること |
 | `test_offsym_with_symbol_sets_symbol_value` | `.offsym <expr>,<sym>` がシンボルへ初期値を与えること |
 | `test_offsym_with_symbol_rejects_alignment_directives` | `.offsym <expr>,<sym>` 中の `.even/.quad/.align` がエラーになること |
+| `test_offsym_overwrite_warning_and_error_mode` | `.offsym` 上書きが通常は警告、`ow_offsym` 有効時はエラーになること |
 
 ---
 
@@ -275,6 +276,7 @@ diff $ORIG_O $RHAS_O
 | 2026-03-01 | `.comm/.rcomm/.rlcomm` 本実装 + `.sym` 表示改善の統合テストを追加 | 回帰なし（golden 17/17, integration 40/40, MS5比較 17一致/0差分） |
 | 2026-03-01 | `.offsym` 基本挙動（`.offset` 同等 + 初期値シンボル）を実装 | 回帰なし（golden 17/17, integration 42/42, MS5比較 17一致/0差分） |
 | 2026-03-01 | `.offsym` シンボル指定中の `.even/.quad/.align` 禁止を実装 | 回帰なし（golden 17/17, integration 43/43, MS5比較 17一致/0差分） |
+| 2026-03-01 | `.offsym` 上書き時の警告/禁止（`ow_offsym`）を実装 | 回帰なし（golden 17/17, integration 44/44, MS5比較 17一致/0差分） |
 
 ---
 

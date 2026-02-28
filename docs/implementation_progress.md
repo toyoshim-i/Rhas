@@ -256,7 +256,7 @@
 | テストスイート | 件数 | 状態 |
 |---|---|---|
 | ユニットテスト（src内 #[cfg(test)]） | 多数 | ✅ 全通過 |
-| 統合テスト（tests/integration_test.rs） | 43件 | ✅ 全通過 |
+| 統合テスト（tests/integration_test.rs） | 44件 | ✅ 全通過 |
 | ゴールデンテスト（tests/golden_test.rs） | 17件 | ✅ 全通過 |
 
 ---
@@ -294,8 +294,11 @@
   - `src/context.rs`: `offsym_with_symbol` フラグを追加（セクション切替で自動解除）
   - `src/pass/pass1.rs`: `.offsym <expr>,<sym>` 中の `.even/.quad/.align` をエラー化
   - `tests/integration_test.rs`: `test_offsym_with_symbol_rejects_alignment_directives` を追加
+- `.offsym` 上書き時の `ow_offsym` 挙動を実装
+  - `src/pass/pass1.rs`: 上書き禁止モード（`ow_offsym`）ではエラー、通常は警告カウントを加算
+  - `tests/integration_test.rs`: `test_offsym_overwrite_warning_and_error_mode` を追加
 - 検証結果（最新）
-  - `cargo test --test integration_test`: 43/43 通過
+  - `cargo test --test integration_test`: 44/44 通過
   - `cargo test --test golden_test`: 17/17 通過
   - `tests/compare_ms5_simple.sh`: 17一致 / 0差分
 

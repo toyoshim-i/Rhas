@@ -87,6 +87,15 @@ impl<'a> P1Ctx<'a> {
         self.ctx.num_errors += 1;
     }
 
+    /// 警告を報告して count を増やす
+    fn warn(&mut self, msg: &str) {
+        eprintln!("{:<16} {:6}: Warning: {}",
+            String::from_utf8_lossy(&self.current_pos.filename),
+            self.current_pos.line,
+            msg);
+        self.ctx.num_warnings += 1;
+    }
+
     fn section_id(&self) -> u8 {
         if self.ctx.is_offset_mode { 0 } else { self.ctx.section as u8 }
     }
@@ -2108,11 +2117,15 @@ fn handle_pseudo(
                     p1.error(".offsym のシンボル名がありません");
                     return;
                 }
+                let mut warn_overwrite = false;
                 match p1.sym.lookup_sym_mut(&name) {
                     Some(Symbol::Value { attrib, section, first, value, ext_attrib, .. }) => {
-                        if *first != FirstDef::Offsym && *attrib >= DefAttrib::Define && p1.ctx.opts.ow_offsym {
-                            p1.error(".offsym 以外で定義済みのシンボルは上書きできません");
-                            return;
+                        if *first != FirstDef::Offsym && *attrib >= DefAttrib::Define {
+                            if p1.ctx.opts.ow_offsym {
+                                p1.error(".offsym 以外で定義済みのシンボルは上書きできません");
+                                return;
+                            }
+                            warn_overwrite = true;
                         }
                         *attrib = DefAttrib::Define;
                         *ext_attrib = ExtAttrib::None;
@@ -2136,6 +2149,9 @@ fn handle_pseudo(
                         };
                         p1.sym.define(name, sym);
                     }
+                }
+                if warn_overwrite {
+                    p1.warn(".offsym により既存シンボルを上書きしました");
                 }
                 has_symbol = true;
                 skip_spaces(line, pos);
