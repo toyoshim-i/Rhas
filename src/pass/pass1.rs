@@ -1364,6 +1364,62 @@ fn parse_operands(
         Some(EffectiveAddress::Immediate(vec![RPNToken::ValueWord(mask), RPNToken::End]))
     }
 
+    fn parse_fp_ctrl_list_token(
+        line: &[u8],
+        pos: &mut usize,
+        sym: &SymbolTable,
+        cpu_type: u16,
+    ) -> Option<EffectiveAddress> {
+        let saved = *pos;
+
+        let parse_one = |s: &[u8]| -> Option<u16> {
+            match sym.lookup_reg(s, cpu_type) {
+                Some(Symbol::Register { regno, .. }) => match *regno {
+                    reg::FPCR => Some(0x1000),
+                    reg::FPSR => Some(0x0800),
+                    reg::FPIAR => Some(0x0400),
+                    _ => None,
+                },
+                _ => None,
+            }
+        };
+
+        let mut p = *pos;
+        let mut mask: u16 = 0;
+        let mut any = false;
+        loop {
+            if p >= line.len() || !line[p].is_ascii_alphabetic() {
+                break;
+            }
+            let start = p;
+            while p < line.len() && (line[p].is_ascii_alphanumeric() || line[p] == b'_') {
+                p += 1;
+            }
+            if let Some(m) = parse_one(&line[start..p]) {
+                mask |= m;
+                any = true;
+            } else {
+                break;
+            }
+            let mut q = p;
+            skip_spaces(line, &mut q);
+            if q < line.len() && line[q] == b'/' {
+                p = q + 1;
+                skip_spaces(line, &mut p);
+                continue;
+            }
+            p = q;
+            break;
+        }
+
+        if !any {
+            *pos = saved;
+            return None;
+        }
+        *pos = p;
+        Some(EffectiveAddress::Immediate(vec![RPNToken::ValueWord(mask), RPNToken::End]))
+    }
+
     fn parse_fp_register_token(
         line: &[u8],
         pos: &mut usize,
@@ -1408,11 +1464,13 @@ fn parse_operands(
 
     loop {
         if pos >= line.len() || line[pos] == b';' { break; }
-        match parse_fp_reg_list_token(line, &mut pos, sym, cpu_type)
+        match parse_fp_ctrl_list_token(line, &mut pos, sym, cpu_type)
+            .map(Ok)
+            .unwrap_or_else(|| parse_fp_reg_list_token(line, &mut pos, sym, cpu_type)
             .map(Ok)
             .unwrap_or_else(|| parse_fp_register_token(line, &mut pos, sym, cpu_type)
             .map(Ok)
-            .unwrap_or_else(|| parse_ea(line, &mut pos, sym, cpu_type)))
+            .unwrap_or_else(|| parse_ea(line, &mut pos, sym, cpu_type))))
         {
             Ok(ea) => ops.push(ea),
             Err(_) => break,

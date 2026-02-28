@@ -649,6 +649,26 @@ fn test_fmovem_fpreg_dynamic_list_encoding() {
     );
 }
 
+/// FMOVEM FPCR 複合指定（fpcr/fpsr 形式）のエンコード。
+#[test]
+fn test_fmovem_fpctrl_list_encoding() {
+    let src = b"\
+\t.68040\n\
+\t.fpid\t3\n\
+\tfmovem.l\tfpcr/fpsr,(a0)\n\
+\tfmovem.l\t(a0),fpcr/fpsr\n\
+";
+    let result = assemble_src(src);
+    let text = result.obj.sections.iter().find(|s| s.id == 1).expect("text");
+    assert_eq!(
+        text.bytes,
+        [
+            0xF6, 0x10, 0xB8, 0x00, // fmovem.l fpcr/fpsr,(a0)
+            0xF6, 0x10, 0x98, 0x00, // fmovem.l (a0),fpcr/fpsr
+        ]
+    );
+}
+
 /// FBcc / FDBcc の基本エンコード（.w/.l と CPID 反映）。
 #[test]
 fn test_fbcc_fdbcc_encoding() {

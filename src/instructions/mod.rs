@@ -276,23 +276,35 @@ fn encode_fmovem(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
         }
         // fmovem <fplist>,<ea> (FPn -> mem, static list)
         (EffectiveAddress::Immediate(rpn), ea) => {
-            let mask = eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u16 & 0x00FF;
+            let raw = eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u16;
             let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
             push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
-            let ext = if matches!(ea, EffectiveAddress::AddrRegPreDec(_)) {
-                0xE000u16 | ((mask as u8).reverse_bits() as u16)
+            let ctrl_mask = raw & 0x1C00;
+            let ext = if ctrl_mask != 0 {
+                0xA000u16 | ctrl_mask
             } else {
-                0xF000u16 | mask
+                let mask = raw & 0x00FF;
+                if matches!(ea, EffectiveAddress::AddrRegPreDec(_)) {
+                    0xE000u16 | ((mask as u8).reverse_bits() as u16)
+                } else {
+                    0xF000u16 | mask
+                }
             };
             push_word(&mut out, ext);
             out.extend_from_slice(&enc.ext_bytes);
         }
         // fmovem <ea>,<fplist> (mem -> FPn, static list)
         (ea, EffectiveAddress::Immediate(rpn)) => {
-            let mask = eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u16 & 0x00FF;
+            let raw = eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u16;
             let enc = encode_ea(ea, 2).map_err(map_enc_err)?;
             push_word(&mut out, 0xF000 | cpid | enc.ea_field as u16);
-            push_word(&mut out, 0xD000 | mask);
+            let ctrl_mask = raw & 0x1C00;
+            let ext = if ctrl_mask != 0 {
+                0x8000u16 | ctrl_mask
+            } else {
+                0xD000u16 | (raw & 0x00FF)
+            };
+            push_word(&mut out, ext);
             out.extend_from_slice(&enc.ext_bytes);
         }
         // fmovem <dn>,<ea> (FPn -> mem, dynamic list)

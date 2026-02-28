@@ -21,6 +21,8 @@
 	fmovem	(a0),fpcr
 	fmovem	(a0),fpsr
 	fmovem	(a0),fpiar
+	fmovem.l	fpcr/fpsr,(a0)
+	fmovem.l	(a0),fpcr/fpsr
 	fmovem.x	fp0/fp1,(a0)
 	fmovem.x	(a0),fp0/fp1
 	fmovem.x	fp0/fp1,-(a0)
