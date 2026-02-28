@@ -348,7 +348,7 @@
   - `tests/integration_test.rs`: `test_g_option_scd_footer_contains_bf_ef_entries` を追加
   - HAS 直接比較（簡易サンプル）: サイズ差分が `-152` → `-44` へ改善
 - SCD の延長名（exname）領域出力を追加
-  - `src/object/writer.rs`: `.file` が8文字超の場合に `EXNAMELEN` と末尾 exname データを出力
+  - `src/object/writer.rs`: `.file` が14文字超の場合に `EXNAMELEN` と末尾 exname データを出力
   - `tests/integration_test.rs`: `test_g_option_scd_footer_emits_exname_for_long_filename` を追加
 - 検証結果（最新）
   - `cargo test --test integration_test`: 60/60 通過

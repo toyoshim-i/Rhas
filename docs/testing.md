@@ -223,7 +223,7 @@ golden_test_opt!(addq_opt);  // assemble_file_c4() を使う
 | `test_scd_val_constant_is_preserved_in_endef_snapshot` | `.val` の定数式が `.endef` スナップショットに `section=-1` として保持されること |
 | `test_g_option_emits_scd_footer_after_terminator` | `-g` 時に `$0000` 後ろへ SCD フッタ（長さ3つ + テーブル）が出力されること |
 | `test_g_option_scd_footer_contains_bf_ef_entries` | `-g` 時の SCD フッタに `.bf` / `.ef` エントリが含まれること |
-| `test_g_option_scd_footer_emits_exname_for_long_filename` | 8文字超の `.file` 名が exname 領域へ出力されること |
+| `test_g_option_scd_footer_emits_exname_for_long_filename` | 14文字超の `.file` 名が exname 領域へ出力されること |
 
 ---
 
@@ -305,6 +305,7 @@ diff $ORIG_O $RHAS_O
 | 2026-03-01 | SCD フッタ出力骨格（`$0000` 後ろの長さ3つ + テーブル）を実装 | 回帰なし（golden 17/17, integration 56/56, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD フッタへ `func/.bf/.ef` 自動エントリを追加 | 回帰なし（golden 17/17, integration 57/57, MS5比較 17一致/0差分） |
 | 2026-03-01 | SCD フッタの exname 領域出力（長名 `.file`）を追加 | 回帰なし（golden 17/17, integration 58/58, MS5比較 17一致/0差分） |
+| 2026-03-01 | `.file` の exname 条件を 14文字超へ修正（HAS仕様寄せ） | 回帰なし（golden 17/17, integration 60/60, MS5比較 17一致/0差分） |
 
 ---
 
