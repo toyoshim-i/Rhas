@@ -2163,3 +2163,29 @@ fn test_c4_lea_disp_to_addq() {
     // LEA (4,A4),A4 -> ADDQ.W #4,A4
     assert_eq!(text.bytes, [0x58, 0x4C]);
 }
+
+// ---- ColdFire CPU 選択 ----
+
+#[test]
+fn test_coldfire_cpu5200_directive() {
+    let src = b"\t.5200\n\tnop\n";
+    let (_result, ctx) = assemble_with_ctx(src);
+    assert_eq!(ctx.cpu_number, 5200);
+    assert_ne!(ctx.cpu_type & rhas::options::cpu::C520, 0);
+}
+
+#[test]
+fn test_coldfire_cpu5300_directive() {
+    let src = b"\t.5300\n\tnop\n";
+    let (_result, ctx) = assemble_with_ctx(src);
+    assert_eq!(ctx.cpu_number, 5300);
+    assert_ne!(ctx.cpu_type & rhas::options::cpu::C530, 0);
+}
+
+#[test]
+fn test_coldfire_cpu5400_directive() {
+    let src = b"\t.5400\n\tnop\n";
+    let (_result, ctx) = assemble_with_ctx(src);
+    assert_eq!(ctx.cpu_number, 5400);
+    assert_ne!(ctx.cpu_type & rhas::options::cpu::C540, 0);
+}

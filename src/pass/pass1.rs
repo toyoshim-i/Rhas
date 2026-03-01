@@ -2160,6 +2160,18 @@ fn handle_pseudo(
             p1.ctx.set_cpu(68060, cpuconst::C060);
             records.push(TempRecord::Cpu { number: 68060, cpu_type: cpuconst::C060 });
         }
+        InsnHandler::Cpu5200 => {
+            p1.ctx.set_cpu(5200, cpuconst::C520);
+            records.push(TempRecord::Cpu { number: 5200, cpu_type: cpuconst::C520 });
+        }
+        InsnHandler::Cpu5300 => {
+            p1.ctx.set_cpu(5300, cpuconst::C530);
+            records.push(TempRecord::Cpu { number: 5300, cpu_type: cpuconst::C530 });
+        }
+        InsnHandler::Cpu5400 => {
+            p1.ctx.set_cpu(5400, cpuconst::C540);
+            records.push(TempRecord::Cpu { number: 5400, cpu_type: cpuconst::C540 });
+        }
 
         // ---- リスト制御 ----
         InsnHandler::List => {
