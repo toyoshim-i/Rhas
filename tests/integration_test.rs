@@ -2207,3 +2207,37 @@ fn test_cpu_directive_5200() {
     assert_eq!(ctx.cpu_number, 5200);
     assert_ne!(ctx.cpu_type & rhas::options::cpu::C520, 0);
 }
+
+// ---- FBcc/FDBcc 外部参照 ----
+
+#[test]
+fn test_fbcc_xref_generates_reloc() {
+    let src = b"\
+\t.68040\n\
+\t.xref\tEXTLABEL\n\
+\t.text\n\
+\tfbeq\tEXTLABEL\n";
+    let (result, ctx) = assemble_with_ctx(src);
+    assert_eq!(ctx.num_errors, 0, "should assemble without errors");
+    // 外部参照シンボルが登録されていること
+    assert!(result.obj.ext_syms.iter().any(|s| s.name.as_slice() == b"EXTLABEL"),
+            "EXTLABEL should be in ext_syms");
+    // HLK バイナリに 0x65 リロケーションレコードが存在すること
+    assert!(result.obj_bytes.windows(2).any(|w| w[0] == 0x65),
+            "0x65 reloc record should exist");
+}
+
+#[test]
+fn test_fdbcc_xref_generates_reloc() {
+    let src = b"\
+\t.68040\n\
+\t.xref\tEXTLABEL\n\
+\t.text\n\
+\tfdbeq\td0,EXTLABEL\n";
+    let (result, ctx) = assemble_with_ctx(src);
+    assert_eq!(ctx.num_errors, 0, "should assemble without errors");
+    assert!(result.obj.ext_syms.iter().any(|s| s.name.as_slice() == b"EXTLABEL"),
+            "EXTLABEL should be in ext_syms");
+    assert!(result.obj_bytes.windows(2).any(|w| w[0] == 0x65),
+            "0x65 reloc record should exist");
+}

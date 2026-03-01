@@ -877,48 +877,78 @@ fn process_deferred(
     // FBcc は PC 相対分岐をここで解決する
     if matches!(handler, InsnHandler::FBcc) {
         let pc = ctx.location();
-        let target_addr = match ext_info.first() {
-            Some(None) => match resolved_ops.first() {
-                Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
-                    match rpn.first() {
-                        Some(RPNToken::Value(v)) => *v as i32,
-                        _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; }
+        match ext_info.first() {
+            Some(None) => {
+                // 内部参照
+                let target_addr = match resolved_ops.first() {
+                    Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
+                        match rpn.first() {
+                            Some(RPNToken::Value(v)) => *v as i32,
+                            _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; }
+                        }
                     }
-                }
-                _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; }
-            },
-            _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; } // 外部参照は未対応
-        };
-        let disp = target_addr - (pc as i32 + 2);
-        let mut opcode_word = base;
-        match size {
-            SizeCode::Long => {
-                opcode_word |= 0x0040;
-                ctx.emit(&[
-                    (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
-                    ((disp >> 24) & 0xFF) as u8, ((disp >> 16) & 0xFF) as u8,
-                    ((disp >> 8) & 0xFF) as u8, (disp & 0xFF) as u8,
-                ]);
-            }
-            SizeCode::Word | SizeCode::None => {
-                if !(-32768..=32767).contains(&disp) {
-                    if matches!(size, SizeCode::None) {
+                    _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; }
+                };
+                let disp = target_addr - (pc as i32 + 2);
+                let mut opcode_word = base;
+                match size {
+                    SizeCode::Long => {
                         opcode_word |= 0x0040;
                         ctx.emit(&[
                             (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
                             ((disp >> 24) & 0xFF) as u8, ((disp >> 16) & 0xFF) as u8,
                             ((disp >> 8) & 0xFF) as u8, (disp & 0xFF) as u8,
                         ]);
-                    } else {
+                    }
+                    SizeCode::Word | SizeCode::None => {
+                        if !(-32768..=32767).contains(&disp) {
+                            if matches!(size, SizeCode::None) {
+                                opcode_word |= 0x0040;
+                                ctx.emit(&[
+                                    (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
+                                    ((disp >> 24) & 0xFF) as u8, ((disp >> 16) & 0xFF) as u8,
+                                    ((disp >> 8) & 0xFF) as u8, (disp & 0xFF) as u8,
+                                ]);
+                            } else {
+                                ctx.emit_zeros(4);
+                                ctx.num_errors += 1;
+                            }
+                        } else {
+                            let dw = disp as i16 as u16;
+                            ctx.emit(&[
+                                (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
+                                (dw >> 8) as u8, (dw & 0xFF) as u8,
+                            ]);
+                        }
+                    }
+                    _ => {
                         ctx.emit_zeros(4);
                         ctx.num_errors += 1;
                     }
-                } else {
-                    let dw = disp as i16 as u16;
-                    ctx.emit(&[
-                        (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
-                        (dw >> 8) as u8, (dw & 0xFF) as u8,
-                    ]);
+                }
+            }
+            Some(Some(EaExtKind::SimpleAbs(name))) => {
+                // 外部参照: PC相対リロケーションレコードを生成
+                match size {
+                    SizeCode::Word | SizeCode::None => {
+                        let name = name.clone();
+                        let xref_num = ctx.get_or_add_xref(name);
+                        ctx.emit(&[(base >> 8) as u8, (base & 0xFF) as u8]);
+                        let loc = ctx.location(); // ディスプレースメントワードのアドレス
+                        ctx.advance(2);
+                        ctx.flush_code_buf();
+                        ctx.flush_dsb();
+                        let sect = ctx.cur_sect;
+                        ctx.code_body.extend_from_slice(&[0x65, sect]);
+                        ctx.code_body.extend_from_slice(&loc.to_be_bytes());
+                        ctx.code_body.push((xref_num >> 8) as u8);
+                        ctx.code_body.push(xref_num as u8);
+                    }
+                    _ => {
+                        // .l 形式の外部参照: 未対応
+                        ctx.advance(6);
+                        ctx.num_errors += 1;
+                    }
                 }
             }
             _ => {
@@ -936,32 +966,56 @@ fn process_deferred(
             Some(EffectiveAddress::DataReg(n)) => *n,
             _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
         };
-        let target_addr = match ext_info.get(1) {
-            Some(None) => match resolved_ops.get(1) {
-                Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
-                    match rpn.first() {
-                        Some(RPNToken::Value(v)) => *v as i32,
-                        _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
-                    }
-                }
-                _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
-            },
-            _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; } // 外部参照は未対応
-        };
         let opcode_word = 0xF048u16 | (base & 0x0E00) | (dn as u16);
         let cond_word = base & 0x001F;
-        let disp = target_addr - (pc as i32 + 4);
-        if !(-32768..=32767).contains(&disp) {
-            ctx.emit_zeros(6);
-            ctx.num_errors += 1;
-            return;
+        match ext_info.get(1) {
+            Some(None) => {
+                // 内部参照
+                let target_addr = match resolved_ops.get(1) {
+                    Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
+                        match rpn.first() {
+                            Some(RPNToken::Value(v)) => *v as i32,
+                            _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
+                        }
+                    }
+                    _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
+                };
+                let disp = target_addr - (pc as i32 + 4);
+                if !(-32768..=32767).contains(&disp) {
+                    ctx.emit_zeros(6);
+                    ctx.num_errors += 1;
+                    return;
+                }
+                let dw = disp as i16 as u16;
+                ctx.emit(&[
+                    (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
+                    (cond_word >> 8) as u8, (cond_word & 0xFF) as u8,
+                    (dw >> 8) as u8, (dw & 0xFF) as u8,
+                ]);
+            }
+            Some(Some(EaExtKind::SimpleAbs(name))) => {
+                // 外部参照: opcode + cond 出力後、PC相対リロケーションレコードを生成
+                let name = name.clone();
+                let xref_num = ctx.get_or_add_xref(name);
+                ctx.emit(&[
+                    (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
+                    (cond_word >> 8) as u8, (cond_word & 0xFF) as u8,
+                ]);
+                let loc = ctx.location(); // ディスプレースメントワードのアドレス
+                ctx.advance(2);
+                ctx.flush_code_buf();
+                ctx.flush_dsb();
+                let sect = ctx.cur_sect;
+                ctx.code_body.extend_from_slice(&[0x65, sect]);
+                ctx.code_body.extend_from_slice(&loc.to_be_bytes());
+                ctx.code_body.push((xref_num >> 8) as u8);
+                ctx.code_body.push(xref_num as u8);
+            }
+            _ => {
+                ctx.emit_zeros(6);
+                ctx.num_errors += 1;
+            }
         }
-        let dw = disp as i16 as u16;
-        ctx.emit(&[
-            (opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
-            (cond_word >> 8) as u8, (cond_word & 0xFF) as u8,
-            (dw >> 8) as u8, (dw & 0xFF) as u8,
-        ]);
         return;
     }
 
