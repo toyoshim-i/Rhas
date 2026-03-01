@@ -58,11 +58,11 @@ SCD まわりで現在固定している仕様:
 - `.file` の exname は 14 文字超で使用
 - SCD フッタの SCD エントリ列は `len` 依存の可変長
 
-## 現在の結果（2026-03-01）
+## 現在の結果（2026-03-02）
 - `cargo clippy --all-targets --all-features`: 警告ゼロ
 - `cargo test --lib --quiet`: 184/184 pass
 - `cargo test --test integration_test --quiet`: 97/97 pass
-- `cargo test --test golden_test --quiet`: 43/63 pass（20件は既知の互換ギャップ）
+- `cargo test --test golden_test --quiet`: 47/63 pass（16件は既知の互換ギャップ）
 - `cargo test --test error_message_test --quiet`: 13/35 pass（22件は `#[ignore]` 仕様記録）
 - `./tests/compare_ms5_simple.sh`: 17/17 一致
 - `./tests/compare_ms6_extended.sh`: 19/19 一致

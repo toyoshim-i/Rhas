@@ -1,6 +1,6 @@
 # Rhas 実装進捗
 
-## 現在の状態（2026-03-01）
+## 現在の状態（2026-03-02）
 - ベース: HAS060X.X v1.2.5 / HAS v3.09+91
 - MS5: 達成（比較対象 17/17 一致）
 - MS6: 達成（FPU/SCD/残互換機能を実装）
@@ -44,20 +44,21 @@
 | clippy | ✅ 警告ゼロ |
 | ユニット（184） | ✅ 全通過 |
 | 統合（97） | ✅ 全通過 |
-| ゴールデン（63） | 43 pass / 20 fail（既知の互換ギャップ） |
+| ゴールデン（63） | 47 pass / 16 fail（既知の互換ギャップ） |
 | エラーメッセージ比較（35） | 13 pass / 22 ignored（仕様記録） |
 | MS5簡易比較（17） | ✅ 全一致 |
 | MS6拡張比較（19） | ✅ 全一致 |
 
 ## 既知の互換ギャップ
 ColdFire CPU 選択 / `.cpu` 数式パラメータ / FBcc・FDBcc 外部参照 / Bcc.L・FBcc.L RPN リロケーションの4件は対応済み。
-ゴールデンテスト 20 件の不一致は 68020+ 命令・EA・最適化レベル差異等。詳細は [verification_backlog.md](verification_backlog.md) 参照。
+ゴールデンテスト 16 件の不一致は 68020+ EA・最適化レベル差異等。詳細は [verification_backlog.md](verification_backlog.md) 参照。
 
 ## 検証残タスク
 - 互換ギャップ・検証テスト拡充は全完了。
 - 残りはクリーンアップ系（優先度C）のみ。詳細は [verification_backlog.md](verification_backlog.md) を参照。
 
 ## 直近コミット（ドキュメント時点）
+- ゴールデンテスト ERROR 上位3件修正（4テスト pass 化）: ネストマクロ、ビットフィールド、CAS2/DIVSL/DIVUL/MULS.L長形式
 - clippy 警告全件修正（84件→0件）: doc comment 変換、range contains、collapsible match 等
 - `4e0d997` Add comprehensive golden and error tests to map HAS060.X compatibility gaps
 - `1d75cb2` Support Bcc.L and FBcc.L external reference with RPN relocation

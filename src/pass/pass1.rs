@@ -1238,6 +1238,16 @@ fn parse_branch_target(line: &[u8], mut pos: usize) -> Option<Rpn> {
 }
 
 /// operand → EffectiveAddress 列
+/// Bitfield {offset:width} 内の値は AbsLong/AbsShort ではなく Immediate として扱う
+fn abs_to_imm(ea: EffectiveAddress) -> EffectiveAddress {
+    match ea {
+        EffectiveAddress::AbsLong(rpn) | EffectiveAddress::AbsShort(rpn) => {
+            EffectiveAddress::Immediate(rpn)
+        }
+        other => other,
+    }
+}
+
 fn parse_operands(
     line:     &[u8],
     mut pos:  usize,
@@ -1509,7 +1519,39 @@ fn parse_operands(
             .map(Ok)
             .unwrap_or_else(|| parse_ea(line, &mut pos, sym, cpu_type)))))
         {
-            Ok(ea) => ops.push(ea),
+            Ok(ea) => {
+                ops.push(ea);
+                // Bitfield suffix {offset:width}
+                if pos < line.len() && line[pos] == b'{' {
+                    pos += 1;
+                    skip_spaces(line, &mut pos);
+                    match parse_ea(line, &mut pos, sym, cpu_type) {
+                        Ok(off) => ops.push(abs_to_imm(off)),
+                        Err(_) => break,
+                    }
+                    skip_spaces(line, &mut pos);
+                    if pos < line.len() && line[pos] == b':' {
+                        pos += 1;
+                        skip_spaces(line, &mut pos);
+                        match parse_ea(line, &mut pos, sym, cpu_type) {
+                            Ok(w) => ops.push(abs_to_imm(w)),
+                            Err(_) => break,
+                        }
+                    }
+                    skip_spaces(line, &mut pos);
+                    if pos < line.len() && line[pos] == b'}' { pos += 1; }
+                }
+                // Register pair Dn:Dm or EA pair (An):(Am) for CAS2/MULS.L etc.
+                if pos < line.len() && line[pos] == b':' {
+                    let save = pos;
+                    pos += 1;
+                    skip_spaces(line, &mut pos);
+                    match parse_ea(line, &mut pos, sym, cpu_type) {
+                        Ok(pair) => ops.push(pair),
+                        Err(_) => { pos = save; }
+                    }
+                }
+            }
             Err(_) => break,
         }
         skip_spaces(line, &mut pos);
@@ -3499,8 +3541,8 @@ fn convert_line_params(
                 i += 1;
             }
             let name = &line[start..i];
-            // サイズサフィックス ('.' の直後) でなければ仮引数をチェック
-            if prev != Some(b'.') {
+            // サイズサフィックス ('.' の直後) や '\' の直後は置換しない
+            if prev != Some(b'.') && prev != Some(b'\\') {
                 if let Some(idx) = params.iter().position(|p| {
                     p.len() == name.len() && p.iter().zip(name.iter()).all(|(a, b2)| {
                         a.eq_ignore_ascii_case(b2)

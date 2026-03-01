@@ -430,6 +430,16 @@ fn addr_reg(ea: &EffectiveAddress) -> Option<u8> {
     if let EffectiveAddress::AddrReg(n) = ea { Some(*n) } else { None }
 }
 
+/// CAS2 の (Rn) オペランドからレジスタコードを取得
+/// AddrRegInd(n) → 8+n, DataReg(n) → n
+fn cas2_reg(ea: &EffectiveAddress) -> Option<u8> {
+    match ea {
+        EffectiveAddress::AddrRegInd(n) => Some(8 + n),
+        EffectiveAddress::DataReg(n) => Some(*n),
+        _ => None,
+    }
+}
+
 /// Immediate の RPN を返す
 fn imm_rpn(ea: &EffectiveAddress) -> Option<&Rpn> {
     if let EffectiveAddress::Immediate(rpn) = ea { Some(rpn) } else { None }
@@ -1024,10 +1034,50 @@ fn encode_exg(operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
     Ok(v)
 }
 
-/// MULU/MULS/DIVU/DIVS <ea>, Dn (68000 word form only)
+/// MULU/MULS/DIVU/DIVS <ea>, Dn
 ///
-/// base_opcode: MULU=0xC0C0, MULS=0xC1C0, DIVU=0x80C0, DIVS=0x81C0
-fn encode_divmul(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+/// Word form (68000): base_opcode encodes operation type
+///   MULU=0xC0C0, MULS=0xC1C0, DIVU=0x80C0, DIVS=0x81C0
+///
+/// Long form (68020+): opcode 0x4C00 (mul) or 0x4C40 (div)
+///   Extension word: Dq<<12 | sign_bit<<11 | size_bit<<10 | Dh/Dr
+///   2 operands: <ea>,Dq (32-bit result)
+///   3 operands: <ea>,Dh:Dl or <ea>,Dr:Dq (64-bit or remainder)
+fn encode_divmul(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    if size == SizeCode::Long {
+        // 68020+ long form
+        let is_signed = (base & 0x0100) != 0; // MULS=0xC1C0, DIVS=0x81C0 have bit 8 set
+        let is_div = (base & 0x4000) == 0;     // DIVU=0x80C0, DIVS=0x81C0 have bit 14 clear
+        let long_base = if is_div { 0x4C40u16 } else { 0x4C00u16 };
+        let sign_bit = if is_signed { 0x0800u16 } else { 0 };
+
+        if operands.len() == 2 {
+            // <ea>,Dq → 32-bit result
+            let dq = data_reg(&operands[1]).ok_or(InsnError::InvalidOperand)?;
+            let src_enc = enc(&operands[0], 2)?; // long = op_size 2
+            let ext = ((dq as u16) << 12) | sign_bit | (dq as u16);
+            let mut v = Vec::new();
+            push_word(&mut v, long_base | (src_enc.ea_field as u16));
+            push_word(&mut v, ext);
+            v.extend_from_slice(&src_enc.ext_bytes);
+            return Ok(v);
+        } else if operands.len() == 3 {
+            // <ea>,Dh:Dl (mul 64-bit) or <ea>,Dr:Dq (div with remainder)
+            let dh_or_dr = data_reg(&operands[1]).ok_or(InsnError::InvalidOperand)?;
+            let dl_or_dq = data_reg(&operands[2]).ok_or(InsnError::InvalidOperand)?;
+            let src_enc = enc(&operands[0], 2)?;
+            let size_bit = if is_div { 0u16 } else { 0x0400u16 }; // mul: 64-bit flag; div: 32-bit dividend
+            let ext = ((dl_or_dq as u16) << 12) | sign_bit | size_bit | (dh_or_dr as u16);
+            let mut v = Vec::new();
+            push_word(&mut v, long_base | (src_enc.ea_field as u16));
+            push_word(&mut v, ext);
+            v.extend_from_slice(&src_enc.ext_bytes);
+            return Ok(v);
+        }
+        return Err(InsnError::OperandCount);
+    }
+
+    // Word form (68000)
     if operands.len() != 2 {
         return Err(InsnError::OperandCount);
     }
@@ -1037,6 +1087,55 @@ fn encode_divmul(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, In
     let mut v = Vec::new();
     push_word(&mut v, word);
     v.extend_from_slice(&src_enc.ext_bytes);
+    Ok(v)
+}
+
+/// DIVSL.L/DIVUL.L <ea>,Dr:Dq (68020+)
+///
+/// Base opcode: 0x4C41 for DIVSL (signed, bit 0 as marker),
+///              0x4C40 for DIVUL (unsigned).
+/// Operands: [<ea>, Dr, Dq]
+fn encode_divsl_ul(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    if operands.len() != 3 {
+        return Err(InsnError::OperandCount);
+    }
+    let dr = data_reg(&operands[1]).ok_or(InsnError::InvalidOperand)?;
+    let dq = data_reg(&operands[2]).ok_or(InsnError::InvalidOperand)?;
+    let src_enc = enc(&operands[0], 2)?;
+    let sign_bit = if (base & 1) != 0 { 0x0800u16 } else { 0 };
+    let real_base = base & !1;
+    let ext = ((dq as u16) << 12) | sign_bit | (dr as u16);
+    let mut v = Vec::new();
+    push_word(&mut v, real_base | (src_enc.ea_field as u16));
+    push_word(&mut v, ext);
+    v.extend_from_slice(&src_enc.ext_bytes);
+    Ok(v)
+}
+
+/// CAS2.W/CAS2.L Dc1:Dc2,Du1:Du2,(Rn1):(Rn2) (68020+)
+///
+/// Operands: [Dc1, Dc2, Du1, Du2, (Rn1), (Rn2)]
+fn encode_cas2(size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
+    if operands.len() != 6 {
+        return Err(InsnError::OperandCount);
+    }
+    let dc1 = data_reg(&operands[0]).ok_or(InsnError::InvalidOperand)?;
+    let dc2 = data_reg(&operands[1]).ok_or(InsnError::InvalidOperand)?;
+    let du1 = data_reg(&operands[2]).ok_or(InsnError::InvalidOperand)?;
+    let du2 = data_reg(&operands[3]).ok_or(InsnError::InvalidOperand)?;
+    let rn1 = cas2_reg(&operands[4]).ok_or(InsnError::InvalidOperand)?;
+    let rn2 = cas2_reg(&operands[5]).ok_or(InsnError::InvalidOperand)?;
+    let opcode = match size {
+        SizeCode::Word => 0x0CFCu16,
+        SizeCode::Long => 0x0EFCu16,
+        _ => return Err(InsnError::InvalidSize),
+    };
+    let ext1 = ((rn1 as u16) << 12) | ((du1 as u16) << 6) | (dc1 as u16);
+    let ext2 = ((rn2 as u16) << 12) | ((du2 as u16) << 6) | (dc2 as u16);
+    let mut v = Vec::new();
+    push_word(&mut v, opcode);
+    push_word(&mut v, ext1);
+    push_word(&mut v, ext2);
     Ok(v)
 }
 
@@ -1520,8 +1619,8 @@ fn parse_bitfield_ext(ops: &[EffectiveAddress]) -> Option<(u16, usize)> {
     if ops.len() < 3 { return None; }
     let offset_ext = match &ops[1] {
         EffectiveAddress::DataReg(r) => {
-            // レジスタ offset: bit 11 set
-            0x0800u16 | ((*r & 7) as u16)
+            // レジスタ offset: bit 11 set, register in bits 8-6
+            0x0800u16 | (((*r & 7) as u16) << 6)
         }
         EffectiveAddress::Immediate(rpn) => {
             let v = eval_const(rpn)? as u16 & 0x1F;
@@ -1816,7 +1915,7 @@ pub fn encode_insn(
         InsnHandler::SubAddI   => encode_subaddi(base_opcode, size, operands),
         InsnHandler::SbAdCpA   => encode_sbadcpa(base_opcode, size, operands),
         InsnHandler::SubAddX   => encode_subaddx(base_opcode, size, operands),
-        InsnHandler::DivMul    => encode_divmul(base_opcode, operands),
+        InsnHandler::DivMul    => encode_divmul(base_opcode, size, operands),
         InsnHandler::NegNot    => encode_negnot(base_opcode, size, operands),
         InsnHandler::Clr       => encode_clr(base_opcode, size, operands),
         InsnHandler::Tst       => encode_tst(base_opcode, size, operands),
@@ -1862,6 +1961,8 @@ pub fn encode_insn(
         InsnHandler::MoveC        => encode_movec(base_opcode, operands),
         InsnHandler::PackUnpk     => encode_packunpk(base_opcode, operands),
         InsnHandler::CasInsn      => encode_cas(base_opcode, size, operands),
+        InsnHandler::Cas2Insn     => encode_cas2(size, operands),
+        InsnHandler::DivSlUl      => encode_divsl_ul(base_opcode, operands),
         InsnHandler::CmpChk2      => encode_cmpchk2(base_opcode, size, operands),
         InsnHandler::Move16Insn   => encode_move16(operands),
         InsnHandler::CInvPushLP   => encode_cinvpush_lp(base_opcode, operands),

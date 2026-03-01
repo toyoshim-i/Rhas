@@ -15,6 +15,7 @@
 fn assemble_file(path: &str) -> Vec<u8> {
     let opts = rhas::options::Options {
         source_file: Some(path.as_bytes().to_vec()),
+        all_xref: true,
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
@@ -28,6 +29,7 @@ fn assemble_file(path: &str) -> Vec<u8> {
 fn assemble_file_c4(path: &str) -> Vec<u8> {
     let opts = rhas::options::Options {
         source_file: Some(path.as_bytes().to_vec()),
+        all_xref:       true,
         opt_clr:        true,
         opt_movea:      true,
         opt_adda_suba:  true,
@@ -52,6 +54,7 @@ fn assemble_file_c4(path: &str) -> Vec<u8> {
 fn assemble_file_c0(path: &str) -> Vec<u8> {
     let opts = rhas::options::Options {
         source_file: Some(path.as_bytes().to_vec()),
+        all_xref: true,
         optimize_disabled: true,
         no_quick: true,
         no_null_disp: true,
@@ -68,6 +71,7 @@ fn assemble_file_c0(path: &str) -> Vec<u8> {
 fn assemble_file_c2(path: &str) -> Vec<u8> {
     let opts = rhas::options::Options {
         source_file: Some(path.as_bytes().to_vec()),
+        all_xref: true,
         no_null_disp: true,
         no_bra_cut: true,
         ..Default::default()
@@ -82,6 +86,7 @@ fn assemble_file_c2(path: &str) -> Vec<u8> {
 fn assemble_file_g(path: &str) -> Vec<u8> {
     let opts = rhas::options::Options {
         source_file: Some(path.as_bytes().to_vec()),
+        all_xref: true,
         make_sym_deb: true,
         make_align: true,
         ..Default::default()

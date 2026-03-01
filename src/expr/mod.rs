@@ -671,11 +671,11 @@ pub fn parse_expr(src: &[u8], pos: &mut usize) -> Result<Rpn, ParseError> {
 // ----------------------------------------------------------------
 
 fn is_ident_start(b: u8) -> bool {
-    b.is_ascii_alphabetic() || b == b'_' || b == b'.' || b == b'?' || b == b'@' || b == b'~'
+    b.is_ascii_alphabetic() || b == b'_' || b == b'.' || b == b'?' || b == b'@' || b == b'~' || b == b'\\'
 }
 
 fn is_ident_cont(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || b == b'_' || b == b'$' || b == b'?' || b == b'@' || b == b'~'
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'$' || b == b'?' || b == b'@' || b == b'~' || b == b'\\'
 }
 
 fn hex_digit(b: u8) -> u8 {

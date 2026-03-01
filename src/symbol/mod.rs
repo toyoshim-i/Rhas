@@ -575,6 +575,9 @@ static OPCODE_TABLE: &[OpcodeEntry] = &[
     OpcodeEntry::op("pack",   InsnHandler::PackUnpk,    0x8140, C020_UP, sz::NONE, sz::NONE),
     OpcodeEntry::op("unpk",   InsnHandler::PackUnpk,    0x8180, C020_UP, sz::NONE, sz::NONE),
     OpcodeEntry::op("cas",    InsnHandler::CasInsn,     0x08C0, C020_UP, sz::BWL, sz::NONE),
+    OpcodeEntry::op("cas2",   InsnHandler::Cas2Insn,    0x0CFC, C020_UP, sz::WL,  sz::NONE),
+    OpcodeEntry::op("divsl",  InsnHandler::DivSlUl,     0x4C41, C020_UP, sz::L,   sz::NONE),
+    OpcodeEntry::op("divul",  InsnHandler::DivSlUl,     0x4C40, C020_UP, sz::L,   sz::NONE),
     OpcodeEntry::op("cmp2",   InsnHandler::CmpChk2,     0x0000, C020_UP, sz::BWL, sz::NONE),
     OpcodeEntry::op("chk2",   InsnHandler::CmpChk2,     0x0800, C020_UP, sz::BWL, sz::NONE),
     // TRAPcc バリアント

@@ -332,6 +332,8 @@ pub enum InsnHandler {
     MoveC,       // MOVEC Rn,CReg / MOVEC CReg,Rn
     PackUnpk,    // PACK/UNPK
     CasInsn,     // CAS Dc,Du,<ea>
+    Cas2Insn,    // CAS2.W/CAS2.L Dc1:Dc2,Du1:Du2,(Rn1):(Rn2)
+    DivSlUl,     // DIVSL.L/DIVUL.L <ea>,Dr:Dq
     CmpChk2,     // CMP2/CHK2 <ea>,Rn
     Move16Insn,  // MOVE16 (Ax)+,(Ay)+ 等
     CInvPushLP,  // CINVL/CINVP/CPUSHL/CPUSHP cache_set,(An)

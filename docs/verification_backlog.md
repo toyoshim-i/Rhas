@@ -3,9 +3,9 @@
 ## 目的
 実装完了後の互換性検証を、優先度付きで継続管理する。
 
-## 現在の前提（2026-03-01）
+## 現在の前提（2026-03-02）
 - `cargo test`: pass（警告ゼロ）
-- `golden_test`: 43/63 pass（既存25 + 新規18 pass / 新規11 MISMATCH + 9 ERROR）
+- `golden_test`: 47/63 pass（既存25 + 新規22 pass / 新規7 MISMATCH + 5 ERROR）
 - `integration_test`: 97/97 pass
 - `error_message_test`: 13/35 pass + 22 ignored（異常系仕様テスト）
 - `compare_ms5_simple.sh`: 17/17 一致
@@ -57,10 +57,10 @@
 | `expr_bitwise` | ビット演算式 (~, &, \|, ^, <<, >>) | MISMATCH | 132 vs 156 bytes（rhas が小さい） |
 | `pseudo_offset` | .offset 疑似命令 | MISMATCH | 104 vs 100 bytes |
 | `ea_020` | 68020 EA (indexed+scale) | ERROR | PC相対indexed構文パース失敗 |
-| `insn_bfld` | ビットフィールド (BFTST等) | ERROR | `{offset:width}` 構文未対応 |
-| `insn_cas` | CAS2 (68020) | ERROR | CAS2 命令未対応 |
-| `insn_muldiv_l` | DIVSL/DIVUL (68020) | ERROR | DIVSL/DIVUL 命令未対応 |
-| `pseudo_macro_adv` | ネストマクロ/rept/irp | ERROR | ネストマクロ呼び出し失敗 |
+| `insn_bfld` | ビットフィールド (BFTST等) | **PASS** | `{offset:width}` 構文対応済み |
+| `insn_cas` | CAS2 (68020) | **PASS** | CAS2 命令対応済み |
+| `insn_muldiv_l` | DIVSL/DIVUL (68020) | **PASS** | DIVSL/DIVUL + MULS.L/MULU.L/DIVS.L/DIVU.L 長形式対応済み |
+| `pseudo_macro_adv` | ネストマクロ/rept/irp | **PASS** | `\` エスケープ + `-u` フラグ対応済み |
 
 ### Round 2: 最適化レベル / SCD / MOVEM / MOVEP / ローカルラベル
 
@@ -105,9 +105,9 @@
 
 | 結果 | Round 1 | Round 2 | Round 3 | Round 4 | 合計 |
 |---|---|---|---|---|---|
-| PASS | 2 | 4 | 4 | 5 | **15** |
+| PASS | 6 | 4 | 4 | 5 | **19** |
 | MISMATCH | 4 | 4 | 2 | 1 | **11** |
-| ERROR | 5 | 1 | 3 | 0 | **9** |
+| ERROR | 1 | 1 | 3 | 0 | **5** |
 | **合計** | 11 | 9 | 9 | 6 | **35** |
 
 ### 最適化比較テスト
@@ -166,9 +166,9 @@ HAS060.X と rhas の異常系動作を比較。26 件追加（うち 22 件は 
 ### 修正優先度
 
 **高（ERROR — 機能欠落）:**
-1. ネストマクロ呼び出し — 実用コードで頻出
-2. ビットフィールド命令 — 68020 コード生成の基本
-3. CAS2 / DIVSL・DIVUL — 68020 命令の欠落
+1. ~~ネストマクロ呼び出し~~ — 対応済み（`\` エスケープ + `-u` フラグ）
+2. ~~ビットフィールド命令~~ — 対応済み（`{offset:width}` 構文 + レジスタオフセットエンコード修正）
+3. ~~CAS2 / DIVSL・DIVUL~~ — 対応済み（CAS2 + MULS.L/MULU.L/DIVS.L/DIVU.L 長形式 + DIVSL/DIVUL）
 4. 68020 EA indexed+scale 構文
 5. 単一レジスタ MOVEM パース
 6. メモリ間接アドレッシング（68020+）
