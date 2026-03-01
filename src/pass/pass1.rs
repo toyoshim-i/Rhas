@@ -21,19 +21,6 @@ use super::temp::TempRecord;
 // エラー型
 // ----------------------------------------------------------------
 
-/// Pass1 エラー
-#[derive(Debug)]
-pub enum Pass1Error {
-    /// .include でファイルが見つからない
-    IncludeNotFound(Vec<u8>),
-    /// ネストが深すぎる（.include / .if 等）
-    TooDeep,
-    /// 致命的エラー（.fail）
-    Fatal(Vec<u8>),
-    /// IO エラー
-    Io(std::io::Error),
-}
-
 // ----------------------------------------------------------------
 // Pass1 コンテキスト
 // ----------------------------------------------------------------
@@ -107,12 +94,6 @@ impl<'a> P1Ctx<'a> {
 
     fn set_section(&mut self, sec: Section) {
         self.ctx.set_section(sec);
-    }
-
-    fn set_location(&mut self, v: u32) {
-        let idx = self.ctx.section as usize - 1;
-        self.ctx.loc_ctr[idx] = v;
-        self.ctx.loc_top = v;
     }
 
     /// シンボル定義（ロケーションラベル）
@@ -1229,7 +1210,7 @@ fn handle_real_insn(
                 });
             }
         }
-        Err(e) => {
+        Err(_) => {
             p1.error_code(ErrorCode::Expr, None);
         }
     }
@@ -3807,4 +3788,3 @@ fn extract_mnemonic(line: &[u8]) -> Vec<u8> {
 // SymbolTable::lookup_sym_mut は symbol/mod.rs に実装済み
 
 // ダミーハンドラ（未実装 If/Ifne/Ifeq エイリアス対応）
-trait InsnHandlerAlias {}

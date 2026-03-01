@@ -1208,11 +1208,6 @@ fn encode_orandeorimm(base: u16, size: SizeCode, operands: &[EffectiveAddress]) 
     Ok(v)
 }
 
-/// NOT <ea>（NegNot ハンドラと共用）
-fn encode_not(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
-    encode_negnot(base, size, operands)
-}
-
 /// BTST/BSET/BCLR/BCHG #imm/<Dn>, <ea>
 ///
 /// 2 forms:

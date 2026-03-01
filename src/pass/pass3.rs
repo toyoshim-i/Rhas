@@ -15,17 +15,6 @@ use super::prn::PrnLine;
 use super::temp::TempRecord;
 
 // ----------------------------------------------------------------
-// Pass3 エラー
-// ----------------------------------------------------------------
-
-#[derive(Debug)]
-pub enum Pass3Error {
-    UndefinedSymbol(Vec<u8>),
-    BranchOutOfRange { offset: i32 },
-    Encoding,
-}
-
-// ----------------------------------------------------------------
 // EA 外部参照種別
 // ----------------------------------------------------------------
 
@@ -311,21 +300,6 @@ fn is_simple_external(rpn: &Rpn) -> Option<&Vec<u8>> {
     None
 }
 
-/// RPN トークンを定数として評価する（数値リテラルまたは定数 .equ シンボル）
-fn token_as_const(tok: &RPNToken, sym: &SymbolTable) -> Option<i32> {
-    match tok {
-        RPNToken::Value(v)     => Some(*v as i32),
-        RPNToken::ValueWord(v) => Some(*v as i32),
-        RPNToken::ValueByte(v) => Some(*v as i32),
-        RPNToken::SymbolRef(name) => {
-            // .equ 定数シンボルの場合は値を取得
-            sym.lookup_sym(name).and_then(sym_to_eval)
-                .filter(|v| v.is_constant())
-                .map(|v| v.value as i32)
-        }
-        _ => None,
-    }
-}
 
 /// RPN が「単一 XREF + 定数オフセット」に簡約できるかチェック。
 ///

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// HLK オブジェクトファイル形式の型定義
 ///
 /// docs/hlk_object_format.md 参照。

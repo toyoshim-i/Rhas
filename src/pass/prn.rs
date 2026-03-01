@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// PRNリストファイル生成（-p オプション）
 ///
 /// HAS060X互換のリストファイルフォーマット:
@@ -19,8 +20,10 @@ pub struct PrnLine {
     pub is_macro:  bool,
 }
 
-/// PRN出力のデフォルト設定
+/// PRN出力のデフォルト設定（テストで使用）
+#[cfg(test)]
 const DEFAULT_PRN_CODE_WIDTH: usize = 16;   // コード部文字数 (8バイト = 16 hex chars)
+#[cfg(test)]
 const DEFAULT_PRN_LINE_WIDTH: usize = 136;  // 全体幅
 
 /// PRNリストをバイト列として生成する
