@@ -860,7 +860,7 @@ fn flatten_paths(paths: &[Vec<u8>]) -> Vec<u8> {
 
 /// CPU番号をCPUタイプビットに変換する。
 /// 返値: Some（CPUナンバー, CPUタイプ）または None（不正な値）
-fn cpu_number_to_type(n: u32) -> Option<(u32, u16)> {
+pub fn cpu_number_to_type(n: u32) -> Option<(u32, u16)> {
     match n {
         68000 => Some((68000, cpu::C000)),
         68010 => Some((68010, cpu::C010)),

@@ -2134,7 +2134,22 @@ fn handle_pseudo(
 
         // ---- .cpu / CPU 指定 ----
         InsnHandler::Cpu => {
-            // .cpu <name> 形式のパラメータ処理は省略
+            skip_spaces(line, pos);
+            if let Ok(rpn) = parse_expr(line, pos) {
+                if let Some(v) = p1.eval_const(&rpn) {
+                    let num = v.value as u32;
+                    if let Some((cnum, ctype)) = crate::options::cpu_number_to_type(num) {
+                        p1.ctx.set_cpu(cnum, ctype);
+                        records.push(TempRecord::Cpu { number: cnum, cpu_type: ctype });
+                    } else {
+                        p1.error_code(ErrorCode::FeatureCpu, None);
+                    }
+                } else {
+                    p1.error_code(ErrorCode::Expr, None);
+                }
+            } else {
+                p1.error_code(ErrorCode::Expr, None);
+            }
         }
         InsnHandler::Cpu68000 => {
             p1.ctx.set_cpu(68000, cpuconst::C000);

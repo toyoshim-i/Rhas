@@ -2189,3 +2189,21 @@ fn test_coldfire_cpu5400_directive() {
     assert_eq!(ctx.cpu_number, 5400);
     assert_ne!(ctx.cpu_type & rhas::options::cpu::C540, 0);
 }
+
+// ---- .cpu 式指定 ----
+
+#[test]
+fn test_cpu_directive_68020() {
+    let src = b"\t.cpu\t68020\n\tnop\n";
+    let (_result, ctx) = assemble_with_ctx(src);
+    assert_eq!(ctx.cpu_number, 68020);
+    assert_ne!(ctx.cpu_type & rhas::options::cpu::C020, 0);
+}
+
+#[test]
+fn test_cpu_directive_5200() {
+    let src = b"\t.cpu\t5200\n\tnop\n";
+    let (_result, ctx) = assemble_with_ctx(src);
+    assert_eq!(ctx.cpu_number, 5200);
+    assert_ne!(ctx.cpu_type & rhas::options::cpu::C520, 0);
+}

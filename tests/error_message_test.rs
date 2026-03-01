@@ -127,3 +127,15 @@ start:\n\
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("シンボル start を .offsym で上書きしました"));
 }
+
+#[test]
+fn test_error_message_cpu_invalid_number() {
+    let out = run_rhas(b"\t.cpu\t99999\n");
+    assert!(!out.status.success(), "assemble should fail");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+
+    assert!(stderr.contains("未対応の cpu です"), "stderr: {}", stderr);
+    assert!(stdout.contains("エラーが 1 個ありました"));
+}
