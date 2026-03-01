@@ -418,6 +418,32 @@ fn emit_rofst(code_body: &mut Vec<u8>, size: u8, xref_num: u16, offset: i32) {
     code_body.extend_from_slice(&(offset as u32).to_be_bytes());
 }
 
+/// PC 相対 RPN リロケーションを code_body に出力 (flush 済み前提)
+///
+/// 原典 outpcdisp7 相当: XREF シンボルを RPN で参照し、ベースアドレスを
+/// 減算してディスプレースメントを求める。リンカが最終解決を行う。
+///   $80FF xref_num          — XREF シンボル値をスタックに積む
+///   $80xx base_addr(4B)     — ベースアドレス（section 付き）をスタックに積む
+///   $A00F                   — 減算（target - base = displacement）
+///   $92/$99/$93 $00         — サイズ終端（long/word/short）
+fn emit_pc_rel_rpn(ctx: &mut P3Ctx<'_>, xref_num: u16, base_addr: u32, size_code: u8) {
+    // XREF シンボル
+    ctx.code_body.push(0x80);
+    ctx.code_body.push(0xFF);
+    ctx.code_body.push((xref_num >> 8) as u8);
+    ctx.code_body.push(xref_num as u8);
+    // ベースアドレス (section + 4バイトアドレス)
+    ctx.code_body.push(0x80);
+    ctx.code_body.push(ctx.cur_sect);
+    ctx.code_body.extend_from_slice(&base_addr.to_be_bytes());
+    // 減算演算子 (Sub = 0x0F)
+    ctx.code_body.push(0xA0);
+    ctx.code_body.push(0x0F);
+    // サイズ終端
+    ctx.code_body.push(size_code);
+    ctx.code_body.push(0x00);
+}
+
 /// RPN 式を HLK RPN 式レコードとして code_body に出力
 ///
 /// $80FF xref_num (外部), $80xx value (内部/定数), $A0xx (演算子), $9x00 (終端)
@@ -944,9 +970,20 @@ fn process_deferred(
                         ctx.code_body.push((xref_num >> 8) as u8);
                         ctx.code_body.push(xref_num as u8);
                     }
+                    SizeCode::Long => {
+                        // .l 形式の外部参照: RPN リロケーション
+                        let name = name.clone();
+                        let xref_num = ctx.get_or_add_xref(name);
+                        let opcode_word = base | 0x0040;
+                        ctx.emit(&[(opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8]);
+                        let base_addr = ctx.location(); // ディスプレースメント基準 = pc + 2
+                        ctx.advance(4);
+                        ctx.flush_code_buf();
+                        ctx.flush_dsb();
+                        emit_pc_rel_rpn(ctx, xref_num, base_addr, 0x92);
+                    }
                     _ => {
-                        // .l 形式の外部参照: 未対応
-                        ctx.advance(6);
+                        ctx.emit_zeros(4);
                         ctx.num_errors += 1;
                     }
                 }
@@ -1269,9 +1306,14 @@ fn process_branch(
             let xref_num = ctx.get_or_add_xref(e);
             match req_size {
                 Some(SizeCode::Long) => {
-                    // .l 形式の外部参照: 未対応
-                    ctx.advance(6);
-                    ctx.num_errors += 1;
+                    // .l 形式の外部参照: RPN リロケーション
+                    // opcode = $xxFF (long form indicator), 4バイトディスプレースメント
+                    ctx.emit(&[(opcode >> 8) as u8, 0xFF]);
+                    let base_addr = ctx.location(); // ディスプレースメント基準 = pc + 2
+                    ctx.advance(4);
+                    ctx.flush_code_buf();
+                    ctx.flush_dsb();
+                    emit_pc_rel_rpn(ctx, xref_num, base_addr, 0x92);
                 }
                 Some(SizeCode::Short) => {
                     // .s 形式: オペコードのみ出力、ディスプレースメントはリンカが提供

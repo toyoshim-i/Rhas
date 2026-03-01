@@ -2241,3 +2241,46 @@ fn test_fdbcc_xref_generates_reloc() {
     assert!(result.obj_bytes.windows(2).any(|w| w[0] == 0x65),
             "0x65 reloc record should exist");
 }
+
+// ---- Bcc.L / FBcc.L 外部参照 (RPN リロケーション) ----
+
+#[test]
+fn test_bcc_long_xref_generates_rpn_reloc() {
+    let src = b"\
+\t.68020\n\
+\t.xref\tEXTLABEL\n\
+\t.text\n\
+\tbeq.l\tEXTLABEL\n";
+    let (result, ctx) = assemble_with_ctx(src);
+    assert_eq!(ctx.num_errors, 0, "should assemble without errors");
+    assert!(result.obj.ext_syms.iter().any(|s| s.name.as_slice() == b"EXTLABEL"),
+            "EXTLABEL should be in ext_syms");
+    // RPN リロケーション: $80FF (xref push) + $A00F (subtract) + $92xx (long store)
+    let bytes = &result.obj_bytes;
+    assert!(bytes.windows(2).any(|w| w[0] == 0x80 && w[1] == 0xFF),
+            "0x80FF xref RPN entry should exist");
+    assert!(bytes.windows(2).any(|w| w[0] == 0xA0 && w[1] == 0x0F),
+            "0xA00F subtract operator should exist");
+    assert!(bytes.windows(2).any(|w| w[0] == 0x92 && w[1] == 0x00),
+            "0x9200 long size terminator should exist");
+}
+
+#[test]
+fn test_fbcc_long_xref_generates_rpn_reloc() {
+    let src = b"\
+\t.68040\n\
+\t.xref\tEXTLABEL\n\
+\t.text\n\
+\tfbeq.l\tEXTLABEL\n";
+    let (result, ctx) = assemble_with_ctx(src);
+    assert_eq!(ctx.num_errors, 0, "should assemble without errors");
+    assert!(result.obj.ext_syms.iter().any(|s| s.name.as_slice() == b"EXTLABEL"),
+            "EXTLABEL should be in ext_syms");
+    let bytes = &result.obj_bytes;
+    assert!(bytes.windows(2).any(|w| w[0] == 0x80 && w[1] == 0xFF),
+            "0x80FF xref RPN entry should exist");
+    assert!(bytes.windows(2).any(|w| w[0] == 0xA0 && w[1] == 0x0F),
+            "0xA00F subtract operator should exist");
+    assert!(bytes.windows(2).any(|w| w[0] == 0x92 && w[1] == 0x00),
+            "0x9200 long size terminator should exist");
+}
