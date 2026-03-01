@@ -61,11 +61,13 @@
 - dead_code の大半は「原典に要素はあるが Rust 実行経路に未接続」または「移植中の補助コード残り」。
 - 直ちに「機能欠落」と断定できるものは限定的だが、`error.rs` 経路と `AsmPass` 遷移は互換性観点で優先確認対象。
 - 進捗: 第3回として「失敗再現テスト先行」で `AsmPass` 遷移と warning レベル反映を接続し、回帰セット（87/25/7, 17/19比較）を再通過。
+- 進捗: 第4回として pass1 の全 `error()`/`warn()` インライン呼び出しを `error_code()`/`warn_code()` に置換し、`error.rs` テーブル経由に統一。回帰セット（88/25/8）を再通過。
 
 ## 優先度A'（テスト欠落補完: 接続忘れ検知）
 1. `error.rs` 出力経路の到達テスト追加
 - 目的: `print_error`/`print_warning` 相当経路が実際に使用されることを検証し、未接続を検知可能にする
 - 完了条件: 到達を確認するテストを追加し、接続修正の前後で挙動差を検出できる
+- 状態: pass1 のエラー経路は対応済み。`error()` インライン呼び出しを全廃し `error_code()` / `warn_code()` 経由に統一。ErrorCode 12種（BadOpe/Forced/NoSymMacro/NoSymPseudo/Redef/RedefOffsym/IlSymValue/IlOpr/IlOprTooMany/IlValue/Expr/OffsymAlign）および WarnCode 1種（REDEF_OFFSYM）が接続済み。error_message_test 8件通過。
 
 2. Pass 遷移（1→2→3）可視化テスト追加
 - 目的: `AsmPass` が原典想定どおり遷移するかを検証し、状態未更新を検知可能にする

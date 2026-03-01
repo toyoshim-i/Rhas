@@ -42,9 +42,9 @@
 | スイート | 状態 |
 |---|---|
 | ユニット | ✅ 全通過 |
-| 統合（87） | ✅ 全通過 |
+| 統合（88） | ✅ 全通過 |
 | ゴールデン（25） | ✅ 全通過 |
-| エラーメッセージ比較（6） | ✅ 全通過 |
+| エラーメッセージ比較（8） | ✅ 全通過 |
 | MS5簡易比較（17） | ✅ 全一致 |
 | MS6拡張比較（19） | ✅ 全一致 |
 
@@ -52,10 +52,10 @@
 - 優先度A/Bで管理していた MS6 由来の互換検証残タスクは完了。
 
 ## 直近コミット（ドキュメント時点）
-- `9fff931` Refresh README and backlog status for completed MS6 coverage
-- `3357147` Add FSINCOS golden fixture and update test metrics
-- `69b16e0` Enforce FMOVEM size constraints and add boundary error tests
-- `c7f52bd` Implement FSINCOS encoding compatibility and coverage
+- `65a6f0e` Eliminate all inline error() calls in pass1, route through error table
+- `93ddd7b` Connect error/warning table output paths for offsym in pass1
+- `6a0581f` Connect pass transitions and warning level handling with regression tests
+- `46b4772` Refactor pass2 branch sizing and continue warning cleanup
 
 ## 参照
 - [README](../README.md)
