@@ -16,6 +16,7 @@
 - 対象: `cargo test` 実行時の `unused` / `dead_code` 系 warning
 - 条件: 互換性テスト（`golden/integration/error_message/compare_ms5/compare_ms6`）を全通過した状態でのみマージ
 - 進捗: 第1回として `unused import` / `unused var` / `unused mut` / `unused_doc_comment` の一部を除去済み（互換テスト全通過を確認）
+- 進捗: 第2回として `pass2` 分岐最適化ロジックを式化し、未使用再エクスポート警告を整理。互換テスト（87/25/6, 17/19比較）を再通過
 
 2. 実装コメントの「未対応」整理（優先度C）
 - 対象: 例として `pass3` の外部参照未対応コメントなど、将来仕様として残すか実装対象にするか未確定の箇所

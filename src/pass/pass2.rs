@@ -85,11 +85,7 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
             }
             TempRecord::Branch { opcode, req_size, cur_size, suppressed, target } => {
                 let loc = loc_ctr[cur_sect];
-                let mut new_cur_size: Option<crate::symbol::types::SizeCode>;
-                let mut new_suppressed = false;
-
-                // サイズ未指定（自動）形式のみ最適化
-                if req_size.is_none() {
+                let (new_cur_size, new_suppressed) = if req_size.is_none() {
                     if let Some(ev) = eval_target(sym, target, loc, cur_sect as u8 + 1) {
                         // 同一セクション参照のみ最適化対象
                         if ev.section as u8 == cur_sect as u8 + 1 {
@@ -105,29 +101,28 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
                             };
                             // 直後への bra/bcc は命令自体を削除（bsr は除外）
                             if offset == next_offset && !is_bsr(*opcode) {
-                                new_suppressed = true;
-                                new_cur_size = None;
+                                (None, true)
                             } else if *suppressed {
                                 // HAS互換: 一度サプレス(0)になった自動分岐は、
                                 // 再出現時にまず .s として復活させる。
-                                new_cur_size = Some(crate::symbol::types::SizeCode::Short);
+                                (Some(crate::symbol::types::SizeCode::Short), false)
                             } else if can_shrink_to_short(*cur_size, loc, ev.value as u32, offset) {
                                 // HAS互換: 前方分岐では短縮に伴ってターゲットも前詰めされるため、
                                 // w→s で +2, l→s で +4 まで許容される。
-                                new_cur_size = Some(crate::symbol::types::SizeCode::Short);
+                                (Some(crate::symbol::types::SizeCode::Short), false)
                             } else {
-                                new_cur_size = None; // word
+                                (None, false) // word
                             }
                         } else {
-                            new_cur_size = None; // セクション違いは最適化しない
+                            (None, false) // セクション違いは最適化しない
                         }
                     } else {
-                        new_cur_size = None; // 未確定は最適化しない
+                        (None, false) // 未確定は最適化しない
                     }
                 } else {
                     // 明示サイズはサプレスしない
-                    new_cur_size = *req_size;
-                }
+                    (*req_size, false)
+                };
 
                 if *cur_size != new_cur_size || *suppressed != new_suppressed {
                     *cur_size = new_cur_size;

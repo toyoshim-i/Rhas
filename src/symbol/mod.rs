@@ -304,12 +304,6 @@ const C010_UP: CpuMask = CpuMask(
     crate::options::cpu::C030 | crate::options::cpu::C040 |
     crate::options::cpu::C060
 );
-/// 68020以降 + CF530/CF540
-const C020_CF53: CpuMask = CpuMask(
-    crate::options::cpu::C020 | crate::options::cpu::C030 |
-    crate::options::cpu::C040 | crate::options::cpu::C060 |
-    crate::options::cpu::C530 | crate::options::cpu::C540
-);
 /// 全68k + CF530/CF540（C520を含まない - divu/divs用）
 const M68K_CF53: CpuMask = CpuMask(
     crate::options::cpu::C000 | crate::options::cpu::C010 |

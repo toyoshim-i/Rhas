@@ -7,7 +7,9 @@
 pub mod rpn;
 pub mod eval;
 
+#[allow(unused_imports)]
 pub use rpn::{Operator, RPNToken, Rpn};
+#[allow(unused_imports)]
 pub use eval::{EvalError, EvalValue, eval_rpn};
 
 use rpn::Operator as Op;
@@ -390,6 +392,7 @@ impl<'a> Parser<'a> {
     }
 
     /// 文字定数 'A' / 'AB' / 'ABC' / 'ABCD'（最大 4 文字）
+    #[allow(dead_code)]
     fn parse_char_const(&mut self) -> Result<u32, ParseError> {
         self.parse_char_const_with_close(b'\'')
     }
