@@ -80,11 +80,33 @@ SCD まわりで現在固定している仕様:
 - 2 は実行可能環境では必須、未実行時は未実行理由を記録する
 - 互換性変更を含む場合は 1+2 を両方実行して結果をドキュメント反映する
 
+## dead_code 調査・修正ルール（接続忘れ優先）
+`dead_code` を減らす際は「単純削除」ではなく、まず接続忘れを疑う。
+
+1. 判定
+- `cargo test --lib --quiet` と `cargo test --bin rhas --quiet` を分離実行し、warning の発生ターゲットを特定する
+- 原典（`external/has060xx/src`）に同等の処理経路がある場合は「未接続候補」とする
+
+2. 修正順序
+- 先に「期待挙動を落とすテスト」を追加して失敗を再現する
+- 次に接続修正を実装する
+- 最後に既存リグレッションセット（integration/golden/error_message/compare_ms5/compare_ms6）を全実行する
+
+3. 判定基準
+- 既存テストだけ通っても未接続候補はクローズしない
+- 新規テストで「未接続経路を通ること」を確認できた場合のみクローズする
+
 ## テスト追加ルール
 1. 単体ロジックはユニットテストを優先
 2. HAS 互換性を確認するものはゴールデンテスト
 3. パス間相互作用やファイル出力仕様は統合テスト
 4. 仕様変更時は docs とテスト名を同時更新
+
+## 直近追加の検知テスト（2026-03-01）
+- `tests/integration_test.rs::test_assemble_sets_final_pass_to_pass3`
+  - `assemble()` が `AsmPass::Pass1→Pass2→Pass3` を反映して終了することを固定
+- `tests/error_message_test.rs::test_warning_level_zero_suppresses_offsym_warning`
+  - `-w0` 指定時に `.offsym` 上書き warning が抑止されることを固定
 
 ## 検証バックログ
 残タスクは [verification_backlog.md](verification_backlog.md) で優先度付き管理に統一する。

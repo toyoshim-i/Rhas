@@ -48,6 +48,21 @@ fn assemble_src_c4(src: &[u8]) -> rhas::pass::AssembleResult {
     rhas::pass::assemble(&mut ctx).expect("assemble")
 }
 
+/// コンテキストを返しつつアセンブルする（pass遷移確認用）。
+fn assemble_with_ctx(src: &[u8]) -> (rhas::pass::AssembleResult, rhas::context::AssemblyContext) {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(src).expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    (result, ctx)
+}
+
 /// ソーステキストを Pass1 のみ実行し、生成された TempRecord を返す。
 fn pass1_records(src: &[u8], make_sym_deb: bool) -> Vec<rhas::pass::temp::TempRecord> {
     let buf = rhas::source::SourceBuf::from_bytes(src.to_vec(), PathBuf::from("inline.s"));
@@ -113,6 +128,12 @@ fn test_ms1_move_b_d0_d1() {
     // 終端 00 00 であること
     let len = result.obj_bytes.len();
     assert_eq!(&result.obj_bytes[len-2..], &[0x00, 0x00], "HLK terminator");
+}
+
+#[test]
+fn test_assemble_sets_final_pass_to_pass3() {
+    let (_result, ctx) = assemble_with_ctx(b"\tnop\n");
+    assert_eq!(ctx.pass, rhas::context::AsmPass::Pass3);
 }
 
 /// 複数命令のアセンブル

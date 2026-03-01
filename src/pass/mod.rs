@@ -10,6 +10,7 @@ pub mod pass3;
 pub mod prn;
 
 use crate::context::AssemblyContext;
+use crate::context::AsmPass;
 use crate::object::writer::write_hlk;
 use crate::object::ObjectCode;
 use crate::source::{parse_include_paths, SourceBuf, SourceStack};
@@ -121,12 +122,15 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     let mut sym = SymbolTable::new(ctx.opts.sym_len8);
 
     // ---- Pass 1: ソース解析 → TempRecord ----
+    ctx.pass = AsmPass::Pass1;
     let mut records = pass1::pass1(&mut source, ctx, &mut sym);
 
     // ---- Pass 2: ロケーション再計算 ----
+    ctx.pass = AsmPass::Pass2;
     pass2::pass2(&mut records, &mut sym);
 
     // ---- Pass 3: コード生成 → ObjectCode ----
+    ctx.pass = AsmPass::Pass3;
     let prn_enable = ctx.opts.make_prn;
     let max_align = ctx.max_align;
     let (mut obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file.clone(), prn_enable, max_align);

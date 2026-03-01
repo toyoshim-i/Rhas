@@ -84,16 +84,20 @@ impl<'a> P1Ctx<'a> {
             String::from_utf8_lossy(&self.current_pos.filename),
             self.current_pos.line,
             msg);
-        self.ctx.num_errors += 1;
+        self.ctx.add_error();
     }
 
     /// 警告を報告して count を増やす
     fn warn(&mut self, msg: &str) {
+        // -w0 では警告を出力しない。
+        if self.ctx.effective_warn_level() == 0 {
+            return;
+        }
         eprintln!("{:<16} {:6}: Warning: {}",
             String::from_utf8_lossy(&self.current_pos.filename),
             self.current_pos.line,
             msg);
-        self.ctx.num_warnings += 1;
+        self.ctx.add_warning();
     }
 
     fn section_id(&self) -> u8 {

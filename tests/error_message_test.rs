@@ -12,6 +12,16 @@ fn run_rhas(src: &[u8]) -> std::process::Output {
         .expect("run rhas")
 }
 
+fn run_rhas_with_args(src: &[u8], args: &[&str]) -> std::process::Output {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(src).expect("write");
+
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rhas"));
+    cmd.args(args);
+    cmd.arg(f.path());
+    cmd.output().expect("run rhas")
+}
+
 #[test]
 fn test_error_message_invalid_size_fmovecr() {
     let out = run_rhas(b"\t.68040\n\tfmovecr.l\t#1,fp0\n");
@@ -90,4 +100,17 @@ fn test_error_message_fmovem_size_boundaries() {
 
     assert_eq!(stderr.matches("命令のエンコードに失敗しました: InvalidSize").count(), 5);
     assert!(stdout.contains("エラーが 5 個ありました"));
+}
+
+#[test]
+fn test_warning_level_zero_suppresses_offsym_warning() {
+    let src = b"\
+start:\n\
+\tnop\n\
+\t.offsym\t0,start\n";
+    let out = run_rhas_with_args(src, &["-w0"]);
+    assert!(out.status.success(), "assemble should succeed");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains(".offsym により既存シンボルを上書きしました"));
 }

@@ -26,6 +26,56 @@
 - 対象: 実装本体の進捗と直接関係しない資料（例: syscall メモ）の「残り」記述
 - 条件: 実装タスクと混在しないよう、追跡先ドキュメントを明確化
 
+## dead_code 由来調査（2026-03-01）
+- 調査方法:
+- `cargo test --lib --quiet` と `cargo test --bin rhas --quiet` を分離して warning を比較
+- `rg` で Rust 側参照有無を確認
+- `external/has060xx/src`（`opname.s`/`error.s`/`work.s` 等）を照合
+
+### 分類A: 原典由来の仕様テーブル/ワーク項目を先行移植した結果
+- 例: `error.rs` の `ErrorCode`/`WarnCode` 群、`context.rs` の `AsmPass::Pass2/Pass3` と一部ワーク項目、`symbol/types.rs` の一部定数/variant
+- 判定根拠: 原典に同等テーブル/ワーク領域が存在（`error.s` の `warntbl`、`work.s` の `ASMPASS` など）
+- 補足: 現状の Rust 実行経路で未参照なものがあり、`bin` 単体ビルドで dead_code warning 化
+
+### 分類B: 移植過程で残った補助/試作コード（欠落機能の直接証拠は薄い）
+- `src/instructions/mod.rs`: `encode_not`（`NegNot` 共通化後のラッパ残り）
+- `src/pass/pass1.rs`: `set_location`（未呼び出し）
+- `src/pass/pass1.rs`: `InsnHandlerAlias`（ダミーtrait、実利用なし）
+- `src/pass/pass3.rs`: `token_as_const`（現ロジック未使用）
+- `src/instructions/mod.rs`(test): `encode_ok`（テスト補助だが未使用）
+
+### 分類C: テスト専用利用で本体から未参照
+- `src/pass/prn.rs` の `DEFAULT_PRN_*` はテスト内でのみ利用
+- 判定根拠: `#[cfg(test)]` 配下からのみ参照
+
+### 要確認（移植未接続の可能性がある箇所）
+1. `error.rs` の `print_error`/`print_warning` 経路
+- 原典は `error.s` の `printerr`/`warntbl` を中心に運用
+- 現状は pass 側で直接文言出力する箇所が多く、テーブル定義が未接続
+
+2. `AsmPass` の実遷移
+- 原典は `ASMPASS=1/2/3` を処理中に切り替える
+- 現状は enum 定義はあるが、実行中の明示更新経路が限定的
+
+### 結論
+- dead_code の大半は「原典に要素はあるが Rust 実行経路に未接続」または「移植中の補助コード残り」。
+- 直ちに「機能欠落」と断定できるものは限定的だが、`error.rs` 経路と `AsmPass` 遷移は互換性観点で優先確認対象。
+- 進捗: 第3回として「失敗再現テスト先行」で `AsmPass` 遷移と warning レベル反映を接続し、回帰セット（87/25/7, 17/19比較）を再通過。
+
+## 優先度A'（テスト欠落補完: 接続忘れ検知）
+1. `error.rs` 出力経路の到達テスト追加
+- 目的: `print_error`/`print_warning` 相当経路が実際に使用されることを検証し、未接続を検知可能にする
+- 完了条件: 到達を確認するテストを追加し、接続修正の前後で挙動差を検出できる
+
+2. Pass 遷移（1→2→3）可視化テスト追加
+- 目的: `AsmPass` が原典想定どおり遷移するかを検証し、状態未更新を検知可能にする
+- 状態: 対応済み
+- メモ: `tests/integration_test.rs` に `test_assemble_sets_final_pass_to_pass3` を追加し、`assemble()` 側で `Pass1→Pass2→Pass3` を明示更新
+
+3. 未接続候補ごとの「再現→修正→回帰」テンプレ運用
+- 目的: warning削減のたびに機能死を見逃さない
+- 完了条件: 以後の dead_code 対応は必ず「失敗テスト先行」で実施し、結果を本書に追記
+
 ## 優先度A（次に必ず実施）
 1. FPU ゴールデン比較を追加 ✅
 - 対象: `fmove/fadd/fsub/fmul/fdiv/fcmp/ftst/fmovecr/fnop/fsave/frestore`
