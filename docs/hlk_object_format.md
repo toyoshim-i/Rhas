@@ -177,40 +177,10 @@ B2 FB                    ; $B2FB: 外部定義シンボル
 `??` で始まるシンボルは外部定義として出力されません（`outxdef0` の処理）。
 これはコンパイラが内部使用するシンボルを外部公開しないための約束事です。
 
-## Rustでの実装方針
+## Rust 実装との対応
 
-```rust
-// オブジェクトファイルの構造体
-pub struct ObjectFile {
-    pub source_name: String,
-    pub sections: Vec<Section>,
-    pub request_files: Vec<String>,
-    pub align_info: Option<AlignInfo>,
-    pub symbols: Vec<ExternalSymbol>,
-    pub code: Vec<u8>,  // または各セクションのコード
-}
-
-pub struct Section {
-    pub id: u8,       // 1=text, 2=data, 3=bss, 4=stack, ...
-    pub name: &'static str,
-    pub size: u32,
-}
-
-pub struct ExternalSymbol {
-    pub kind: SymbolKind,  // XDef, XRef, Comm, RComm, RLComm, Globl
-    pub value: u32,
-    pub name: String,
-}
-
-pub enum SymbolKind {
-    Globl = 0xFA,
-    XDef  = 0xFB,
-    RLComm = 0xFC,
-    RComm = 0xFD,
-    Comm  = 0xFE,
-    XRef  = 0xFF,
-}
-```
+本ドキュメントは HLK オブジェクトフォーマットの参照資料です。
+Rust 実装の実際の構造体は `src/pass/pass3.rs` を直接参照してください。
 
 ## 参照
 

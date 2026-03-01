@@ -7,8 +7,8 @@ rhas のテストは以下の 3 層で構成する。
 |---|---|---:|---|
 | ユニットテスト | `src/**` | 多数 | モジュール単体の正確性 |
 | ゴールデンテスト | `tests/golden_test.rs` | 25 | HAS060.X とのバイト一致 |
-| 統合テスト | `tests/integration_test.rs` | 87 | 3パス全体の振る舞い検証 |
-| エラーメッセージ比較 | `tests/error_message_test.rs` | 6 | 失敗時メッセージ互換の固定 |
+| 統合テスト | `tests/integration_test.rs` | 97 | 3パス全体の振る舞い検証 |
+| エラーメッセージ比較 | `tests/error_message_test.rs` | 9 | 失敗時メッセージ互換の固定 |
 
 ## 実行コマンド
 ```bash
@@ -46,6 +46,8 @@ cargo test --test error_message_test
 - Pass1/2/3 の再評価と最適化（分岐縮小、`.equ/.set`、DeferredInsn）
 - PRN 出力制御（`.list/.nlist/.sall/.lall/.width/.title/.subttl/.page`）
 - MS6 進行分（`.offsym`, `.fpid`, `fsincos`, SCD 疑似命令と SCD フッタ）
+- CPU 選択（ColdFire `.5200`/`.5300`/`.5400`、`.cpu` 数式パラメータ）
+- 外部参照リロケーション（FBcc/FDBcc `.w`、Bcc.L/FBcc.L RPN リロケーション）
 
 SCD まわりで現在固定している仕様:
 - `-g` のみで `$B204` は出る
@@ -57,9 +59,9 @@ SCD まわりで現在固定している仕様:
 - SCD フッタの SCD エントリ列は `len` 依存の可変長
 
 ## 現在の結果（2026-03-01）
-- `cargo test --test integration_test --quiet`: 87/87 pass
+- `cargo test --test integration_test --quiet`: 97/97 pass
 - `cargo test --test golden_test --quiet`: 25/25 pass
-- `cargo test --test error_message_test --quiet`: 6/6 pass
+- `cargo test --test error_message_test --quiet`: 9/9 pass
 - `./tests/compare_ms5_simple.sh`: 17/17 一致
 - `./tests/compare_ms6_extended.sh`: 19/19 一致
 
@@ -103,10 +105,13 @@ SCD まわりで現在固定している仕様:
 4. 仕様変更時は docs とテスト名を同時更新
 
 ## 直近追加の検知テスト（2026-03-01）
-- `tests/integration_test.rs::test_assemble_sets_final_pass_to_pass3`
-  - `assemble()` が `AsmPass::Pass1→Pass2→Pass3` を反映して終了することを固定
-- `tests/error_message_test.rs::test_warning_level_zero_suppresses_offsym_warning`
-  - `-w0` 指定時に `.offsym` 上書き warning が抑止されることを固定
+- ColdFire CPU 選択: `test_coldfire_cpu5200_directive` / `test_coldfire_cpu5300_directive` / `test_coldfire_cpu5400_directive`
+- `.cpu` 数式パラメータ: `test_cpu_directive_68020` / `test_cpu_directive_5200`
+- FBcc/FDBcc 外部参照: `test_fbcc_xref_generates_reloc` / `test_fdbcc_xref_generates_reloc`
+- Bcc.L/FBcc.L RPN リロケーション: `test_bcc_long_xref_generates_rpn_reloc` / `test_fbcc_long_xref_generates_rpn_reloc`
+- エラーメッセージ: `test_error_message_cpu_invalid_number`（`.cpu 99999` の不正値検出）
+- Pass 遷移: `test_assemble_sets_final_pass_to_pass3`
+- Warning 抑止: `test_warning_level_zero_suppresses_offsym_warning`
 
 ## 検証バックログ
 残タスクは [verification_backlog.md](verification_backlog.md) で優先度付き管理に統一する。

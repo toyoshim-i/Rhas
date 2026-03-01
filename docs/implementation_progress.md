@@ -49,16 +49,11 @@
 | MS6拡張比較（19） | ✅ 全一致 |
 
 ## 既知の互換ギャップ
-| 項目 | 優先度 | 状態 |
-|---|---|---|
-| ColdFire CPU 選択（`.5200`/`.5300`/`.5400`） | 中 | ✅ 対応済み |
-| `.cpu` 数式パラメータ | 低 | ✅ 対応済み |
-| FBcc/FDBcc 外部参照ターゲット | 低 | ✅ 対応済み（`.w` + `.l`） |
-| Bcc.L/FBcc.L 外部参照 PC 相対リロケーション | 低 | ✅ 対応済み（RPN リロケーション） |
+全解消。ColdFire CPU 選択 / `.cpu` 数式パラメータ / FBcc・FDBcc 外部参照 / Bcc.L・FBcc.L RPN リロケーションの4件を対応済み。
 
 ## 検証残タスク
-- 優先度A/Bで管理していた MS6 由来の互換検証残タスクは完了。
-- 残互換ギャップの詳細は [verification_backlog.md](verification_backlog.md) を参照。
+- 互換ギャップ・検証テスト拡充は全完了。
+- 残りはクリーンアップ系（優先度C）のみ。詳細は [verification_backlog.md](verification_backlog.md) を参照。
 
 ## 直近コミット（ドキュメント時点）
 - `1d75cb2` Support Bcc.L and FBcc.L external reference with RPN relocation
