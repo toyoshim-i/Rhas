@@ -42,9 +42,9 @@
 | スイート | 状態 |
 |---|---|
 | ユニット | ✅ 全通過 |
-| 統合（91） | ✅ 全通過 |
+| 統合（93） | ✅ 全通過 |
 | ゴールデン（25） | ✅ 全通過 |
-| エラーメッセージ比較（8） | ✅ 全通過 |
+| エラーメッセージ比較（9） | ✅ 全通過 |
 | MS5簡易比較（17） | ✅ 全一致 |
 | MS6拡張比較（19） | ✅ 全一致 |
 
@@ -52,7 +52,7 @@
 | 項目 | 優先度 | 状態 |
 |---|---|---|
 | ColdFire CPU 選択（`.5200`/`.5300`/`.5400`） | 中 | ✅ 対応済み |
-| `.cpu` 文字列パラメータ | 低 | 未接続 |
+| `.cpu` 数式パラメータ | 低 | ✅ 対応済み |
 | FBcc/FDBcc 外部参照ターゲット | 低 | 非対応（エラー化） |
 | Bcc.L 外部参照 PC 相対リロケーション | 低 | 非対応（`.w`/`.s` は対応済み） |
 
@@ -61,6 +61,7 @@
 - 残互換ギャップの詳細は [verification_backlog.md](verification_backlog.md) を参照。
 
 ## 直近コミット（ドキュメント時点）
+- `1ca0181` Connect .cpu directive to evaluate expression and set CPU type
 - `c7f715a` Connect ColdFire CPU selection directives (.5200/.5300/.5400) in pass1
 - `c161860` Document remaining compatibility gaps for full HAS interop
 - `e8f8f02` Achieve zero warnings: remove dead helpers and suppress spec tables
