@@ -1,11 +1,11 @@
-/// HLK オブジェクトファイル書き出し
-///
-/// docs/hlk_object_format.md で定義された形式に従って書き出す。
-/// HAS060.X の実際の出力形式に合わせた実装:
-/// - ファイルサイズフィールド = ファイル全体のバイト数
-/// - ファイル名・セクション名は偶数バイトにパディング（null 込みで奇数なら追加 null）
-/// - 常に text/data/bss/stack の4セクションヘッダを出力
-/// - コードボディは 20xx セクション切り替え + 10xx コードブロック形式
+//! HLK オブジェクトファイル書き出し
+//!
+//! docs/hlk_object_format.md で定義された形式に従って書き出す。
+//! HAS060.X の実際の出力形式に合わせた実装:
+//! - ファイルサイズフィールド = ファイル全体のバイト数
+//! - ファイル名・セクション名は偶数バイトにパディング（null 込みで奇数なら追加 null）
+//! - 常に text/data/bss/stack の4セクションヘッダを出力
+//! - コードボディは 20xx セクション切り替え + 10xx コードブロック形式
 
 use super::{ObjectCode, ScdEvent};
 
@@ -14,7 +14,7 @@ fn push_str_even(out: &mut Vec<u8>, s: &[u8]) {
     out.extend_from_slice(s);
     out.push(0x00);
     // name + null の長さが奇数なら追加 null でパディング
-    if (s.len() + 1) % 2 != 0 {
+    if !(s.len() + 1).is_multiple_of(2) {
         out.push(0x00);
     }
 }
@@ -335,7 +335,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     let line_len = (lines.len() as u32) * 6;
     let scd_len: u32 = entries
         .iter()
-        .map(|e| ((u32::from(e.len) + 1) * 18) as u32)
+        .map(|e| (u32::from(e.len) + 1) * 18)
         .sum();
     let exname_len = exname_data.len() as u32;
     out.extend_from_slice(&line_len.to_be_bytes());

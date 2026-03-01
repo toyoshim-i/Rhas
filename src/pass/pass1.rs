@@ -1,7 +1,7 @@
-/// Pass 1: ソース行解析 → TempRecord 生成
-///
-/// オリジナルの `main.s` の pass1 ルーチンに対応。
-/// ソーステキストをスキャンし、シンボルを定義しながら TempRecord 列を構築する。
+//! Pass 1: ソース行解析 → TempRecord 生成
+//!
+//! オリジナルの `main.s` の pass1 ルーチンに対応。
+//! ソーステキストをスキャンし、シンボルを定義しながら TempRecord 列を構築する。
 
 use crate::addressing::{parse_ea, parse_reg_list_mask, EffectiveAddress};
 use crate::context::{AssemblyContext, Section};
@@ -361,7 +361,7 @@ fn preprocess_numeric_local_labels(line: &[u8], counts: &mut HashMap<u32, u32>) 
                 while k < line.len() && line[k].is_ascii_digit() {
                     k += 1;
                 }
-                if k > i && k + 1 <= line.len() {
+                if k > i && k < line.len() {
                     let suffix = line.get(k).copied();
                     if matches!(suffix, Some(b'f' | b'b')) {
                         let after = k + 1;
@@ -464,10 +464,8 @@ fn parse_line(
                 if is_global_label {
                     records.push(TempRecord::XDef { name: name.clone() });
                     // ext_attrib を更新（try_register_xdef で早期検出できるように）
-                    if let Some(s) = p1.sym.lookup_sym_mut(name) {
-                        if let Symbol::Value { ext_attrib, .. } = s {
-                            *ext_attrib = ExtAttrib::XDef;
-                        }
+                    if let Some(Symbol::Value { ext_attrib, .. }) = p1.sym.lookup_sym_mut(name) {
+                        *ext_attrib = ExtAttrib::XDef;
                     }
                 }
             }
@@ -477,13 +475,15 @@ fn parse_line(
 
     // Case 1: 行頭ラベル後の ':=' → SET（例: N:=7）
     // parse_label が ':' を消費した後、次が '=' の場合
-    if label.is_some() && pos < line.len() && line[pos] == b'=' {
-        if !p1.is_skip {
-            pos += 1; // '=' を消費
-            skip_spaces(line, &mut pos);
-            handle_set_assignment(label.as_ref().unwrap(), line, &mut pos, p1);
+    if let Some(ref lbl) = label {
+        if pos < line.len() && line[pos] == b'=' {
+            if !p1.is_skip {
+                pos += 1; // '=' を消費
+                skip_spaces(line, &mut pos);
+                handle_set_assignment(lbl, line, &mut pos, p1);
+            }
+            return;
         }
-        return;
     }
 
     // ニーモニック + サイズ解析
@@ -638,10 +638,8 @@ fn parse_line(
         if let Some(ref name) = label {
             records.push(TempRecord::XDef { name: name.clone() });
             // ext_attrib を更新（try_register_xdef で早期検出できるように）
-            if let Some(s) = p1.sym.lookup_sym_mut(name) {
-                if let Symbol::Value { ext_attrib, .. } = s {
-                    *ext_attrib = ExtAttrib::XDef;
-                }
+            if let Some(Symbol::Value { ext_attrib, .. }) = p1.sym.lookup_sym_mut(name) {
+                *ext_attrib = ExtAttrib::XDef;
             }
         }
     }
@@ -1236,10 +1234,7 @@ fn parse_branch_target(line: &[u8], mut pos: usize) -> Option<Rpn> {
         return None; // no operand
     }
     let mut p = pos;
-    match parse_expr(line, &mut p) {
-        Ok(rpn) => Some(rpn),
-        Err(_) => None,
-    }
+    parse_expr(line, &mut p).ok()
 }
 
 /// operand → EffectiveAddress 列
@@ -1424,10 +1419,7 @@ fn parse_operands(
         while end_c < line.len() && (line[end_c].is_ascii_alphanumeric() || line[end_c] == b'_') {
             end_c += 1;
         }
-        let fp_c = match parse_fp(&line[start_c..end_c]) {
-            Some(v) => v,
-            None => return None,
-        };
+        let fp_c = parse_fp(&line[start_c..end_c])?;
 
         // :
         let mut p = end_c;
@@ -1687,6 +1679,7 @@ fn placeholder_ea(ea: &EffectiveAddress) -> EffectiveAddress {
 // 疑似命令処理
 // ----------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 fn handle_pseudo(
     handler:  InsnHandler,
     mnem:     &[u8],
@@ -1751,7 +1744,7 @@ fn handle_pseudo(
             if p1.is_offset_mode() {
                 // .offset モードでは実データを出力しない（カウンタを偶数に揃えるだけ）
                 let loc = p1.location();
-                if loc % 2 != 0 { p1.advance(1); }
+                if !loc.is_multiple_of(2) { p1.advance(1); }
             } else {
                 let sec = p1.section_id();
                 let pad = if sec == 0x01 { 0x4E71u16 } else { 0u16 };
@@ -1786,11 +1779,11 @@ fn handle_pseudo(
                     // .offset モードでは仮想カウンタを整列するだけ
                     let align = 1u32 << n;
                     let loc = p1.location();
-                    if loc % align != 0 { p1.advance(align - (loc % align)); }
+                    if !loc.is_multiple_of(align) { p1.advance(align - (loc % align)); }
                 } else {
                     let sec = p1.section_id();
                     // パディング値（オプション）
-                    let pad = parse_align_pad(line, pos, p1).unwrap_or_else(|| {
+                    let pad = parse_align_pad(line, pos, p1).unwrap_or({
                         if sec == 0x01 { 0x4E71 } else { 0 }
                     });
                     // max_align を更新（B204 レコード用）
@@ -1939,10 +1932,8 @@ fn handle_pseudo(
             if let Some(ref name) = label {
                 records.push(TempRecord::XDef { name: name.clone() });
                 // シンボルの ext_attrib を更新
-                if let Some(s) = p1.sym.lookup_sym_mut(name) {
-                    if let Symbol::Value { ext_attrib, .. } = s {
-                        *ext_attrib = ExtAttrib::XDef;
-                    }
+                if let Some(Symbol::Value { ext_attrib, .. }) = p1.sym.lookup_sym_mut(name) {
+                    *ext_attrib = ExtAttrib::XDef;
                 }
             }
             // オペランドに名前リストがある場合
@@ -1951,10 +1942,8 @@ fn handle_pseudo(
                 let name = read_ident(line, pos);
                 if name.is_empty() { break; }
                 records.push(TempRecord::XDef { name: name.clone() });
-                if let Some(s) = p1.sym.lookup_sym_mut(&name) {
-                    if let Symbol::Value { ext_attrib, .. } = s {
-                        *ext_attrib = ExtAttrib::XDef;
-                    }
+                if let Some(Symbol::Value { ext_attrib, .. }) = p1.sym.lookup_sym_mut(&name) {
+                    *ext_attrib = ExtAttrib::XDef;
                 }
                 skip_spaces(line, pos);
                 if *pos < line.len() && line[*pos] == b',' {
@@ -2205,7 +2194,7 @@ fn handle_pseudo(
             skip_spaces(line, pos);
             match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn).map(|v| v.value)) {
                 Some(v) if (80..=255).contains(&v) => {
-                    p1.ctx.opts.prn_width = ((v as u16) & !7) as u16;
+                    p1.ctx.opts.prn_width = (v as u16) & !7;
                 }
                 _ => {
                     p1.error_code(ErrorCode::IlValue, None);
@@ -2262,7 +2251,7 @@ fn handle_pseudo(
         // ---- .macro ----
         InsnHandler::MacroDef => {
             // マクロ名はラベルフィールドに書く
-            let mac_name = label.clone().unwrap_or_else(Vec::new);
+            let mac_name = label.clone().unwrap_or_default();
             if mac_name.is_empty() {
                 p1.error_code(ErrorCode::NoSymMacro, None);
                 return;
@@ -2366,9 +2355,11 @@ fn handle_pseudo(
                         p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
-                    let mut temp = crate::context::ScdTemp::default();
-                    temp.name = name.iter().take(8).copied().collect();
-                    temp.size = p1.ctx.scd_ln as u32;
+                    let mut temp = crate::context::ScdTemp {
+                        name: name.iter().take(8).copied().collect(),
+                        size: p1.ctx.scd_ln as u32,
+                        ..Default::default()
+                    };
                     p1.ctx.scd_ln = 0;
                     if let Some(attr) = scd_special_attr(&temp.name) {
                         temp.attrib = attr;
@@ -2654,7 +2645,7 @@ fn handle_pseudo(
             if let Some(ref name) = label {
                 let saved_pos = *pos;
                 // まずレジスタリスト（MOVEM 用）として解析を試みる
-                let reg_mask = parse_reg_list_mask(line, pos, &p1.sym, p1.ctx.cpu_type);
+                let reg_mask = parse_reg_list_mask(line, pos, p1.sym, p1.ctx.cpu_type);
                 let rpns: Vec<Rpn> = if let Some(mask) = reg_mask {
                     // レジスタリスト → 定数マスクとして保存
                     vec![vec![RPNToken::ValueWord(mask), RPNToken::End]]
@@ -2920,7 +2911,7 @@ fn parse_dc(
                 let b = line[*pos];
                 s.push(b);
                 *pos += 1;
-                let is_sjis = (b >= 0x81 && b <= 0x9F) || (b >= 0xE0 && b <= 0xFC);
+                let is_sjis = (0x81..=0x9F).contains(&b) || (0xE0..=0xFC).contains(&b);
                 if is_sjis && *pos < line.len() {
                     s.push(line[*pos]);
                     *pos += 1;
@@ -2958,8 +2949,8 @@ fn parse_dc(
                         let mut i = 0;
                         while i < s.len() {
                             let remaining = s.len() - i;
-                            let pad = if remaining < 4 { 4 - remaining } else { 0 };
-                            for _ in 0..pad { bytes.push(0); }
+                            let pad = 4usize.saturating_sub(remaining);
+                            bytes.extend(std::iter::repeat_n(0u8, pad));
                             let take = remaining.min(4);
                             bytes.extend_from_slice(&s[i..i+take]);
                             i += take;
@@ -3043,22 +3034,20 @@ fn parse_dc(
                                 records.push(TempRecord::Data { size: byte_size, rpn: elem_rpn.clone() });
                             }
                         }
-                    } else {
-                        if is_literal_only_rpn(&rpn) {
-                            if let Some(v) = p1.eval_const(&rpn) {
-                                // リテラルのみの式は Pass1 で確定
-                                let bytes = val_to_bytes(v.value, byte_size);
-                                p1.advance(bytes.len() as u32);
-                                records.push(TempRecord::Const(bytes));
-                            } else {
-                                p1.advance(byte_size as u32);
-                                records.push(TempRecord::Data { size: byte_size, rpn });
-                            }
+                    } else if is_literal_only_rpn(&rpn) {
+                        if let Some(v) = p1.eval_const(&rpn) {
+                            // リテラルのみの式は Pass1 で確定
+                            let bytes = val_to_bytes(v.value, byte_size);
+                            p1.advance(bytes.len() as u32);
+                            records.push(TempRecord::Const(bytes));
                         } else {
-                            // シンボル/ロケーション依存式は Pass3 で最終評価する
                             p1.advance(byte_size as u32);
                             records.push(TempRecord::Data { size: byte_size, rpn });
                         }
+                    } else {
+                        // シンボル/ロケーション依存式は Pass3 で最終評価する
+                        p1.advance(byte_size as u32);
+                        records.push(TempRecord::Data { size: byte_size, rpn });
                     }
                 }
                 Err(_) => break,
@@ -3350,11 +3339,7 @@ fn collect_macro_body(
     let mut nest_depth = 0u32;
     let mut name_map: std::collections::HashMap<Vec<u8>, u16> = std::collections::HashMap::new();
 
-    loop {
-        let line = match source.read_line() {
-            ReadResult::Line(l) => l,
-            ReadResult::Eof | ReadResult::IncludeEnd => break,
-        };
+    while let ReadResult::Line(line) = source.read_line() {
         // 末尾の CR/LF を除去
         let trim_len = line.iter().rev().take_while(|&&b| b == b'\r' || b == b'\n').count();
         let line = &line[..line.len() - trim_len];
@@ -3430,7 +3415,7 @@ fn convert_line_params(
             }
             let name = &line[start..i];
             if let Some(idx) = params.iter().position(|p| {
-                p.len() == name.len() && p.iter().zip(name).all(|(a,b)| a.to_ascii_lowercase() == b.to_ascii_lowercase())
+                p.len() == name.len() && p.iter().zip(name).all(|(a,b)| a.eq_ignore_ascii_case(b))
             }) {
                 out.push(0xFF);
                 out.push((idx >> 8) as u8);
@@ -3488,7 +3473,7 @@ fn convert_line_params(
                     while i < line.len() && (line[i].is_ascii_alphanumeric() || line[i] == b'_') { i += 1; }
                     let name = &line[start..i];
                     if let Some(idx) = params.iter().position(|p| {
-                        p.len() == name.len() && p.iter().zip(name).all(|(a,b2)| a.to_ascii_lowercase() == b2.to_ascii_lowercase())
+                        p.len() == name.len() && p.iter().zip(name).all(|(a,b2)| a.eq_ignore_ascii_case(b2))
                     }) {
                         out.push(0xFF);
                         out.push((idx >> 8) as u8);
@@ -3518,7 +3503,7 @@ fn convert_line_params(
             if prev != Some(b'.') {
                 if let Some(idx) = params.iter().position(|p| {
                     p.len() == name.len() && p.iter().zip(name.iter()).all(|(a, b2)| {
-                        a.to_ascii_lowercase() == b2.to_ascii_lowercase()
+                        a.eq_ignore_ascii_case(b2)
                     })
                 }) {
                     out.push(0xFF);

@@ -1,6 +1,6 @@
-/// 実効アドレスエンコード
-///
-/// `EffectiveAddress` → 6ビット EA フィールド + 拡張ワードバイト列
+//! 実効アドレスエンコード
+//!
+//! `EffectiveAddress` → 6ビット EA フィールド + 拡張ワードバイト列
 
 use super::{EffectiveAddress, Displacement, IndexSpec, IdxSize, eac};
 use crate::expr::eval_rpn;
@@ -242,7 +242,7 @@ mod tests {
         let sym = make_sym();
         let mut pos = 0;
         let ea = parse_ea(s.as_bytes(), &mut pos, &sym, cpu::C000).expect(s);
-        encode_ea(&ea, op_size).expect(&format!("encode {}", s))
+        encode_ea(&ea, op_size).unwrap_or_else(|_| panic!("encode {}", s))
     }
 
     // ---- EA フィールド値の確認 ----
@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn test_encode_dspadr_negative() {
         let enc = parse_and_encode("(-8,a0)", 1);
-        assert_eq!(enc.ea_field, eac::DSPADR | 0);
+        assert_eq!(enc.ea_field, eac::DSPADR);
         assert_eq!(enc.ext_bytes, vec![0xFF, 0xF8]);  // -8 as i16 = 0xFFF8
     }
 
@@ -297,7 +297,7 @@ mod tests {
         // (2,a0,d1.w*1) brief extension word:
         // bit15=0(Dn), bits14-12=001(D1), bit11=0(.w), bits10-9=00(*1), bit8=0, bits7-0=0x02
         let enc = parse_and_encode("(2,a0,d1)", 1);
-        assert_eq!(enc.ea_field, eac::IDXADR | 0);
+        assert_eq!(enc.ea_field, eac::IDXADR);
         // D1.w*1 disp=2: 0001_0000_0000_0010 = 0x1002
         assert_eq!(enc.ext_bytes, vec![0x10, 0x02]);
     }
@@ -315,7 +315,7 @@ mod tests {
     fn test_encode_idxadr_an_index() {
         // (0,a0,a1.w) → A1 as index: bit15=1(An), 001(A1), 0(.w), 00(*1), 0, 0x00 = 0x9000
         let enc = parse_and_encode("(0,a0,a1.w)", 1);
-        assert_eq!(enc.ea_field, eac::IDXADR | 0);
+        assert_eq!(enc.ea_field, eac::IDXADR);
         assert_eq!(enc.ext_bytes, vec![0x90, 0x00]);
     }
 

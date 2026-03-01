@@ -1,7 +1,7 @@
 #![allow(dead_code)]
-/// シンボルテーブル型定義
-///
-/// オリジナルの `symbol.equ` の構造体定義に対応する。
+//! シンボルテーブル型定義
+//!
+//! オリジナルの `symbol.equ` の構造体定義に対応する。
 
 #[cfg(test)]
 use crate::options::cpu;

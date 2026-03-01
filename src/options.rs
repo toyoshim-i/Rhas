@@ -278,8 +278,7 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let mut opts = Options::default();
-    opts.g2as_mode = g2as_mode;
+    let mut opts = Options { g2as_mode, ..Default::default() };
 
     // 環境変数 HAS または G2AS を取得
     let env_name = if g2as_mode { "G2AS" } else { "HAS" };
@@ -719,7 +718,7 @@ fn parse_prn_format(chars: &[u8], opts: &mut Options) -> usize {
     let (v, n) = get_optional_num(&chars[pos..]);
     pos += n;
     if let Some(v) = v {
-        if v >= 80 && v < 256 {
+        if (80..256).contains(&v) {
             opts.prn_width = (v & !7) as u16;
         }
     }
@@ -729,7 +728,7 @@ fn parse_prn_format(chars: &[u8], opts: &mut Options) -> usize {
     let (v, n) = get_optional_num(&chars[pos..]);
     pos += n;
     if let Some(v) = v {
-        if v >= 10 && v < 256 {
+        if (10..256).contains(&v) {
             opts.prn_page_lines = v as u16;
         }
     }
@@ -739,7 +738,7 @@ fn parse_prn_format(chars: &[u8], opts: &mut Options) -> usize {
     let (v, n) = get_optional_num(&chars[pos..]);
     pos += n;
     if let Some(v) = v {
-        if v >= 4 && v < 65 {
+        if (4..65).contains(&v) {
             opts.prn_code_width = (v & !3) as u16;
         }
     }
@@ -773,9 +772,9 @@ fn get_optional_num(chars: &[u8]) -> (Option<u32>, usize) {
 
 /// スイッチの引数文字列を取得（残り文字または次の引数）。
 /// 返値は（文字列, 消費追加引数数）。
-fn get_cmd_string<'a>(
+fn get_cmd_string(
     chars: &[u8],
-    remaining: &'a [Vec<u8>],
+    remaining: &[Vec<u8>],
     already_consumed: usize,
 ) -> Result<(Vec<u8>, usize), ParseError> {
     if !chars.is_empty() {

@@ -1,8 +1,8 @@
-/// Pass 2: 最適化（分岐サイズ縮小 + DeferredInsn サイズ再評価）
-///
-/// オリジナルの pass2 に対応。分岐命令のサイズ最適化に加えて、
-/// Pass1 で未解決だった EA を再評価して命令長を更新する。
-/// 収束するまで繰り返す。
+//! Pass 2: 最適化（分岐サイズ縮小 + DeferredInsn サイズ再評価）
+//!
+//! オリジナルの pass2 に対応。分岐命令のサイズ最適化に加えて、
+//! Pass1 で未解決だった EA を再評価して命令長を更新する。
+//! 収束するまで繰り返す。
 
 use crate::addressing::{Displacement, EffectiveAddress};
 use crate::expr::{eval_rpn, Rpn, RPNToken};
@@ -18,7 +18,7 @@ use super::temp::{branch_word_size, TempRecord};
 /// 1. ロケーションカウンタを再計算してシンボルを更新する
 /// 2. 最適化できる分岐（.w → .s）を縮小する
 /// 3. 収束するまで繰り返す
-pub fn pass2(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) {
+pub fn pass2(records: &mut [TempRecord], sym: &mut SymbolTable) {
     // 最大反復回数（通常は少ない繰り返しで収束する）
     for _ in 0..32 {
         let changed = pass2_one(records, sym);
@@ -28,7 +28,7 @@ pub fn pass2(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) {
 
 /// 1回のパス: ロケーションカウンタ再計算 + 分岐縮小
 /// 変化があれば true を返す
-fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
+fn pass2_one(records: &mut [TempRecord], sym: &mut SymbolTable) -> bool {
     let mut loc_ctr = [0u32; 10];
     let mut cur_sect = 0usize;
     let mut changed = false;
@@ -88,7 +88,7 @@ fn pass2_one(records: &mut Vec<TempRecord>, sym: &mut SymbolTable) -> bool {
                 let (new_cur_size, new_suppressed) = if req_size.is_none() {
                     if let Some(ev) = eval_target(sym, target, loc, cur_sect as u8 + 1) {
                         // 同一セクション参照のみ最適化対象
-                        if ev.section as u8 == cur_sect as u8 + 1 {
+                        if ev.section == cur_sect as u8 + 1 {
                             let offset = (ev.value as i64) - (loc as i64 + 2);
                             let next_offset = if *suppressed {
                                 -2
@@ -175,7 +175,7 @@ fn can_shrink_to_short(
     let shrink = old_size - 2;
     let forward = target_addr > branch_loc;
     let adjusted = if forward && shrink > 0 { raw_offset - shrink } else { raw_offset };
-    adjusted >= -128 && adjusted <= 127
+    (-128..=127).contains(&adjusted)
 }
 
 fn estimate_deferred_size(

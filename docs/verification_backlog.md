@@ -39,6 +39,7 @@
 
 ### 警告ゼロ化
 - `cargo check` 警告ゼロ達成
+- `cargo clippy --all-targets --all-features` 警告ゼロ達成（84件修正: doc comment 変換、range contains、collapsible match、redundant closure、unnecessary cast 等）
 
 ## ゴールデンテスト拡充（2026-03-01 調査）
 

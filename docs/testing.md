@@ -5,10 +5,10 @@ rhas のテストは以下の 3 層で構成する。
 
 | スイート | 場所 | 件数 | 目的 |
 |---|---|---:|---|
-| ユニットテスト | `src/**` | 多数 | モジュール単体の正確性 |
-| ゴールデンテスト | `tests/golden_test.rs` | 25 | HAS060.X とのバイト一致 |
+| ユニットテスト | `src/**` | 184 | モジュール単体の正確性 |
+| ゴールデンテスト | `tests/golden_test.rs` | 63 | HAS060.X とのバイト一致 |
 | 統合テスト | `tests/integration_test.rs` | 97 | 3パス全体の振る舞い検証 |
-| エラーメッセージ比較 | `tests/error_message_test.rs` | 9 | 失敗時メッセージ互換の固定 |
+| エラーメッセージ比較 | `tests/error_message_test.rs` | 35 | 失敗時メッセージ互換の固定 |
 
 ## 実行コマンド
 ```bash
@@ -59,9 +59,11 @@ SCD まわりで現在固定している仕様:
 - SCD フッタの SCD エントリ列は `len` 依存の可変長
 
 ## 現在の結果（2026-03-01）
+- `cargo clippy --all-targets --all-features`: 警告ゼロ
+- `cargo test --lib --quiet`: 184/184 pass
 - `cargo test --test integration_test --quiet`: 97/97 pass
-- `cargo test --test golden_test --quiet`: 25/25 pass
-- `cargo test --test error_message_test --quiet`: 9/9 pass
+- `cargo test --test golden_test --quiet`: 43/63 pass（20件は既知の互換ギャップ）
+- `cargo test --test error_message_test --quiet`: 13/35 pass（22件は `#[ignore]` 仕様記録）
 - `./tests/compare_ms5_simple.sh`: 17/17 一致
 - `./tests/compare_ms6_extended.sh`: 19/19 一致
 

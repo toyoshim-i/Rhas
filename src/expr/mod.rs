@@ -1,11 +1,11 @@
 // 原典（expr.s）由来の定義を先行移植しているため
 // 未参照の項目が残っている。
 #![allow(dead_code)]
-/// 式パーサー（ソーステキスト → 逆ポーランド式）
-///
-/// オリジナルの `convrpn`（expr.s）と字句解析部分に対応する。
-/// Rust版はソーステキストから直接 RPN トークン列を生成する。
-/// シャンティングヤードアルゴリズムを使用する。
+//! 式パーサー（ソーステキスト → 逆ポーランド式）
+//!
+//! オリジナルの `convrpn`（expr.s）と字句解析部分に対応する。
+//! Rust版はソーステキストから直接 RPN トークン列を生成する。
+//! シャンティングヤードアルゴリズムを使用する。
 
 pub mod rpn;
 pub mod eval;
@@ -265,7 +265,7 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
         // '@' 形式の 8 進数（次の文字が 0-7 の場合のみ; @@N は識別子として処理）
-        if self.peek() == Some(b'@') && self.peek2().map(|b| b >= b'0' && b <= b'7').unwrap_or(false) {
+        if self.peek() == Some(b'@') && self.peek2().map(|b| (b'0'..=b'7').contains(&b)).unwrap_or(false) {
             self.pos += 1;
             let v = self.parse_octal_digits()?;
             self.push_value(v);
@@ -311,7 +311,7 @@ impl<'a> Parser<'a> {
             return Err(ParseError::ExprExpected);
         }
         // 識別子（シンボル名）
-        if self.peek().map(|b| is_ident_start(b)).unwrap_or(false) {
+        if self.peek().map(is_ident_start).unwrap_or(false) {
             let name = self.parse_ident();
             self.output.push(RPNToken::SymbolRef(name));
             return Ok(());
@@ -351,7 +351,7 @@ impl<'a> Parser<'a> {
 
     fn parse_octal_digits(&mut self) -> Result<u32, ParseError> {
         let start = self.pos;
-        while self.peek().map(|b| (b >= b'0' && b <= b'7') || b == b'_').unwrap_or(false) {
+        while self.peek().map(|b| (b'0'..=b'7').contains(&b) || b == b'_').unwrap_or(false) {
             self.pos += 1;
         }
         if self.pos == start { return Err(ParseError::InvalidNumber); }
@@ -436,7 +436,7 @@ impl<'a> Parser<'a> {
 
     fn parse_ident(&mut self) -> Vec<u8> {
         let start = self.pos;
-        while self.peek().map(|b| is_ident_cont(b)).unwrap_or(false) {
+        while self.peek().map(is_ident_cont).unwrap_or(false) {
             self.pos += 1;
         }
         self.src[start..self.pos].to_vec()
@@ -446,9 +446,9 @@ impl<'a> Parser<'a> {
         if self.peek() != Some(b'.') { return None; }
         let save = self.pos;
         self.pos += 1;
-        if self.peek().map(|b| is_ident_start(b)).unwrap_or(false) {
+        if self.peek().map(is_ident_start).unwrap_or(false) {
             let mut name = vec![b'.'];
-            while self.peek().map(|b| is_ident_cont(b)).unwrap_or(false) {
+            while self.peek().map(is_ident_cont).unwrap_or(false) {
                 name.push(self.advance().unwrap());
             }
             Some(name)
@@ -686,7 +686,7 @@ fn hex_digit(b: u8) -> u8 {
 
 /// Shift_JIS 先行バイト判定
 fn is_sjis_lead(b: u8) -> bool {
-    (b >= 0x81 && b <= 0x9F) || (b >= 0xE0 && b <= 0xFC)
+    (0x81..=0x9F).contains(&b) || (0xE0..=0xFC).contains(&b)
 }
 
 // ----------------------------------------------------------------

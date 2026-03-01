@@ -127,9 +127,11 @@ zsh tests/gen_golden.sh
 詳細は [docs/testing.md](docs/testing.md) を参照してください。
 
 2026-03-01 時点の主な結果:
-- `golden_test`: 25/25 pass
+- `clippy`: 警告ゼロ
+- `unit tests`: 184/184 pass
+- `golden_test`: 43/63 pass（20件は既知の互換ギャップ）
 - `integration_test`: 97/97 pass
-- `error_message_test`: 9/9 pass
+- `error_message_test`: 13/35 pass（22件は仕様記録）
 - `compare_ms5_simple.sh`: 17/17 一致
 - `compare_ms6_extended.sh`: 19/19 一致
 

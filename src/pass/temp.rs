@@ -1,8 +1,8 @@
 #![allow(dead_code)]
-/// 中間コードレコード（tmpcode.equ の T_* コードに対応）
-///
-/// オリジナルはテンポラリファイルに書き出すバイナリコードだが、
-/// Rust版はメモリ上の Vec<TempRecord> として表現する。
+//! 中間コードレコード（tmpcode.equ の T_* コードに対応）
+//!
+//! オリジナルはテンポラリファイルに書き出すバイナリコードだが、
+//! Rust版はメモリ上の Vec<TempRecord> として表現する。
 
 use crate::addressing::EffectiveAddress;
 use crate::expr::Rpn;

@@ -1,6 +1,6 @@
-/// End-to-end integration tests
-///
-/// アセンブラの 3 パスパイプライン全体を検証する。
+//! End-to-end integration tests
+//!
+//! アセンブラの 3 パスパイプライン全体を検証する。
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -1857,7 +1857,7 @@ fn test_prn_lall_shows_macro_expansion_lines() {
 fn test_prn_width_directive_limits_line_width() {
     let mut src = Vec::<u8>::new();
     src.extend_from_slice(b"\t.width\t80\n\tnop\t;");
-    src.extend(std::iter::repeat(b'A').take(160));
+    src.extend(std::iter::repeat_n(b'A', 160));
     src.extend_from_slice(b"\n");
 
     let mut f = NamedTempFile::new().expect("tempfile");

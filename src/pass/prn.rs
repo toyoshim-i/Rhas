@@ -1,13 +1,13 @@
 #![allow(dead_code)]
-/// PRNリストファイル生成（-p オプション）
-///
-/// HAS060X互換のリストファイルフォーマット:
-/// `NNNNN XXXXXXXX[* ]CCCCCCCCCCCCCCCCSSSSSSSSSSSS\n`
-/// - NNNNN:  行番号 (5桁ゼロサプレス)
-/// - XXXXXXXX: 16進アドレス (8桁)
-/// - [ *]:   スペース（通常）または '*'（マクロ展開中）
-/// - CCCC...: 機械語バイト列 (16文字 = 8バイト分)
-/// - SSSS...: ソース行テキスト
+//! PRNリストファイル生成（-p オプション）
+//!
+//! HAS060X互換のリストファイルフォーマット:
+//! `NNNNN XXXXXXXX[* ]CCCCCCCCCCCCCCCCSSSSSSSSSSSS\n`
+//! - NNNNN:  行番号 (5桁ゼロサプレス)
+//! - XXXXXXXX: 16進アドレス (8桁)
+//! - [ *]:   スペース（通常）または '*'（マクロ展開中）
+//! - CCCC...: 機械語バイト列 (16文字 = 8バイト分)
+//! - SSSS...: ソース行テキスト
 
 /// PRNの1行エントリ
 #[derive(Debug, Clone)]

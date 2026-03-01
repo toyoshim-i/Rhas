@@ -1,10 +1,10 @@
 // 原典（has060xx）由来のEAビットマスク定数・フィールドを先行移植しているため
 // 現時点で未参照の項目が残っている。将来の接続まで警告を抑制する。
 #![allow(dead_code)]
-/// 実効アドレス解析
-///
-/// 68000 基本12モードを実装（Phase 4）。
-/// 68020+ 拡張モード（フルフォーマット、メモリ間接）は Phase 9 で追加予定。
+//! 実効アドレス解析
+//!
+//! 68000 基本12モードを実装（Phase 4）。
+//! 68020+ 拡張モード（フルフォーマット、メモリ間接）は Phase 9 で追加予定。
 
 pub mod encode;
 
@@ -403,7 +403,7 @@ fn parse_paren_with_base(
     let is_zpc = base_regno == reg::ZPC;
     let an = if is_pc || is_zpc {
         0 // PC ベース（reg 番号は EA フィールドには含まれない）
-    } else if base_regno >= 0x08 && base_regno <= 0x0F {
+    } else if (0x08..=0x0F).contains(&base_regno) {
         base_regno - 0x08
     } else {
         return Err(EaError::InvalidRegister);
@@ -490,7 +490,7 @@ fn parse_paren_with_expr(
                 let (is_pc, is_zpc) = (base_regno == reg::PC || base_regno == reg::OPC, base_regno == reg::ZPC);
                 let an = if is_pc || is_zpc {
                     0
-                } else if base_regno >= 0x08 && base_regno <= 0x0F {
+                } else if (0x08..=0x0F).contains(&base_regno) {
                     base_regno - 0x08
                 } else {
                     return Err(EaError::InvalidRegister);
@@ -535,7 +535,7 @@ fn parse_paren_with_expr(
                 Some(r) => r,
                 None => return Err(EaError::ExpectedRegister),
             };
-            let disp = Displacement { rpn, size: size.map(|s| s), const_val: None };
+            let disp = Displacement { rpn, size, const_val: None };
             skip_spaces(src, pos);
             parse_paren_with_base(src, pos, sym, cpu_type, base_regno, Some(disp))
         }
@@ -699,7 +699,7 @@ pub fn parse_ea(
             skip_spaces(src, pos);
             let reg_pos = *pos;
             if let Some(regno) = try_parse_register(src, pos, sym, cpu_type) {
-                if regno >= 0x08 && regno <= 0x0F {
+                if (0x08..=0x0F).contains(&regno) {
                     let an = regno - 0x08;
                     skip_spaces(src, pos);
                     if src.get(*pos) == Some(&b')') {
@@ -770,7 +770,7 @@ pub fn parse_ea(
             Some(r) => r,
             None => return Err(EaError::ExpectedRegister),
         };
-        let disp = Displacement { rpn, size: size.map(|s| s), const_val: None };
+        let disp = Displacement { rpn, size, const_val: None };
         skip_spaces(src, pos);
         return parse_paren_with_base(src, pos, sym, cpu_type, base_regno, Some(disp));
     }
@@ -780,6 +780,28 @@ pub fn parse_ea(
         Some(DispSize::Word) => Ok(EffectiveAddress::AbsShort(rpn)),
         Some(DispSize::Long) | None => Ok(EffectiveAddress::AbsLong(rpn)),
         Some(DispSize::Short) => Err(EaError::InvalidSize),
+    }
+}
+
+// PartialEq のための実装（テスト用）
+impl PartialEq for EffectiveAddress {
+    fn eq(&self, other: &Self) -> bool {
+        use EffectiveAddress::*;
+        match (self, other) {
+            (DataReg(a),        DataReg(b))        => a == b,
+            (AddrReg(a),        AddrReg(b))        => a == b,
+            (AddrRegInd(a),     AddrRegInd(b))     => a == b,
+            (AddrRegPostInc(a), AddrRegPostInc(b)) => a == b,
+            (AddrRegPreDec(a),  AddrRegPreDec(b))  => a == b,
+            (AddrRegDisp { an: a, .. }, AddrRegDisp { an: b, .. }) => a == b,
+            (AddrRegIdx { an: a, .. },  AddrRegIdx { an: b, .. })  => a == b,
+            (AbsShort(_),  AbsShort(_))  => true,
+            (AbsLong(_),   AbsLong(_))   => true,
+            (PcDisp(_),    PcDisp(_))    => true,
+            (PcIdx { .. }, PcIdx { .. }) => true,
+            (Immediate(_), Immediate(_)) => true,
+            _ => false,
+        }
     }
 }
 
@@ -1042,27 +1064,5 @@ mod tests {
     #[test]
     fn test_error_empty() {
         assert_eq!(parse_err(""), EaError::ExpectedOperand);
-    }
-}
-
-// PartialEq のための実装（テスト用）
-impl PartialEq for EffectiveAddress {
-    fn eq(&self, other: &Self) -> bool {
-        use EffectiveAddress::*;
-        match (self, other) {
-            (DataReg(a),        DataReg(b))        => a == b,
-            (AddrReg(a),        AddrReg(b))        => a == b,
-            (AddrRegInd(a),     AddrRegInd(b))     => a == b,
-            (AddrRegPostInc(a), AddrRegPostInc(b)) => a == b,
-            (AddrRegPreDec(a),  AddrRegPreDec(b))  => a == b,
-            (AddrRegDisp { an: a, .. }, AddrRegDisp { an: b, .. }) => a == b,
-            (AddrRegIdx { an: a, .. },  AddrRegIdx { an: b, .. })  => a == b,
-            (AbsShort(_),  AbsShort(_))  => true,
-            (AbsLong(_),   AbsLong(_))   => true,
-            (PcDisp(_),    PcDisp(_))    => true,
-            (PcIdx { .. }, PcIdx { .. }) => true,
-            (Immediate(_), Immediate(_)) => true,
-            _ => false,
-        }
     }
 }

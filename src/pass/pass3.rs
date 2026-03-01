@@ -1,7 +1,7 @@
-/// Pass 3: オブジェクトコード生成
-///
-/// TempRecord 列とシンボルテーブルから最終的なバイト列と
-/// 外部シンボル情報を生成し、ObjectCode を返す。
+//! Pass 3: オブジェクトコード生成
+//!
+//! TempRecord 列とシンボルテーブルから最終的なバイト列と
+//! 外部シンボル情報を生成し、ObjectCode を返す。
 
 use crate::addressing::{Displacement, EffectiveAddress};
 use crate::expr::{eval_rpn, Rpn};
@@ -40,6 +40,9 @@ struct FoldExpr {
 // Pass3 内部状態
 // ----------------------------------------------------------------
 
+/// PRN pending info: (line_num, start_loc, start_sect, text, is_macro, accumulated_bytes)
+type PrnPendingInfo = (u32, u32, u8, Vec<u8>, bool, Vec<u8>);
+
 struct P3Ctx<'a> {
     sym: &'a SymbolTable,
     /// 現在のセクション ID（1=text, 2=data, ...）
@@ -65,7 +68,7 @@ struct P3Ctx<'a> {
     /// PRN生成が有効か
     prn_enable: bool,
     /// 現在の行の情報（line_num, start_loc, start_sect, text, is_macro, accumulated_bytes）
-    prn_pending: Option<(u32, u32, u8, Vec<u8>, bool, Vec<u8>)>,
+    prn_pending: Option<PrnPendingInfo>,
     /// 収集済みのPRN行リスト
     pub prn_lines: Vec<PrnLine>,
 }
@@ -641,11 +644,9 @@ pub fn pass3(
                     // already registered via try_register_xdef
                 } else {
                     // コード中で参照されなかった XDEF: ここで初めて登録
-                    let (val, kind) = if let Some(s) = sym.lookup_sym(name) {
-                        if let Symbol::Value { value, section, attrib, .. } = s {
-                            if *attrib >= DefAttrib::Define {
-                                (*value as u32, *section)
-                            } else { (0, sym_kind::XDEF) }
+                    let (val, kind) = if let Some(Symbol::Value { value, section, attrib, .. }) = sym.lookup_sym(name) {
+                        if *attrib >= DefAttrib::Define {
+                            (*value as u32, *section)
                         } else { (0, sym_kind::XDEF) }
                     } else { (0, sym_kind::XDEF) };
                     ctx.ext_syms.push(ExternalSymbol {
@@ -850,7 +851,7 @@ fn process_deferred(
     // DBcc は encode_insn では常に DeferToLinker を返すため、ここで特別処理する
     if matches!(handler, InsnHandler::DBcc) {
         let pc = ctx.location();
-        let dn = match resolved_ops.get(0) {
+        let dn = match resolved_ops.first() {
             Some(EffectiveAddress::DataReg(n)) => *n,
             _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; }
         };
@@ -868,7 +869,7 @@ fn process_deferred(
                     _ => 0,
                 };
                 let disp = target_addr - (pc as i32 + 2);
-                if disp >= -32768 && disp <= 32767 {
+                if (-32768..=32767).contains(&disp) {
                     let dw = disp as i16 as u16;
                     ctx.emit(&[(opcode_word >> 8) as u8, (opcode_word & 0xFF) as u8,
                                (dw >> 8) as u8, (dw & 0xFF) as u8]);
@@ -1353,7 +1354,7 @@ fn process_branch(
     match req_size {
         Some(SizeCode::Short) => {
             // .s 形式: 2バイト (オフセットを下位バイトに埋め込む)
-            if offset_w >= -128 && offset_w <= 127 {
+            if (-128..=127).contains(&offset_w) {
                 let b1 = (opcode | (offset_w as u16 & 0xFF)) as u8;
                 let b0 = (opcode >> 8) as u8;
                 ctx.emit(&[b0, b1]);
@@ -1377,7 +1378,7 @@ fn process_branch(
         }
         _ => {
             // .w 形式 (デフォルト): 4バイト
-            if offset_w >= -32768 && offset_w <= 32767 {
+            if (-32768..=32767).contains(&offset_w) {
                 let w = offset_w as i16 as u16;
                 let b0 = (opcode >> 8) as u8;
                 let b1 = opcode as u8; // 下位バイトは 0x00 for .w

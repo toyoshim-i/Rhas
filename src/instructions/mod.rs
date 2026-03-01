@@ -1,9 +1,9 @@
-/// 68000 命令エンコード（Phase 5）
-///
-/// `encode_insn(base_opcode, handler, size, operands)` → `Vec<u8>`
-///
-/// 入力はすでに解析済みの EffectiveAddress。
-/// シンボル参照を含む EA は `InsnError::DeferToLinker` を返す。
+//! 68000 命令エンコード（Phase 5）
+//!
+//! `encode_insn(base_opcode, handler, size, operands)` → `Vec<u8>`
+//!
+//! 入力はすでに解析済みの EffectiveAddress。
+//! シンボル参照を含む EA は `InsnError::DeferToLinker` を返す。
 
 use crate::addressing::{
     EffectiveAddress,
@@ -578,7 +578,7 @@ fn encode_moveq(operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
     let rpn = imm_rpn(&operands[0]).ok_or(InsnError::InvalidOperand)?;
     let dn = data_reg(&operands[1]).ok_or(InsnError::InvalidOperand)?;
     let val = eval_const(rpn).ok_or(InsnError::DeferToLinker)?;
-    if val < -128 || val > 255 {
+    if !(-128..=255).contains(&val) {
         return Err(InsnError::OutOfRange { value: val, min: -128, max: 255 });
     }
     let word = 0x7000u16 | ((dn as u16) << 9) | (val as u8 as u16);
@@ -788,7 +788,7 @@ fn encode_subaddq(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> R
     }
     let rpn = imm_rpn(&operands[0]).ok_or(InsnError::InvalidOperand)?;
     let val = eval_const(rpn).ok_or(InsnError::DeferToLinker)?;
-    if val < 1 || val > 8 {
+    if !(1..=8).contains(&val) {
         return Err(InsnError::OutOfRange { value: val, min: 1, max: 8 });
     }
     let qval = if val == 8 { 0u16 } else { val as u16 };
@@ -1225,7 +1225,7 @@ fn encode_bchclst(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, I
         (EffectiveAddress::Immediate(rpn), dst) => {
             // Static bit: base | 0x0800 | EA
             let bit_num = eval_const(rpn).ok_or(InsnError::DeferToLinker)?;
-            if bit_num < 0 || bit_num > 31 {
+            if !(0..=31).contains(&bit_num) {
                 return Err(InsnError::OutOfRange { value: bit_num, min: 0, max: 31 });
             }
             let dst_enc = enc(dst, 0)?;
@@ -1278,8 +1278,8 @@ fn encode_sftrot(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
         // TTT = type bits (from base bits 4-3): AS=000, LS=001, ROX=010, RO=011
         // D = direction (from base bit 8): 0=right, 1=left
         // bits 7-6 = 11 (memory form marker)
-        let type_bits = ((base & 0x0018) >> 3) as u16;  // LS=1, AS=0, ROX=2, RO=3
-        let dir_bit   = ((base & 0x0100) >> 8) as u16;  // 1=left, 0=right
+        let type_bits = (base & 0x0018) >> 3;  // LS=1, AS=0, ROX=2, RO=3
+        let dir_bit   = (base & 0x0100) >> 8;  // 1=left, 0=right
         let word = 0xE000u16 | (type_bits << 9) | (dir_bit << 8) | 0x00C0 | (ea_enc.ea_field as u16);
         let mut v = Vec::new();
         push_word(&mut v, word);
@@ -1294,7 +1294,7 @@ fn encode_sftrot(base: u16, size: SizeCode, operands: &[EffectiveAddress]) -> Re
         // #imm, Dn: count in bits 11-9 (1-8, 8→0)
         EffectiveAddress::Immediate(rpn) => {
             let count = eval_const(rpn).ok_or(InsnError::DeferToLinker)?;
-            if count < 1 || count > 8 {
+            if !(1..=8).contains(&count) {
                 return Err(InsnError::OutOfRange { value: count, min: 1, max: 8 });
             }
             let cnt = if count == 8 { 0u16 } else { count as u16 };
@@ -1411,7 +1411,7 @@ fn encode_trap(operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
     }
     let rpn = imm_rpn(&operands[0]).ok_or(InsnError::InvalidOperand)?;
     let vec_num = eval_const(rpn).ok_or(InsnError::DeferToLinker)?;
-    if vec_num < 0 || vec_num > 15 {
+    if !(0..=15).contains(&vec_num) {
         return Err(InsnError::OutOfRange { value: vec_num, min: 0, max: 15 });
     }
     let word = 0x4E40u16 | (vec_num as u16);
@@ -1534,8 +1534,7 @@ fn parse_bitfield_ext(ops: &[EffectiveAddress]) -> Option<(u16, usize)> {
             0x0020u16 | ((*r & 7) as u16)
         }
         EffectiveAddress::Immediate(rpn) => {
-            let v = eval_const(rpn)? as u16 & 0x1F;
-            v // 0 means 32
+            eval_const(rpn)? as u16 & 0x1F // 0 means 32
         }
         _ => return None,
     };
@@ -1909,6 +1908,7 @@ mod tests {
         encode_insn(opcode, handler, size, &operands).unwrap()
     }
 
+    #[allow(dead_code)]
     fn encode_ok(handler: InsnHandler, opcode: u16, size: SizeCode, ops: Vec<&str>) -> Option<Vec<u8>> {
         let operands: Vec<EffectiveAddress> = ops.iter().map(|s| parse(s)).collect();
         encode_insn(opcode, handler, size, &operands).ok()

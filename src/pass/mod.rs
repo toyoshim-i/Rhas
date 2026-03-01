@@ -1,8 +1,8 @@
 #![allow(dead_code)]
-/// パスシステム（Pass 1 → Pass 2 → Pass 3）
-///
-/// オリジナルの 3 パスアセンブラ構造に対応する。
-/// Rust版はテンポラリファイルの代わりにメモリ上の Vec<TempRecord> を使う。
+//! パスシステム（Pass 1 → Pass 2 → Pass 3）
+//!
+//! オリジナルの 3 パスアセンブラ構造に対応する。
+//! Rust版はテンポラリファイルの代わりにメモリ上の Vec<TempRecord> を使う。
 
 pub mod temp;
 pub mod pass1;
@@ -30,9 +30,7 @@ fn format_sym_file(sym: &SymbolTable) -> Vec<u8> {
         // シンボル名（16文字、スペースパディング）
         let name_len = name.len().min(16);
         out.extend_from_slice(&name[..name_len]);
-        for _ in name_len..16 {
-            out.push(b' ');
-        }
+        out.extend(std::iter::repeat_n(b' ', 16 - name_len));
         out.extend_from_slice(b" : ");
 
         match symbol {

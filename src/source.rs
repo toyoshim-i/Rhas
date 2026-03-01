@@ -1,9 +1,9 @@
 #![allow(dead_code)]
-/// ソースファイル読み込み
-///
-/// オリジナルの `file.s`（readline, readopen）に相当する。
-/// Rust版はファイルを全てメモリに読み込み、イテレータで行を返す方式を採用。
-/// インクルードファイルのネストは最大 INCLDMAXNEST(8) レベル。
+//! ソースファイル読み込み
+//!
+//! オリジナルの `file.s`（readline, readopen）に相当する。
+//! Rust版はファイルを全てメモリに読み込み、イテレータで行を返す方式を採用。
+//! インクルードファイルのネストは最大 INCLDMAXNEST(8) レベル。
 
 use crate::error::{FileError, FileErrorKind, SourcePos};
 use std::path::{Path, PathBuf};
@@ -178,25 +178,23 @@ impl SourceStack {
     /// 現在のファイルが EOF なら、スタックを巻き戻して上位ファイルから読む。
     /// 全て EOF ならば None を返す。
     pub fn read_line(&mut self) -> ReadResult {
-        loop {
-            let is_eof = self.stack.last().map(|s| s.is_eof()).unwrap_or(true);
-            if !is_eof {
-                let line = self.current_mut().read_line();
-                return match line {
-                    Some(l) => ReadResult::Line(l),
-                    None => ReadResult::Eof,
-                };
-            }
-            // 現在ファイルが EOF
-            if self.stack.len() == 1 {
-                // メインファイルの EOF = アセンブル終了
-                return ReadResult::Eof;
-            }
-            // インクルードファイルの EOF = スタックを1段戻す
-            self.stack.pop();
-            // インクルード終了イベント（Pass1 で T_INCLDEND を記録するため）
-            return ReadResult::IncludeEnd;
+        let is_eof = self.stack.last().map(|s| s.is_eof()).unwrap_or(true);
+        if !is_eof {
+            let line = self.current_mut().read_line();
+            return match line {
+                Some(l) => ReadResult::Line(l),
+                None => ReadResult::Eof,
+            };
         }
+        // 現在ファイルが EOF
+        if self.stack.len() == 1 {
+            // メインファイルの EOF = アセンブル終了
+            return ReadResult::Eof;
+        }
+        // インクルードファイルの EOF = スタックを1段戻す
+        self.stack.pop();
+        // インクルード終了イベント（Pass1 で T_INCLDEND を記録するため）
+        ReadResult::IncludeEnd
     }
 
     /// インクルードファイルをオープンしてスタックに積む

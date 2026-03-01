@@ -1,13 +1,13 @@
 #![allow(dead_code)]
-/// シンボルテーブル
-///
-/// オリジナルの `symbol.s`（SYMHASHPTR / CMDHASHPTR）に対応する。
-/// Rust版はHashMapで実装する。
-///
-/// ## テーブル構成
-/// - `user_syms`: ユーザー定義シンボル（大文字小文字区別、ラベル・.equ等）
-/// - `reg_table`: レジスタ名（大文字小文字区別なし、起動時登録）
-/// - `cmd_table`: 命令名・マクロ名（大文字小文字区別なし）
+//! シンボルテーブル
+//!
+//! オリジナルの `symbol.s`（SYMHASHPTR / CMDHASHPTR）に対応する。
+//! Rust版はHashMapで実装する。
+//!
+//! ## テーブル構成
+//! - `user_syms`: ユーザー定義シンボル（大文字小文字区別、ラベル・.equ等）
+//! - `reg_table`: レジスタ名（大文字小文字区別なし、起動時登録）
+//! - `cmd_table`: 命令名・マクロ名（大文字小文字区別なし）
 
 pub mod types;
 
