@@ -5,7 +5,7 @@
 
 use crate::addressing::{parse_ea, parse_reg_list_mask, EffectiveAddress};
 use crate::context::{AssemblyContext, Section};
-use crate::error::SourcePos;
+use crate::error::{print_error, print_warning, ErrorCode, SourcePos, warn};
 use crate::expr::{eval_rpn, parse_expr, Rpn};
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;
@@ -87,17 +87,19 @@ impl<'a> P1Ctx<'a> {
         self.ctx.add_error();
     }
 
-    /// 警告を報告して count を増やす
-    fn warn(&mut self, msg: &str) {
-        // -w0 では警告を出力しない。
-        if self.ctx.effective_warn_level() == 0 {
-            return;
+    fn error_code(&mut self, code: ErrorCode, sym: Option<&[u8]>) {
+        let mut stderr = std::io::stderr();
+        print_error(&mut stderr, &self.current_pos, code, sym);
+        self.ctx.add_error();
+    }
+
+    fn warn_code(&mut self, code: crate::error::WarnCode, sym: Option<&[u8]>) {
+        let level = self.ctx.effective_warn_level();
+        let mut stderr = std::io::stderr();
+        print_warning(&mut stderr, &self.current_pos, code, sym, level);
+        if level >= crate::error::warn_default_level(code) {
+            self.ctx.add_warning();
         }
-        eprintln!("{:<16} {:6}: Warning: {}",
-            String::from_utf8_lossy(&self.current_pos.filename),
-            self.current_pos.line,
-            msg);
-        self.ctx.add_warning();
     }
 
     fn section_id(&self) -> u8 {
@@ -1772,7 +1774,7 @@ fn handle_pseudo(
         // ---- .even / .quad / .align ----
         InsnHandler::Even => {
             if p1.ctx.offsym_with_symbol {
-                p1.error(".offsym 中に .even は指定できません");
+                p1.error_code(ErrorCode::OffsymAlign, Some(b".even"));
                 return;
             }
             if p1.is_offset_mode() {
@@ -1788,7 +1790,7 @@ fn handle_pseudo(
         }
         InsnHandler::Quad => {
             if p1.ctx.offsym_with_symbol {
-                p1.error(".offsym 中に .quad は指定できません");
+                p1.error_code(ErrorCode::OffsymAlign, Some(b".quad"));
                 return;
             }
             if p1.is_offset_mode() {
@@ -1803,7 +1805,7 @@ fn handle_pseudo(
         }
         InsnHandler::Align => {
             if p1.ctx.offsym_with_symbol {
-                p1.error(".offsym 中に .align は指定できません");
+                p1.error_code(ErrorCode::OffsymAlign, Some(b".align"));
                 return;
             }
             skip_spaces(line, pos);
@@ -2826,11 +2828,11 @@ fn handle_pseudo(
                             opt_count:  0,
                             value:      init,
                         };
-                        p1.sym.define(name, sym);
+                        p1.sym.define(name.clone(), sym);
                     }
                 }
                 if warn_overwrite {
-                    p1.warn(".offsym により既存シンボルを上書きしました");
+                    p1.warn_code(warn::REDEF_OFFSYM, Some(&name));
                 }
                 has_symbol = true;
                 skip_spaces(line, pos);

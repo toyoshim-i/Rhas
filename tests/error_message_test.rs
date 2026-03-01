@@ -114,3 +114,16 @@ start:\n\
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!stderr.contains(".offsym により既存シンボルを上書きしました"));
 }
+
+#[test]
+fn test_warning_message_offsym_uses_warn_table_with_symbol() {
+    let src = b"\
+start:\n\
+\tnop\n\
+\t.offsym\t0,start\n";
+    let out = run_rhas_with_args(src, &["-w1"]);
+    assert!(out.status.success(), "assemble should succeed");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("シンボル start を .offsym で上書きしました"));
+}
