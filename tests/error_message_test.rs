@@ -30,7 +30,7 @@ fn test_error_message_invalid_size_fmovecr() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert!(stderr.contains("命令のエンコードに失敗しました: InvalidSize"));
+    assert!(stderr.contains("記述が間違っています"), "stderr: {}", stderr);
     assert!(stdout.contains("エラーが 1 個ありました"));
 }
 
@@ -42,7 +42,7 @@ fn test_error_message_invalid_operand_file_directive() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert!(stderr.contains(".endef にオペランドは指定できません"));
+    assert!(stderr.contains("不正なオペランドです"), "stderr: {}", stderr);
     assert!(stdout.contains("エラーが 1 個ありました"));
 }
 
@@ -54,7 +54,7 @@ fn test_error_message_invalid_expr_val_directive() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert!(stderr.contains(".val の式が不正です"));
+    assert!(stderr.contains("記述が間違っています"), "stderr: {}", stderr);
     assert!(stdout.contains("エラーが 1 個ありました"));
 }
 
@@ -66,7 +66,7 @@ fn test_error_message_scd_boundary_scl_range() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert!(stderr.contains(".scl の値は -1 または 0..255 で指定してください"));
+    assert!(stderr.contains("不正な値です"), "stderr: {}", stderr);
     assert!(stdout.contains("エラーが 1 個ありました"));
 }
 
@@ -78,7 +78,7 @@ fn test_error_message_fpid_boundary() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert!(stderr.contains(".fpid の値は 0..7 で指定してください"));
+    assert!(stderr.contains("不正な値です"), "stderr: {}", stderr);
     assert!(stdout.contains("エラーが 1 個ありました"));
 }
 
@@ -98,7 +98,7 @@ fn test_error_message_fmovem_size_boundaries() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert_eq!(stderr.matches("命令のエンコードに失敗しました: InvalidSize").count(), 5);
+    assert_eq!(stderr.matches("記述が間違っています").count(), 5, "stderr: {}", stderr);
     assert!(stdout.contains("エラーが 5 個ありました"));
 }
 

@@ -78,15 +78,7 @@ impl<'a> P1Ctx<'a> {
         }
     }
 
-    /// エラーを報告して count を増やす
-    fn error(&mut self, msg: &str) {
-        eprintln!("{:<16} {:6}: Error: {}",
-            String::from_utf8_lossy(&self.current_pos.filename),
-            self.current_pos.line,
-            msg);
-        self.ctx.add_error();
-    }
-
+    /// エラーを報告して count を増やす（error.rs テーブル経由）
     fn error_code(&mut self, code: ErrorCode, sym: Option<&[u8]>) {
         let mut stderr = std::io::stderr();
         print_error(&mut stderr, &self.current_pos, code, sym);
@@ -656,9 +648,7 @@ fn parse_line(
         }
         // ---- 未知のニーモニック ----
         Dispatch::Unknown => {
-            let msg = format!("命令が解釈できません: {}",
-                String::from_utf8_lossy(&mnem));
-            p1.error(&msg);
+            p1.error_code(ErrorCode::BadOpe, None);
         }
     }
 
@@ -1240,7 +1230,7 @@ fn handle_real_insn(
             }
         }
         Err(e) => {
-            p1.error(&format!("命令のエンコードに失敗しました: {:?}", e));
+            p1.error_code(ErrorCode::Expr, None);
         }
     }
 }
@@ -2210,7 +2200,7 @@ fn handle_pseudo(
                     p1.ctx.opts.prn_width = ((v as u16) & !7) as u16;
                 }
                 _ => {
-                    p1.error(".width の値が不正です (80..255)");
+                    p1.error_code(ErrorCode::IlValue, None);
                 }
             }
         }
@@ -2231,7 +2221,7 @@ fn handle_pseudo(
                         p1.ctx.opts.prn_page_lines = v as u16;
                     }
                     _ => {
-                        p1.error(".page の値が不正です (10..255 または -1)");
+                        p1.error_code(ErrorCode::IlValue, None);
                     }
                 }
             }
@@ -2257,7 +2247,7 @@ fn handle_pseudo(
                 true
             };
             if should_fail {
-                p1.error(".fail によるエラー");
+                p1.error_code(ErrorCode::Forced, None);
             }
         }
 
@@ -2266,7 +2256,7 @@ fn handle_pseudo(
             // マクロ名はラベルフィールドに書く
             let mac_name = label.clone().unwrap_or_else(Vec::new);
             if mac_name.is_empty() {
-                p1.error(".macro にマクロ名がありません");
+                p1.error_code(ErrorCode::NoSymMacro, None);
                 return;
             }
             // 仮引数リストを解析
@@ -2345,12 +2335,12 @@ fn handle_pseudo(
                     skip_spaces(line, pos);
                     let name = parse_filename(line, pos);
                     if name.is_empty() {
-                        p1.error(".file のファイル名がありません");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".file のオペランドが不正です");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     p1.ctx.scd_enabled = true;
@@ -2360,12 +2350,12 @@ fn handle_pseudo(
                     skip_spaces(line, pos);
                     let name = read_ident(line, pos);
                     if name.is_empty() {
-                        p1.error(".def のシンボル名がありません");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".def のオペランドが不正です");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     let mut temp = crate::context::ScdTemp::default();
@@ -2381,7 +2371,7 @@ fn handle_pseudo(
                 InsnHandler::Endef => {
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".endef にオペランドは指定できません");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     // HAS互換: .endef 時に attrib を type/scl から補完する。
@@ -2427,7 +2417,7 @@ fn handle_pseudo(
                 InsnHandler::Val => {
                     skip_spaces(line, pos);
                     if *pos >= line.len() || line[*pos] == b';' {
-                        p1.error(".val の式がありません");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     let rpn = if line[*pos] == b'.' {
@@ -2440,7 +2430,7 @@ fn handle_pseudo(
                             match parse_expr(line, pos) {
                                 Ok(rpn) => rpn,
                                 Err(_) => {
-                                    p1.error(".val の式が不正です");
+                                    p1.error_code(ErrorCode::Expr, None);
                                     return;
                                 }
                             }
@@ -2449,14 +2439,14 @@ fn handle_pseudo(
                         match parse_expr(line, pos) {
                             Ok(rpn) => rpn,
                             Err(_) => {
-                                p1.error(".val の式が不正です");
+                                p1.error_code(ErrorCode::Expr, None);
                                 return;
                             }
                         }
                     };
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".val のオペランドが不正です");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     if let Some(ev) = p1.eval_const(&rpn) {
@@ -2473,13 +2463,13 @@ fn handle_pseudo(
                     let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
                         Some(v) if v.section == 0 => v.value,
                         _ => {
-                            p1.error(".scl は定数式で指定してください");
+                            p1.error_code(ErrorCode::Expr, None);
                             return;
                         }
                     };
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".scl のオペランドが不正です");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     if value == -1 {
@@ -2491,7 +2481,7 @@ fn handle_pseudo(
                     } else if (0..=255).contains(&value) {
                         p1.ctx.scd_temp.scl = value as u8;
                     } else {
-                        p1.error(".scl の値は -1 または 0..255 で指定してください");
+                        p1.error_code(ErrorCode::IlValue, None);
                     }
                 }
                 InsnHandler::TypeScd => {
@@ -2499,17 +2489,17 @@ fn handle_pseudo(
                     let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
                         Some(v) if v.section == 0 => v.value,
                         _ => {
-                            p1.error(".type は定数式で指定してください");
+                            p1.error_code(ErrorCode::Expr, None);
                             return;
                         }
                     };
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".type のオペランドが不正です");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     if !(0..=65535).contains(&value) {
-                        p1.error(".type の値は 0..65535 で指定してください");
+                        p1.error_code(ErrorCode::IlValue, None);
                         return;
                     }
                     p1.ctx.scd_temp.type_code = value as u16;
@@ -2524,12 +2514,12 @@ fn handle_pseudo(
                     skip_spaces(line, pos);
                     let tag_name = read_ident(line, pos);
                     if tag_name.is_empty() {
-                        p1.error(".tag のタグ名がありません");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".tag のオペランドが不正です");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     records.push(TempRecord::ScdTag { name: tag_name });
@@ -2540,7 +2530,7 @@ fn handle_pseudo(
                     let line_no = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
                         Some(v) if v.section == 0 => v.value,
                         _ => {
-                            p1.error(".ln の行番号は定数式で指定してください");
+                            p1.error_code(ErrorCode::Expr, None);
                             return;
                         }
                     };
@@ -2552,14 +2542,14 @@ fn handle_pseudo(
                         loc_rpn = match parse_expr(line, pos) {
                             Ok(rpn) => rpn,
                             Err(_) => {
-                                p1.error(".ln のロケーション式が不正です");
+                                p1.error_code(ErrorCode::Expr, None);
                                 return;
                             }
                         };
                         skip_spaces(line, pos);
                     }
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".ln のオペランドが不正です");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     // HAS互換: .ln の行番号は move.w 相当で下位16bitを保持する。
@@ -2572,13 +2562,13 @@ fn handle_pseudo(
                     let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
                         Some(v) if v.section == 0 => v.value,
                         _ => {
-                            p1.error(".line は定数式で指定してください");
+                            p1.error_code(ErrorCode::Expr, None);
                             return;
                         }
                     };
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".line のオペランドが不正です");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     p1.ctx.scd_temp.is_long = true;
@@ -2590,13 +2580,13 @@ fn handle_pseudo(
                     let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
                         Some(v) if v.section == 0 => v.value,
                         _ => {
-                            p1.error(".size は定数式で指定してください");
+                            p1.error_code(ErrorCode::Expr, None);
                             return;
                         }
                     };
                     skip_spaces(line, pos);
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".size のオペランドが不正です");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     if value != 0 {
@@ -2609,18 +2599,18 @@ fn handle_pseudo(
                     let mut dims = [0u16; 4];
                     let mut i = 0usize;
                     if *pos >= line.len() || line[*pos] == b';' {
-                        p1.error(".dim の値がありません");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     loop {
                         if i >= 4 {
-                            p1.error(".dim は最大4要素まで指定できます");
+                            p1.error_code(ErrorCode::IlOprTooMany, Some(b".dim"));
                             return;
                         }
                         let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
                             Some(v) if v.section == 0 => v.value,
                             _ => {
-                                p1.error(".dim は定数式のみ指定できます");
+                                p1.error_code(ErrorCode::Expr, None);
                                 return;
                             }
                         };
@@ -2635,7 +2625,7 @@ fn handle_pseudo(
                         break;
                     }
                     if *pos < line.len() && line[*pos] != b';' {
-                        p1.error(".dim のオペランドが不正です");
+                        p1.error_code(ErrorCode::IlOpr, None);
                         return;
                     }
                     p1.ctx.scd_temp.dim = dims;
@@ -2715,12 +2705,12 @@ fn handle_pseudo(
             skip_spaces(line, pos);
             let name = read_ident(line, pos);
             if name.is_empty() {
-                p1.error(".comm のシンボルがありません");
+                p1.error_code(ErrorCode::NoSymPseudo, Some(b".comm"));
                 return;
             }
             skip_spaces(line, pos);
             if *pos >= line.len() || line[*pos] != b',' {
-                p1.error(".comm のサイズ式がありません");
+                p1.error_code(ErrorCode::IlOpr, None);
                 return;
             }
             *pos += 1;
@@ -2729,28 +2719,28 @@ fn handle_pseudo(
             let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
                 Some(v) if v.section == 0 && v.value > 0 => v.value,
                 _ => {
-                    p1.error(".comm のサイズは正の定数である必要があります");
+                    p1.error_code(ErrorCode::IlValue, None);
                     return;
                 }
             };
 
             skip_spaces(line, pos);
             if *pos < line.len() && line[*pos] != b';' {
-                p1.error(".comm のオペランドが不正です");
+                p1.error_code(ErrorCode::IlOpr, None);
                 return;
             }
 
             match p1.sym.lookup_sym_mut(&name) {
                 Some(Symbol::Value { attrib, ext_attrib, value: sym_value, .. }) => {
                     if *attrib != DefAttrib::Undef {
-                        p1.error(".comm シンボルは未定義である必要があります");
+                        p1.error_code(ErrorCode::Redef, Some(&name));
                         return;
                     }
                     *ext_attrib = ext;
                     *sym_value = value;
                 }
                 Some(_) => {
-                    p1.error(".comm シンボル型が不正です");
+                    p1.error_code(ErrorCode::IlSymValue, None);
                     return;
                 }
                 None => {
@@ -2780,11 +2770,11 @@ fn handle_pseudo(
                 if let Ok(rpn) = parse_expr(line, pos) {
                     p1.eval_const(&rpn).map(|v| v.value).unwrap_or(0)
                 } else {
-                    p1.error(".offsym の初期値式が不正です");
+                    p1.error_code(ErrorCode::Expr, None);
                     return;
                 }
             } else {
-                p1.error(".offsym の初期値がありません");
+                p1.error_code(ErrorCode::IlOpr, None);
                 return;
             };
 
@@ -2795,7 +2785,7 @@ fn handle_pseudo(
                 skip_spaces(line, pos);
                 let name = read_ident(line, pos);
                 if name.is_empty() {
-                    p1.error(".offsym のシンボル名がありません");
+                    p1.error_code(ErrorCode::NoSymPseudo, Some(b".offsym"));
                     return;
                 }
                 let mut warn_overwrite = false;
@@ -2803,7 +2793,7 @@ fn handle_pseudo(
                     Some(Symbol::Value { attrib, section, first, value, ext_attrib, .. }) => {
                         if *first != FirstDef::Offsym && *attrib >= DefAttrib::Define {
                             if p1.ctx.opts.ow_offsym {
-                                p1.error(".offsym 以外で定義済みのシンボルは上書きできません");
+                                p1.error_code(ErrorCode::RedefOffsym, Some(&name));
                                 return;
                             }
                             warn_overwrite = true;
@@ -2815,7 +2805,7 @@ fn handle_pseudo(
                         *value = init;
                     }
                     Some(_) => {
-                        p1.error(".offsym シンボル型が不正です");
+                        p1.error_code(ErrorCode::IlSymValue, None);
                         return;
                     }
                     None => {
@@ -2839,7 +2829,7 @@ fn handle_pseudo(
             }
 
             if *pos < line.len() && line[*pos] != b';' {
-                p1.error(".offsym のオペランドが不正です");
+                p1.error_code(ErrorCode::IlOpr, None);
                 return;
             }
             p1.ctx.offsym_with_symbol = has_symbol;
@@ -2850,19 +2840,19 @@ fn handle_pseudo(
         InsnHandler::FpId => {
             skip_spaces(line, pos);
             if *pos >= line.len() || line[*pos] == b';' {
-                p1.error(".fpid の値がありません");
+                p1.error_code(ErrorCode::IlOpr, None);
                 return;
             }
             let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
                 Some(v) if v.section == 0 => v.value,
                 _ => {
-                    p1.error(".fpid は定数式で指定してください");
+                    p1.error_code(ErrorCode::Expr, None);
                     return;
                 }
             };
             skip_spaces(line, pos);
             if *pos < line.len() && line[*pos] != b';' {
-                p1.error(".fpid のオペランドが不正です");
+                p1.error_code(ErrorCode::IlOpr, None);
                 return;
             }
             if value < 0 {
@@ -2871,7 +2861,7 @@ fn handle_pseudo(
             } else if value <= 7 {
                 p1.ctx.fpid = value as u8;
             } else {
-                p1.error(".fpid の値は 0..7 で指定してください");
+                p1.error_code(ErrorCode::IlValue, None);
             }
         }
         InsnHandler::Pragma => {}
