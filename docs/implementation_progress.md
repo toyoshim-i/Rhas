@@ -52,10 +52,10 @@
 - 優先度A/Bで管理していた MS6 由来の互換検証残タスクは完了。
 
 ## 直近コミット（ドキュメント時点）
+- `e8f8f02` Achieve zero warnings: remove dead helpers and suppress spec tables
 - `65a6f0e` Eliminate all inline error() calls in pass1, route through error table
 - `93ddd7b` Connect error/warning table output paths for offsym in pass1
 - `6a0581f` Connect pass transitions and warning level handling with regression tests
-- `46b4772` Refactor pass2 branch sizing and continue warning cleanup
 
 ## 参照
 - [README](../README.md)
