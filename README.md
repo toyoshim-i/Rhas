@@ -1,4 +1,7 @@
 # rhas
+[![CI](https://github.com/toyoshim-i/Rhas/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/toyoshim-i/Rhas/actions/workflows/ci.yml)
+[![Compat Manual Status](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftoyoshim-i%2Faction-stores%2Fmain%2Fbadges%2Frhas%2Fcompat-manual.json)](https://github.com/toyoshim-i/Rhas/actions/workflows/ci.yml?query=event%3Aworkflow_dispatch)
+[![Last Commit (main)](https://img.shields.io/github/last-commit/toyoshim-i/Rhas/main?logo=github)](https://github.com/toyoshim-i/Rhas/commits/main)
 
 X68000 用 M68000 アセンブラ **HAS060X.X** を Rust に移植したクロスアセンブラです。
 
@@ -125,8 +128,8 @@ zsh tests/gen_golden.sh
 
 2026-03-01 時点の主な結果:
 - `golden_test`: 25/25 pass
-- `integration_test`: 87/87 pass
-- `error_message_test`: 6/6 pass
+- `integration_test`: 97/97 pass
+- `error_message_test`: 9/9 pass
 - `compare_ms5_simple.sh`: 17/17 一致
 - `compare_ms6_extended.sh`: 19/19 一致
 

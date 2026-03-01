@@ -1,0 +1,239 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_compat:
+        description: "Run HAS compatibility regression (run68-based)"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  rust-check:
+    name: Rust Check (clippy + test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features
+
+      - name: Unit tests
+        run: cargo test
+
+  publish-main-badge:
+    name: Publish Main Badge
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - rust-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Preflight
+        env:
+          BADGE_REPO: ${{ vars.BADGE_REPO }}
+        run: |
+          echo "event=${{ github.event_name }}"
+          echo "ref=${{ github.ref }}"
+          if [[ -z "${BADGE_REPO}" ]]; then
+            echo "BADGE_REPO variable is empty. Set Settings -> Secrets and variables -> Actions -> Variables -> BADGE_REPO" >&2
+            exit 1
+          fi
+
+      - name: Checkout badge repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.BADGE_REPO }}
+          ref: ${{ vars.BADGE_REPO_BRANCH != '' && vars.BADGE_REPO_BRANCH || 'main' }}
+          token: ${{ secrets.BADGE_REPO_TOKEN != '' && secrets.BADGE_REPO_TOKEN || github.token }}
+          path: badge-repo
+
+      - name: Update badge json
+        env:
+          RUST_CHECK_RESULT: ${{ needs.rust-check.result }}
+          SHA7: ${{ github.sha }}
+          BADGE_DIR: ${{ vars.BADGE_DIR != '' && vars.BADGE_DIR || 'badges/rhas' }}
+        run: |
+          mkdir -p "badge-repo/${BADGE_DIR}"
+          short_sha="${SHA7:0:7}"
+          case "${RUST_CHECK_RESULT}" in
+            success)
+              color="brightgreen"
+              message="${short_sha} passing"
+              ;;
+            failure)
+              color="red"
+              message="${short_sha} failing"
+              ;;
+            cancelled)
+              color="lightgray"
+              message="${short_sha} cancelled"
+              ;;
+            *)
+              color="yellow"
+              message="${short_sha} ${RUST_CHECK_RESULT}"
+              ;;
+          esac
+          cat > "badge-repo/${BADGE_DIR}/ci-main.json" <<EOF
+          {
+            "schemaVersion": 1,
+            "label": "CI main",
+            "message": "${message}",
+            "color": "${color}"
+          }
+          EOF
+
+      - name: Commit badge update
+        run: |
+          cd badge-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No badge changes"
+            exit 0
+          fi
+          git commit -m "chore(ci): update rhas main badge [skip ci]"
+          git push
+
+  compat-regression:
+    name: Compatibility Regression (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.run_compat
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake unzip ripgrep
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build rhas
+        run: cargo build
+
+      - name: Setup Human68k binaries
+        run: ./tools/setup_human68k_binaries.sh
+
+      - name: Run MS5 compatibility regression
+        run: |
+          result=$(./tests/compare_ms5_simple.sh)
+          echo "${result}"
+          echo "${result}" | tail -1 | grep -q "diff=0"
+
+      - name: Run MS6 compatibility regression
+        run: |
+          result=$(./tests/compare_ms6_extended.sh)
+          echo "${result}"
+          echo "${result}" | tail -1 | grep -q "diff=0"
+
+  publish-compat-badge:
+    name: Publish Compatibility Badge
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.run_compat && github.ref == 'refs/heads/main'
+    needs:
+      - compat-regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Preflight
+        env:
+          BADGE_REPO: ${{ vars.BADGE_REPO }}
+        run: |
+          echo "event=${{ github.event_name }}"
+          echo "ref=${{ github.ref }}"
+          echo "run_compat=${{ inputs.run_compat }}"
+          if [[ -z "${BADGE_REPO}" ]]; then
+            echo "BADGE_REPO variable is empty. Set Settings -> Secrets and variables -> Actions -> Variables -> BADGE_REPO" >&2
+            exit 1
+          fi
+
+      - name: Checkout badge repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.BADGE_REPO }}
+          ref: ${{ vars.BADGE_REPO_BRANCH != '' && vars.BADGE_REPO_BRANCH || 'main' }}
+          token: ${{ secrets.BADGE_REPO_TOKEN != '' && secrets.BADGE_REPO_TOKEN || github.token }}
+          path: badge-repo
+
+      - name: Update compatibility badge json
+        env:
+          COMPAT_RESULT: ${{ needs.compat-regression.result }}
+          SHA7: ${{ github.sha }}
+          BADGE_DIR: ${{ vars.BADGE_DIR != '' && vars.BADGE_DIR || 'badges/rhas' }}
+        run: |
+          mkdir -p "badge-repo/${BADGE_DIR}"
+          short_sha="${SHA7:0:7}"
+          case "${COMPAT_RESULT}" in
+            success)
+              color="brightgreen"
+              message="${short_sha} passing"
+              ;;
+            failure)
+              color="red"
+              message="${short_sha} failing"
+              ;;
+            cancelled)
+              color="lightgray"
+              message="${short_sha} cancelled"
+              ;;
+            *)
+              color="yellow"
+              message="${short_sha} ${COMPAT_RESULT}"
+              ;;
+          esac
+          cat > "badge-repo/${BADGE_DIR}/compat-manual.json" <<EOF
+          {
+            "schemaVersion": 1,
+            "label": "compat manual",
+            "message": "${message}",
+            "color": "${color}"
+          }
+          EOF
+
+      - name: Commit compatibility badge update
+        run: |
+          cd badge-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No badge changes"
+            exit 0
+          fi
+          git commit -m "chore(ci): update rhas manual compat badge [skip ci]"
+          git push

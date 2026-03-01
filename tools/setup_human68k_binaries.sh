@@ -19,15 +19,34 @@ copy_local_if_exists() {
 
 echo "Setting up Human68k tool binaries..."
 
-# Prefer locally available binaries from sibling repository.
-copy_local_if_exists \
-  "/home/toyoshim/Work/Rhlk/external/run68x/build/run68" \
-  "${BIN_DIR}/run68" || true
-copy_local_if_exists \
-  "/home/toyoshim/Work/Rhlk/external/toolchain/bin/has060x.x" \
-  "${HAS_TEST_DIR}/HAS060.X" || true
+# --- run68 ---
+# 1. Prefer locally available binary from sibling Rhlk repository.
+RHLK_RUN68="${RHLK_RUN68:-/home/toyoshim/Work/Rhlk/external/run68x/build/run68}"
+copy_local_if_exists "${RHLK_RUN68}" "${BIN_DIR}/run68" || true
 
-# Optional fallback: download HAS060X.X from official release if local copy is unavailable.
+# 2. Fallback: build from external/run68x submodule (for CI).
+if [[ ! -f "${BIN_DIR}/run68" ]]; then
+  RUN68X_DIR="${ROOT_DIR}/external/run68x"
+  if [[ -f "${RUN68X_DIR}/CMakeLists.txt" ]]; then
+    echo "Building run68x from submodule..."
+    cmake -S "${RUN68X_DIR}" -B "${RUN68X_DIR}/build"
+    cmake --build "${RUN68X_DIR}/build"
+    cp -f "${RUN68X_DIR}/build/run68" "${BIN_DIR}/run68"
+  fi
+fi
+
+if [[ ! -f "${BIN_DIR}/run68" ]]; then
+  echo "ERROR: run68 binary not found. Please place it at ${BIN_DIR}/run68." >&2
+  exit 1
+fi
+chmod +x "${BIN_DIR}/run68"
+
+# --- HAS060.X ---
+# 1. Prefer locally available binary from sibling Rhlk repository.
+RHLK_HAS="${RHLK_HAS:-/home/toyoshim/Work/Rhlk/external/toolchain/bin/has060x.x}"
+copy_local_if_exists "${RHLK_HAS}" "${HAS_TEST_DIR}/HAS060.X" || true
+
+# 2. Fallback: download from official release.
 if [[ ! -f "${HAS_TEST_DIR}/HAS060.X" ]]; then
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -41,13 +60,6 @@ if [[ ! -f "${HAS_TEST_DIR}/HAS060.X" ]]; then
   fi
   unzip -p "${ZIP}" "${ENTRY}" > "${HAS_TEST_DIR}/HAS060.X"
 fi
-
-if [[ ! -f "${BIN_DIR}/run68" ]]; then
-  echo "ERROR: run68 binary not found. Please place it at ${BIN_DIR}/run68." >&2
-  exit 1
-fi
-
-chmod +x "${BIN_DIR}/run68"
 
 echo "Installed:"
 echo "  run68: ${BIN_DIR}/run68"
