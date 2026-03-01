@@ -48,6 +48,50 @@ fn assemble_file_c4(path: &str) -> Vec<u8> {
         .obj_bytes
 }
 
+/// Assemble with -c0 (all optimizations disabled).
+fn assemble_file_c0(path: &str) -> Vec<u8> {
+    let opts = rhas::options::Options {
+        source_file: Some(path.as_bytes().to_vec()),
+        optimize_disabled: true,
+        no_quick: true,
+        no_null_disp: true,
+        no_bra_cut: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx)
+        .expect("assemble failed")
+        .obj_bytes
+}
+
+/// Assemble with -c2 (v2 compatible mode).
+fn assemble_file_c2(path: &str) -> Vec<u8> {
+    let opts = rhas::options::Options {
+        source_file: Some(path.as_bytes().to_vec()),
+        no_null_disp: true,
+        no_bra_cut: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx)
+        .expect("assemble failed")
+        .obj_bytes
+}
+
+/// Assemble with -g (SCD debug output).
+fn assemble_file_g(path: &str) -> Vec<u8> {
+    let opts = rhas::options::Options {
+        source_file: Some(path.as_bytes().to_vec()),
+        make_sym_deb: true,
+        make_align: true,
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    rhas::pass::assemble(&mut ctx)
+        .expect("assemble failed")
+        .obj_bytes
+}
+
 /// Load golden file bytes, or return `None` when the file does not exist yet.
 fn load_golden(name: &str) -> Option<Vec<u8>> {
     let path = format!(
@@ -179,6 +223,62 @@ macro_rules! golden_test_opt {
     };
 }
 
+/// Declare a golden test with a custom assembler function.
+macro_rules! golden_test_custom {
+    ($name:ident, $asm_fn:ident) => {
+        #[test]
+        fn $name() {
+            let src_path = concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/asm/",
+                stringify!($name),
+                ".s"
+            );
+
+            let actual = $asm_fn(src_path);
+
+            let golden = match load_golden(stringify!($name)) {
+                Some(g) => g,
+                None => {
+                    eprintln!(
+                        "[SKIP] golden file missing for '{}'. \
+                         Run: zsh tests/gen_golden.sh",
+                        stringify!($name)
+                    );
+                    return;
+                }
+            };
+
+            if actual != golden {
+                let mismatch = actual
+                    .iter()
+                    .zip(golden.iter())
+                    .enumerate()
+                    .find(|(_, (a, b))| a != b)
+                    .map(|(i, _)| i);
+                let extra = if actual.len() != golden.len() {
+                    format!(
+                        "  rhas   : {} bytes\n  golden : {} bytes\n",
+                        actual.len(),
+                        golden.len()
+                    )
+                } else {
+                    format!("  size   : {} bytes (same)\n", actual.len())
+                };
+                let loc = mismatch
+                    .map(|i| format!("  first mismatch at byte offset {}\n", i))
+                    .unwrap_or_default();
+                panic!(
+                    "Golden mismatch for '{}':\n{}{}",
+                    stringify!($name),
+                    extra,
+                    loc
+                );
+            }
+        }
+    };
+}
+
 // ─── 68000 instruction tests ─────────────────────────────────────────────────
 
 golden_test!(insn_move);
@@ -212,6 +312,29 @@ golden_test!(rofst_disp);
 golden_test_opt!(addq_opt);
 golden_test_opt!(c4_core_opt);
 
+// ─── 68020+ instruction tests ────────────────────────────────────────────────
+
+golden_test!(insn_link_unlk);
+golden_test!(insn_chk);
+golden_test!(insn_020);
+golden_test!(insn_bfld);
+golden_test!(insn_cas);
+golden_test!(insn_moves);
+golden_test!(insn_muldiv_l);
+
+// ─── 68020+ addressing mode tests ────────────────────────────────────────────
+
+golden_test!(ea_020);
+
+// ─── expression tests (bitwise) ──────────────────────────────────────────────
+
+golden_test!(expr_bitwise);
+
+// ─── advanced macro / pseudo tests ───────────────────────────────────────────
+
+golden_test!(pseudo_macro_adv);
+golden_test!(pseudo_offset);
+
 // ─── FPU tests ────────────────────────────────────────────────────────────────
 
 golden_test!(fpu_core);
@@ -221,3 +344,120 @@ golden_test!(fmovem_list);
 golden_test!(fmovem_dyn);
 golden_test!(fpu_branch);
 golden_test!(fsincos);
+
+// ─── optimization level tests ────────────────────────────────────────────────
+
+golden_test_custom!(opt_c0, assemble_file_c0);
+golden_test_custom!(opt_c2, assemble_file_c2);
+golden_test!(opt_branch);
+
+// ─── SCD debug tests ─────────────────────────────────────────────────────────
+
+golden_test_custom!(scd_g, assemble_file_g);
+golden_test!(scd_file);
+
+// ─── additional instruction tests ────────────────────────────────────────────
+
+golden_test!(insn_movem);
+golden_test!(insn_movep);
+
+// ─── additional pseudo / symbol tests ────────────────────────────────────────
+
+golden_test!(pseudo_local);
+golden_test!(pseudo_comm);
+
+// ─── BCD / DEC / INC tests ──────────────────────────────────────────────────
+
+golden_test!(insn_bcd);
+golden_test!(insn_dec_inc);
+
+// ─── 68020+ conditional trap / bounds check ─────────────────────────────────
+
+golden_test!(insn_trapcc);
+golden_test!(insn_chk2_cmp2);
+
+// ─── 68040+ cache / move16 tests ────────────────────────────────────────────
+
+golden_test!(insn_cache);
+golden_test!(insn_move16);
+
+// ─── relative section tests ─────────────────────────────────────────────────
+
+golden_test!(pseudo_rsect);
+
+// ─── string literal tests ───────────────────────────────────────────────────
+
+golden_test!(pseudo_data_str);
+
+// ─── memory indirect addressing (68020+) ────────────────────────────────────
+
+golden_test!(ea_memory_indirect);
+
+// ─── optimization comparison tests ──────────────────────────────────────────
+
+golden_test!(opt_compare);
+golden_test!(opt_moveq);
+golden_test_opt!(opt_jmp_jsr);
+
+/// Same source as opt_compare, assembled with -c4.
+/// Golden file: HAS060.X -u -w0 -c4 -o opt_compare_c4.o opt_compare.s
+#[test]
+fn opt_compare_c4() {
+    let src_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/asm/opt_compare.s"
+    );
+    let actual = assemble_file_c4(src_path);
+    let golden = match load_golden("opt_compare_c4") {
+        Some(g) => g,
+        None => {
+            eprintln!("[SKIP] golden file missing for 'opt_compare_c4'.");
+            return;
+        }
+    };
+    if actual != golden {
+        let extra = if actual.len() != golden.len() {
+            format!(
+                "  rhas   : {} bytes\n  golden : {} bytes\n",
+                actual.len(), golden.len()
+            )
+        } else {
+            format!("  size   : {} bytes (same)\n", actual.len())
+        };
+        panic!("Golden mismatch for 'opt_compare_c4' (c4 opts):\n{}", extra);
+    }
+}
+
+/// Verify that default and -c4 produce different output for the same source.
+#[test]
+fn opt_compare_default_vs_c4_differ() {
+    let src_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/asm/opt_compare.s"
+    );
+    let default_bytes = assemble_file(src_path);
+    let c4_bytes = assemble_file_c4(src_path);
+    assert_ne!(
+        default_bytes.len(),
+        c4_bytes.len(),
+        "default ({} bytes) and -c4 ({} bytes) should produce different output sizes",
+        default_bytes.len(),
+        c4_bytes.len()
+    );
+}
+
+// ─── DBcc instruction tests ─────────────────────────────────────────────────
+
+golden_test!(insn_dbcc);
+
+// ─── absolute addressing tests ──────────────────────────────────────────────
+
+golden_test!(ea_absshort);
+
+// ─── conditional assembly edge cases ────────────────────────────────────────
+
+golden_test!(pseudo_cond_edge);
+
+// ─── macro/rept edge cases ──────────────────────────────────────────────────
+
+golden_test!(pseudo_rept_edge);
