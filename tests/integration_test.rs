@@ -110,6 +110,16 @@ fn scd_entry_offsets(bytes: &[u8], p: usize, line_len: usize, scd_len: usize) ->
     out
 }
 
+/// Compute the record (18-byte slot) index for entry at `entry_idx`.
+fn scd_record_index(bytes: &[u8], offsets: &[usize], entry_idx: usize) -> u32 {
+    offsets[..entry_idx].iter().map(|e| bytes[*e + 17] as u32 + 1).sum()
+}
+
+/// Compute the record index of the next slot after entry at `entry_idx`.
+fn scd_next_record_after(bytes: &[u8], offsets: &[usize], entry_idx: usize) -> u32 {
+    offsets[..=entry_idx].iter().map(|e| bytes[*e + 17] as u32 + 1).sum()
+}
+
 // ─── MS1: 最小アセンブル ─────────────────────────────────────────────────────
 
 /// move.b d0,d1 が 0x1200 にエンコードされ、正しい HLK ファイルが出力される。
@@ -1658,7 +1668,8 @@ fn test_scd_bb_eb_updates_bb_next_chain() {
         }
     }
     assert!(bb_idx.is_some() && eb_idx.is_some());
-    assert_eq!(bb_next, eb_idx.map(|v| v + 1));
+    // HAS互換: next はレコード(18バイト単位)インデックス
+    assert_eq!(bb_next, eb_idx.map(|v| Some(scd_next_record_after(bytes, &offsets, v as usize))).unwrap());
 }
 
 /// HAS互換: `.eb` / `.ef` が単独で現れてもチェイン書き戻しは行わず、
@@ -1740,7 +1751,8 @@ fn test_scd_tag_last_wins_after_unresolved_tag() {
             var_tag = Some(u32::from_be_bytes([bytes[e + 18], bytes[e + 19], bytes[e + 20], bytes[e + 21]]));
         }
     }
-    assert_eq!(var_tag, tagok_idx);
+    // HAS互換: tag はレコード(18バイト単位)インデックス
+    assert_eq!(var_tag, tagok_idx.map(|v| scd_record_index(bytes, &offsets, v as usize)));
 }
 
 /// HAS互換: `.val` は Pass3 で再評価され、forward 参照でも Endef 値へ反映される。

@@ -62,6 +62,32 @@ impl SymbolTable {
                 Symbol::Register { arch: CpuMask(*arch), regno: *regno },
             );
         }
+        // MOVEC control register names (68010+)
+        for (name, val) in [
+            ("sfc",  0x000i32), ("dfc",  0x001),
+            ("cacr", 0x002), ("tc",   0x003),
+            ("itt0", 0x004), ("itt1", 0x005),
+            ("dtt0", 0x006), ("dtt1", 0x007),
+            ("buscr", 0x008),
+            ("usp",  0x800), ("vbr",  0x801),
+            ("caar", 0x802), ("msp",  0x803),
+            ("isp",  0x804), ("mmusr", 0x805),
+            ("urp",  0x806), ("srp",  0x807),
+            ("pcr",  0x808),
+        ] {
+            self.user_syms.insert(
+                name.as_bytes().to_vec(),
+                Symbol::Value {
+                    attrib: DefAttrib::Define,
+                    ext_attrib: ExtAttrib::None,
+                    section: 0,
+                    org_num: 0,
+                    first: FirstDef::Other,
+                    opt_count: 0,
+                    value: val,
+                },
+            );
+        }
         // HAS060X cache set specifiers (dc=1, ic=2, bc=3) for CINV/CPUSH
         for (name, val) in [("dc", 1i32), ("ic", 2), ("bc", 3)] {
             self.user_syms.insert(

@@ -192,22 +192,6 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
         entries.push(ef_ent);
     }
 
-    let mut offset = 0u32;
-    for (name, sect, idx) in [(b".text".as_slice(), 1i16, 0usize), (b".data".as_slice(), 2, 1), (b".bss".as_slice(), 3, 2)] {
-        let size = obj.sections.get(idx).map(|s| s.size).unwrap_or(0);
-        let mut ent = ScdEntry {
-            value: offset,
-            section: sect,
-            scl: 0x78,
-            len: 1,
-            tag: size,
-            ..Default::default()
-        };
-        fill_scd_name(&mut ent.name, name);
-        entries.push(ent);
-        offset = offset.wrapping_add(size);
-    }
-
     let mut open_func_defs: Vec<usize> = Vec::new();
     let mut open_bb: Vec<usize> = Vec::new();
     let mut open_bf: Vec<usize> = Vec::new();
@@ -261,12 +245,19 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 fill_scd_name(&mut ent.name, name);
                 entries.push(ent);
                 let cur = entries.len() - 1;
-                let cur_num = cur as u32;
+                // HAS互換: レコード(18バイト単位)インデックス
+                let cur_record: u32 = entries[..cur].iter()
+                    .map(|e| u32::from(e.len) + 1).sum();
+                let cur_next_record: u32 = cur_record + u32::from(entries[cur].len) + 1;
                 pending_tag_name = None;
                 pending_val = None;
 
                 // HAS互換: 関数定義開始(0x21)は .scl -1 でサイズ確定させる。
                 if *attrib == 0x21 {
+                    // COFF互換: 関数定義時に暗黙の行番号エントリ(record_index, 0)を追加。
+                    if out_section == 1 {
+                        lines.push((cur_record, 0));
+                    }
                     open_func_defs.push(cur);
                 } else if *attrib == 0x2B {
                     // .bb
@@ -274,7 +265,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 } else if *attrib == 0x2C {
                     // .eb: 対応する .bb へ次位置を書き戻す
                     if let Some(bb) = open_bb.pop() {
-                        entries[bb].next = cur_num + 1;
+                        entries[bb].next = cur_next_record;
                     }
                 } else if *attrib == 0x2D {
                     // .bf
@@ -282,16 +273,16 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 } else if *attrib == 0x2E {
                     // .ef: 対応する .bf の next を .ef 位置へ
                     if let Some(bf) = open_bf.pop() {
-                        entries[bf].next = cur_num;
+                        entries[bf].next = cur_record;
                     }
                 } else if *attrib == 0x11 {
                     // タグ定義開始
                     open_tag_defs.push(cur);
-                    tag_def_by_name.insert(name.clone(), cur_num);
+                    tag_def_by_name.insert(name.clone(), cur_record);
                 } else if *attrib == 0x1F {
                     // タグ定義終了(.eos): 開始タグから次エントリへチェイン
                     if let Some(tag_begin) = open_tag_defs.pop() {
-                        entries[tag_begin].next = cur_num + 1;
+                        entries[tag_begin].next = cur_next_record;
                     }
                 }
             }
@@ -299,7 +290,9 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 pending_val = None;
                 if *section == 1 {
                     if let Some(idx) = open_func_defs.pop() {
-                        let next_num = entries.len() as u32;
+                        // HAS互換: next はレコード(18バイト単位)インデックスで指す。
+                        let next_num: u32 = entries.iter()
+                            .map(|e| u32::from(e.len) + 1).sum();
                         let ent = &mut entries[idx];
                         ent.size = location.saturating_sub(ent.value);
                         ent.next = next_num;
@@ -308,18 +301,35 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
             }
         }
     }
+    // HAS互換: .text/.data/.bss セクションエントリはユーザーイベントの後に追加する。
+    let mut offset = 0u32;
+    for (name, sect, idx) in [(b".text".as_slice(), 1i16, 0usize), (b".data".as_slice(), 2, 1), (b".bss".as_slice(), 3, 2)] {
+        let size = obj.sections.get(idx).map(|s| s.size).unwrap_or(0);
+        let mut ent = ScdEntry {
+            value: offset,
+            section: sect,
+            scl: 0x78,
+            len: 1,
+            tag: size,
+            ..Default::default()
+        };
+        fill_scd_name(&mut ent.name, name);
+        entries.push(ent);
+        offset = offset.wrapping_add(size);
+    }
+
     if debug_mode {
         // HAS 互換: -g の行番号テーブルは先頭にダミー行番号エントリを持つ。
         lines.insert(0, (2, 0));
-        // .text の size は行番号データ数。
-        if let Some(text) = entries.iter_mut().find(|e| &e.name[..5] == b".text") {
-            text.size = lines.len() as u32;
-        }
         // .ef の line count 相当を埋める（move.w 相当: 上位16bit）。
         if let Some(ef) = entries.iter_mut().find(|e| &e.name[..3] == b".ef") {
             let max_line = lines.iter().map(|(_, l)| *l as u32).max().unwrap_or(0);
             ef.size = max_line << 16;
         }
+    }
+    // HAS互換: .text の size フィールドに行番号エントリ数を設定する。
+    if let Some(text) = entries.iter_mut().find(|e| &e.name[..5] == b".text") {
+        text.size = lines.len() as u32;
     }
 
     // HAS の GLBDEFNUM 相当: .file 以外の非セクションエントリ長(単位) + 8

@@ -138,8 +138,8 @@ impl<'a> P3Ctx<'a> {
 
     fn emit(&mut self, bytes: &[u8]) {
         let idx = self.sect_idx();
-        // BSS/Stack セクション (id >= 3) の場合はサイズのみ記録
-        let bss_like = self.cur_sect >= 3;
+        // BSS/Stack セクション（bss, stack, rbss, rstack, rlbss, rlstack）はサイズのみ記録
+        let bss_like = matches!(self.cur_sect, 3 | 4 | 6 | 7 | 9 | 10);
         if bss_like {
             self.dsb_pending += bytes.len() as u32;
         } else {
@@ -159,7 +159,7 @@ impl<'a> P3Ctx<'a> {
 
     fn emit_zeros(&mut self, count: u32) {
         let idx = self.sect_idx();
-        let bss_like = self.cur_sect >= 3;
+        let bss_like = matches!(self.cur_sect, 3 | 4 | 6 | 7 | 9 | 10);
         if bss_like {
             self.dsb_pending += count;
         } else {
@@ -804,19 +804,33 @@ pub fn pass3(
             size,
         });
     }
-    // 相対セクション（5〜10）は使用時のみ追加
-    for sect_id in 5u8..=10 {
-        let idx = (sect_id as usize) - 1;
+    // 相対セクション（5〜7: rdata/rbss/rstack）は使用時のみ追加
+    // 対応する rl* セクション（8〜10: rldata/rlbss/rlstack）も同時に追加
+    let mut rsect_used = [false; 3]; // rdata, rbss, rstack
+    for (i, sect_id) in [5u8, 6, 7].iter().enumerate() {
+        let idx = (*sect_id as usize) - 1;
         let bytes = &ctx.sect_bytes[idx];
         let size = ctx.loc_ctr[idx];
         if size > 0 || !bytes.is_empty() {
+            rsect_used[i] = true;
+            let is_bss = matches!(sect_id, 6 | 7);
             obj.sections.push(SectionInfo {
-                id:    sect_id,
-                bytes: if sect_id == 6 || sect_id == 7 || sect_id == 9 || sect_id == 10 {
-                    Vec::new()
-                } else {
-                    bytes.clone()
-                },
+                id:    *sect_id,
+                bytes: if is_bss { Vec::new() } else { bytes.clone() },
+                size,
+            });
+        }
+    }
+    // rl* セクション: 対応する r* セクションが使われていれば常に出力
+    for (i, sect_id) in [8u8, 9, 10].iter().enumerate() {
+        let idx = (*sect_id as usize) - 1;
+        let bytes = &ctx.sect_bytes[idx];
+        let size = ctx.loc_ctr[idx];
+        if rsect_used[i] || size > 0 || !bytes.is_empty() {
+            let is_bss = matches!(sect_id, 9 | 10);
+            obj.sections.push(SectionInfo {
+                id:    *sect_id,
+                bytes: if is_bss { Vec::new() } else { bytes.clone() },
                 size,
             });
         }
