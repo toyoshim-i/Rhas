@@ -28,6 +28,8 @@ enum EaExtKind {
     PcRel(Vec<u8>),
     /// 複合外部式: RPN フォーマット
     Complex(Rpn),
+    /// セクション内絶対参照: $41/$42 sect value (同一セクション内ラベル参照)
+    SectionAbs(u8),
 }
 
 #[derive(Clone)]
@@ -871,8 +873,9 @@ fn process_deferred(
         };
         let opcode_word = base | (dn as u16);
         match ext_info.get(1) {
-            Some(None) => {
-                // 内部参照: resolve_ea_with_ext で解決済みの AbsLong からターゲットアドレスを取得
+            Some(None) | Some(Some(EaExtKind::SectionAbs(_))) => {
+                // 内部参照 (SectionAbs = 解決済み同一セクションラベル):
+                // resolve_ea_with_ext で解決済みの AbsLong からターゲットアドレスを取得
                 let target_addr = match resolved_ops.get(1) {
                     Some(EffectiveAddress::AbsLong(rpn)) => {
                         match rpn.first() {
@@ -919,8 +922,8 @@ fn process_deferred(
     if matches!(handler, InsnHandler::FBcc) {
         let pc = ctx.location();
         match ext_info.first() {
-            Some(None) => {
-                // 内部参照
+            Some(None) | Some(Some(EaExtKind::SectionAbs(_))) => {
+                // 内部参照 (SectionAbs = 解決済み同一セクションラベル)
                 let target_addr = match resolved_ops.first() {
                     Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
                         match rpn.first() {
@@ -1021,8 +1024,8 @@ fn process_deferred(
         let opcode_word = 0xF048u16 | (base & 0x0E00) | (dn as u16);
         let cond_word = base & 0x001F;
         match ext_info.get(1) {
-            Some(None) => {
-                // 内部参照
+            Some(None) | Some(Some(EaExtKind::SectionAbs(_))) => {
+                // 内部参照 (SectionAbs = 解決済み同一セクションラベル)
                 let target_addr = match resolved_ops.get(1) {
                     Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
                         match rpn.first() {
@@ -1079,10 +1082,15 @@ fn process_deferred(
                 return;
             }
             // 外部参照あり → バイト列を分割してリロケーションレコードを挿入
-            // bytes = opcode(2) + op0_ext + op1_ext + ...
-            // まずオペコードワード (2 bytes) を出力
-            ctx.emit(&bytes[..2]);
-            let mut pos = 2usize;
+            // bytes = opcode(2) + [extra_insn_bytes] + op0_ext + op1_ext + ...
+            // CMP2/CHK2 等は opcode(2) の後に拡張ワードがある
+            let total_ext_sz: usize = resolved_ops.iter()
+                .enumerate()
+                .map(|(i, ea)| if matches!(handler, InsnHandler::SubAddQ) && i == 0 { 0 } else { ea_ext_size_for_insn(ea, size) as usize })
+                .sum();
+            let extra_insn_sz = bytes.len() - 2 - total_ext_sz;
+            ctx.emit(&bytes[..2 + extra_insn_sz]);
+            let mut pos = 2 + extra_insn_sz;
             for (i, ea) in resolved_ops.iter().enumerate() {
                 // SubAddQ (ADDQ/SUBQ): immediate count is embedded in opcode bits, not as extension word
                 let ext_sz = if matches!(handler, InsnHandler::SubAddQ) && i == 0 {
@@ -1130,6 +1138,18 @@ fn process_deferred(
                         ctx.flush_dsb();
                         emit_rpn_expression(ctx, &rpn, ext_sz as u8);
                     }
+                    Some(EaExtKind::SectionAbs(sect)) => {
+                        // セクション内絶対参照 → $41/$42 sect value
+                        ctx.flush_code_buf();
+                        ctx.flush_dsb();
+                        let tag = if ext_sz <= 2 { 0x41u8 } else { 0x42u8 };
+                        ctx.code_body.push(tag);
+                        ctx.code_body.push(*sect);
+                        if pos + ext_sz <= bytes.len() {
+                            ctx.code_body.extend_from_slice(&bytes[pos..pos + ext_sz]);
+                        }
+                        ctx.advance(ext_sz as u32);
+                    }
                     None => {
                         // 内部参照 → バイトをそのまま出力
                         if pos + ext_sz <= bytes.len() {
@@ -1173,12 +1193,20 @@ fn resolve_ea_with_ext(ctx: &P3Ctx<'_>, ea: &EffectiveAddress) -> (EffectiveAddr
         }
         EffectiveAddress::AbsShort(rpn) => {
             match ctx.eval(rpn) {
+                Ok(v) if v.section != 0 => (
+                    EffectiveAddress::AbsShort(vec![RPNToken::Value(v.value as u32), RPNToken::End]),
+                    Some(EaExtKind::SectionAbs(v.section)),
+                ),
                 Ok(v) => (EffectiveAddress::AbsShort(vec![RPNToken::Value(v.value as u32), RPNToken::End]), None),
                 Err(name) => (EffectiveAddress::AbsShort(zero_rpn()), Some(EaExtKind::SimpleAbs(name))),
             }
         }
         EffectiveAddress::AbsLong(rpn) => {
             match ctx.eval(rpn) {
+                Ok(v) if v.section != 0 => (
+                    EffectiveAddress::AbsLong(vec![RPNToken::Value(v.value as u32), RPNToken::End]),
+                    Some(EaExtKind::SectionAbs(v.section)),
+                ),
                 Ok(v) => (EffectiveAddress::AbsLong(vec![RPNToken::Value(v.value as u32), RPNToken::End]), None),
                 Err(name) => (EffectiveAddress::AbsLong(zero_rpn()), Some(EaExtKind::SimpleAbs(name))),
             }
