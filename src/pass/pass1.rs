@@ -966,11 +966,10 @@ fn handle_real_insn(
         if let (EffectiveAddress::Immediate(rpn), EffectiveAddress::DataReg(_)) = (&ops[0], &ops[1]) {
             if let Some(ev) = p1.eval_const(rpn) {
                 if ev.section == 0 {
-                    if p1.ctx.opts.opt_move0
-                        && enc_size == SizeCode::Long
+                    if enc_size == SizeCode::Long
                         && !p1.ctx.opts.no_quick
                         && ev.value >= -128
-                        && ev.value <= 255
+                        && ev.value <= 127
                     {
                         handler = InsnHandler::MoveQ;
                         opcode = 0x7000;
@@ -1038,7 +1037,7 @@ fn handle_real_insn(
 
     // SUBI/ADDI #imm(1-8),<ea> → SUBQ/ADDQ
     if matches!(handler, InsnHandler::SubAddI)
-        && p1.ctx.opts.opt_sub_addi0
+        && !p1.ctx.opts.no_quick
         && ops.len() >= 2
     {
         if let EffectiveAddress::Immediate(rpn) = &ops[0] {
@@ -1051,9 +1050,9 @@ fn handle_real_insn(
         }
     }
 
-    // ADD/SUB #imm(1-8), <ea> → ADDQ/SUBQ（opt_adda_suba）
+    // ADD/SUB #imm(1-8), <ea> → ADDQ/SUBQ
     if matches!(handler, InsnHandler::SubAdd)
-        && p1.ctx.opts.opt_adda_suba
+        && !p1.ctx.opts.no_quick
         && ops.len() >= 2
     {
         if let EffectiveAddress::Immediate(rpn) = &ops[0] {
@@ -1174,6 +1173,24 @@ fn handle_real_insn(
         }
     }
 
+    // no_null_disp: displacement=0 の (An) 形式への最適化を抑制
+    if p1.ctx.opts.no_null_disp {
+        for ea in &mut ops {
+            if let EffectiveAddress::AddrRegDisp { disp, .. } = ea {
+                if disp.size.is_none() && disp.const_val == Some(0) {
+                    disp.size = Some(crate::addressing::DispSize::Word);
+                } else if disp.size.is_none() && disp.const_val.is_none() {
+                    // const_val 未設定でも rpn が定数 0 なら size を設定
+                    if let Some(ev) = p1.eval_const(&disp.rpn) {
+                        if ev.section == 0 && ev.value == 0 {
+                            disp.size = Some(crate::addressing::DispSize::Word);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     match encode_insn(opcode, handler, enc_size, &ops) {
         Ok(bytes) => {
             p1.advance(bytes.len() as u32);
@@ -1185,7 +1202,7 @@ fn handle_real_insn(
             let can_freeze_now = ops.iter().all(|ea| !ea_has_dynamic_ref(ea, p1.sym));
             if can_freeze_now {
                 let resolved: Vec<EffectiveAddress> = ops.iter()
-                    .map(|ea| resolve_ea_const_for_size(ea, p1.sym))
+                    .map(|ea| resolve_ea_const_for_size(ea, p1.sym, p1.ctx.opts.no_null_disp))
                     .collect();
                 match encode_insn(opcode, handler, enc_size, &resolved) {
                     Ok(bytes) => {
@@ -1581,7 +1598,7 @@ fn estimate_insn_size(
 }
 
 /// EA 内の RPN を pass1 シンボルテーブルで解決して定数に置換する（サイズ推定精度向上のため）
-fn resolve_ea_const_for_size(ea: &EffectiveAddress, sym: &SymbolTable) -> EffectiveAddress {
+fn resolve_ea_const_for_size(ea: &EffectiveAddress, sym: &SymbolTable, no_null_disp: bool) -> EffectiveAddress {
     use crate::addressing::Displacement;
     let lookup = |name: &[u8]| -> Option<EvalValue> {
         sym.lookup_sym(name).and_then(|s| {
@@ -1621,11 +1638,17 @@ fn resolve_ea_const_for_size(ea: &EffectiveAddress, sym: &SymbolTable) -> Effect
         EffectiveAddress::AddrRegDisp { an, disp } => {
             if let Ok(v) = eval_rpn(&disp.rpn, 0, 0, 0, &lookup) {
                 if v.section == 0 {
+                    // no_null_disp: displacement=0 の最適化を抑制するため明示的サイズを設定
+                    let size = if no_null_disp && v.value == 0 && disp.size.is_none() {
+                        Some(crate::addressing::DispSize::Word)
+                    } else {
+                        disp.size
+                    };
                     return EffectiveAddress::AddrRegDisp {
                         an: *an,
                         disp: Displacement {
                             rpn: vec![RPNToken::Value(v.value as u32), RPNToken::End],
-                            size: disp.size,
+                            size,
                             const_val: Some(v.value),
                         },
                     };

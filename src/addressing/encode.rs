@@ -221,7 +221,8 @@ pub fn encode_ea(ea: &EffectiveAddress, op_size: u8) -> Result<EaEncoded, Encode
         EffectiveAddress::AddrRegDisp { an, disp } => {
             let v = eval_disp(disp)?;
             // HAS互換: displacement=0 の場合は (An) 形式に最適化
-            if v == 0 {
+            // ただし明示的サイズ指定がある場合は抑制（-c0 での no_null_disp 対応）
+            if v == 0 && disp.size.is_none() {
                 return Ok(EaEncoded::new(eac::ADR | an));
             }
             if let Ok(w) = check_word(v) {
@@ -502,7 +503,7 @@ mod tests {
             disp: Displacement { rpn: vec![], size: None, const_val: Some(0x10000) },
         };
         let enc = encode_ea(&ea, 1).unwrap();
-        assert_eq!(enc.ea_field, eac::IDXADR | 0); // mode 110, reg A0
+        assert_eq!(enc.ea_field, eac::IDXADR); // mode 110, reg A0
         // ext word (0x0170) + long BD (4 bytes) = 6 bytes
         assert_eq!(enc.ext_bytes.len(), 6);
         assert_eq!(enc.ext_bytes[0], 0x01); // full format: IS=1, BD=long

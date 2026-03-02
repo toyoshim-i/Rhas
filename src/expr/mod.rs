@@ -468,19 +468,9 @@ impl<'a> Parser<'a> {
             b'-' => { self.pos += 1; Some(Op::Neg) }
             b'+' => { self.pos += 1; Some(Op::Pos) }
             b'~' => {
-                // HAS互換: '~' の後にアルファベット・アンダースコア・'~' が続く場合は
-                // シンボル名の一部（~symbol, ~~label）として扱う
-                // それ以外（数値、'$'等）は NOT 演算子として扱う
-                let next = self.peek2();
-                let is_tilde_sym = next.map(|b| {
-                    b.is_ascii_alphabetic() || b == b'_' || b == b'~' || b == b'?' || b == b'@'
-                }).unwrap_or(false);
-                if is_tilde_sym {
-                    None  // シンボル名として parse_primary に任せる
-                } else {
-                    self.pos += 1;
-                    Some(Op::Not)
-                }
+                // HAS互換: '~' は常にシンボル名の先頭文字として扱う
+                // ビット反転は .NOT. キーワード演算子を使用
+                None
             }
             b'.' => self.try_keyword_unary(),
             _ => None,
@@ -756,8 +746,10 @@ mod tests {
 
     #[test]
     fn test_unary_not() {
-        assert_eq!(eval_const(parse("~0").unwrap()), -1);
+        // HAS互換: '~' はシンボル先頭文字であり NOT 演算子ではない
+        // ビット反転は .NOT. を使う
         assert_eq!(eval_const(parse(".not. 0").unwrap()), -1);
+        assert_eq!(eval_const(parse(".not. $FF").unwrap()), -256); // NOT($FF) = $FFFFFF00
     }
 
     #[test]

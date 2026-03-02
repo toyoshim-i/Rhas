@@ -1161,7 +1161,8 @@ fn encode_chk(size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>, 
         SizeCode::Long => 0x0000,   // bits 8-6 = 100 → base 0x4100 (68020+)
         _ => return Err(InsnError::InvalidSize),
     };
-    let src_enc = enc(&operands[0], 1)?;
+    let op_size = size_to_op_size(size)?;
+    let src_enc = enc(&operands[0], op_size)?;
     let word = 0x4100u16 | sz_bit | ((dn as u16) << 9) | (src_enc.ea_field as u16);
     let mut v = Vec::new();
     push_word(&mut v, word);
