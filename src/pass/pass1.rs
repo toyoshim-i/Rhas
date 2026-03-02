@@ -1646,6 +1646,12 @@ fn ea_has_dynamic_ref(ea: &EffectiveAddress, sym: &SymbolTable) -> bool {
         | EffectiveAddress::PcDisp(disp) => rpn_has_dynamic_ref(&disp.rpn, sym),
         EffectiveAddress::AddrRegIdx { disp, .. }
         | EffectiveAddress::PcIdx { disp, .. } => rpn_has_dynamic_ref(&disp.rpn, sym),
+        EffectiveAddress::MemIndPost { bd, od, .. }
+        | EffectiveAddress::MemIndPre { bd, od, .. }
+        | EffectiveAddress::PcMemIndPost { bd, od, .. }
+        | EffectiveAddress::PcMemIndPre { bd, od, .. } => {
+            rpn_has_dynamic_ref(&bd.rpn, sym) || rpn_has_dynamic_ref(&od.rpn, sym)
+        }
         _ => false,
     }
 }
@@ -1685,6 +1691,8 @@ fn ea_ext_words(ea: &EffectiveAddress) -> u32 {
             2
         }
         EffectiveAddress::AddrRegIdx { .. } | EffectiveAddress::PcIdx { .. } => 2,
+        EffectiveAddress::MemIndPost { .. } | EffectiveAddress::MemIndPre { .. }
+        | EffectiveAddress::PcMemIndPost { .. } | EffectiveAddress::PcMemIndPre { .. } => 6,
         EffectiveAddress::CcrReg | EffectiveAddress::SrReg
         | EffectiveAddress::FpReg(_) | EffectiveAddress::FpCtrlReg(_) => 0,
     }
@@ -1712,6 +1720,34 @@ fn placeholder_ea(ea: &EffectiveAddress) -> EffectiveAddress {
             EffectiveAddress::PcDisp(
                 Displacement { rpn: one_rpn(), size: disp.size, const_val: Some(1) }
             )
+        }
+        EffectiveAddress::MemIndPost { an, bd, idx, od } => {
+            EffectiveAddress::MemIndPost {
+                an: *an, idx: idx.clone(),
+                bd: Displacement { rpn: if bd.const_val.is_some() { bd.rpn.clone() } else { one_rpn() }, size: bd.size, const_val: bd.const_val.or(Some(1)) },
+                od: Displacement { rpn: if od.const_val.is_some() { od.rpn.clone() } else { zero_rpn() }, size: od.size, const_val: od.const_val.or(Some(0)) },
+            }
+        }
+        EffectiveAddress::MemIndPre { an, bd, idx, od } => {
+            EffectiveAddress::MemIndPre {
+                an: *an, idx: idx.clone(),
+                bd: Displacement { rpn: if bd.const_val.is_some() { bd.rpn.clone() } else { one_rpn() }, size: bd.size, const_val: bd.const_val.or(Some(1)) },
+                od: Displacement { rpn: if od.const_val.is_some() { od.rpn.clone() } else { zero_rpn() }, size: od.size, const_val: od.const_val.or(Some(0)) },
+            }
+        }
+        EffectiveAddress::PcMemIndPost { bd, idx, od } => {
+            EffectiveAddress::PcMemIndPost {
+                idx: idx.clone(),
+                bd: Displacement { rpn: if bd.const_val.is_some() { bd.rpn.clone() } else { one_rpn() }, size: bd.size, const_val: bd.const_val.or(Some(1)) },
+                od: Displacement { rpn: if od.const_val.is_some() { od.rpn.clone() } else { zero_rpn() }, size: od.size, const_val: od.const_val.or(Some(0)) },
+            }
+        }
+        EffectiveAddress::PcMemIndPre { bd, idx, od } => {
+            EffectiveAddress::PcMemIndPre {
+                idx: idx.clone(),
+                bd: Displacement { rpn: if bd.const_val.is_some() { bd.rpn.clone() } else { one_rpn() }, size: bd.size, const_val: bd.const_val.or(Some(1)) },
+                od: Displacement { rpn: if od.const_val.is_some() { od.rpn.clone() } else { zero_rpn() }, size: od.size, const_val: od.const_val.or(Some(0)) },
+            }
         }
         other => other.clone(),
     }

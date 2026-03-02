@@ -113,6 +113,82 @@ fn check_byte(v: i32) -> Result<i8, EncodeError> {
     }
 }
 
+/// 68020+ フルフォーマット拡張ワードを作る
+///
+/// full format extension word:
+/// ```text
+/// bit 15:    D/A (0=Dn, 1=An for index register)
+/// bits 14-12: index register number (0-7)
+/// bit 11:    W/L (0=word, 1=long index size)
+/// bits 10-9: scale (00=*1, 01=*2, 10=*4, 11=*8)
+/// bit 8:     1 (full format identifier)
+/// bit 7:     BS (base suppress)
+/// bit 6:     IS (index suppress)
+/// bits 5-4:  BD size (01=null, 10=word, 11=long)
+/// bit 3:     0
+/// bits 2-0:  I/IS (indirect/index select)
+/// ```
+fn make_full_ext(idx: &IndexSpec, bs: bool, bd_size: u8, iis: u8) -> u16 {
+    let da_bit = if idx.reg >= 8 { 1u16 } else { 0u16 };
+    let reg_num = (idx.reg & 7) as u16;
+    let sz_bit = if idx.size == IdxSize::Long { 1u16 } else { 0u16 };
+    let scale = idx.scale as u16;
+    let is_bit = if idx.suppress { 1u16 } else { 0u16 };
+    let bs_bit = if bs { 1u16 } else { 0u16 };
+    (da_bit << 15) | (reg_num << 12) | (sz_bit << 11) | (scale << 9)
+        | 0x0100  // bit 8 = full format
+        | (bs_bit << 7) | (is_bit << 6)
+        | ((bd_size as u16) << 4)
+        | (iis as u16)
+}
+
+/// ディスプレースメントの BD/OD サイズを決定する（01=null, 10=word, 11=long）
+fn disp_bd_size(v: i32) -> u8 {
+    if v == 0 { 1 }  // null
+    else if v >= i16::MIN as i32 && v <= i16::MAX as i32 { 2 }  // word
+    else { 3 }  // long
+}
+
+/// メモリ間接アドレッシングのエンコード共通処理
+fn encode_mem_indirect(
+    enc: &mut EaEncoded,
+    idx: &IndexSpec,
+    bd: &Displacement,
+    od: &Displacement,
+    is_post: bool,
+) -> Result<(), EncodeError> {
+    let bd_val = eval_disp(bd)?;
+    let od_val = eval_disp(od)?;
+    let bd_sz = disp_bd_size(bd_val);
+    let od_sz = disp_bd_size(od_val);
+
+    // I/IS encoding:
+    // Postindexed:  101=null_od, 110=word_od, 111=long_od
+    // Preindexed:   001=null_od, 010=word_od, 011=long_od
+    let iis = if is_post {
+        0b100 | od_sz  // 101/110/111
+    } else {
+        od_sz  // 001/010/011
+    };
+
+    let ext = make_full_ext(idx, false, bd_sz, iis);
+    enc.push_word(ext);
+
+    // Base displacement
+    match bd_sz {
+        2 => enc.push_word(bd_val as u16),
+        3 => enc.push_long(bd_val as u32),
+        _ => {} // null
+    }
+    // Outer displacement
+    match od_sz {
+        2 => enc.push_word(od_val as u16),
+        3 => enc.push_long(od_val as u32),
+        _ => {} // null
+    }
+    Ok(())
+}
+
 // ----------------------------------------------------------------
 // 公開 API
 // ----------------------------------------------------------------
@@ -141,17 +217,25 @@ pub fn encode_ea(ea: &EffectiveAddress, op_size: u8) -> Result<EaEncoded, Encode
         EffectiveAddress::AddrRegPreDec(n) =>
             Ok(EaEncoded::new(eac::DECADR | n)),
 
-        // ---- 16ビットディスプレースメント ----
+        // ---- 16ビットディスプレースメント（32ビットはフルフォーマットへフォールバック）----
         EffectiveAddress::AddrRegDisp { an, disp } => {
             let v = eval_disp(disp)?;
             // HAS互換: displacement=0 の場合は (An) 形式に最適化
             if v == 0 {
                 return Ok(EaEncoded::new(eac::ADR | an));
             }
-            let w = check_word(v)?;
-            let mut enc = EaEncoded::new(eac::DSPADR | an);
-            enc.push_word(w as u16);
-            Ok(enc)
+            if let Ok(w) = check_word(v) {
+                let mut enc = EaEncoded::new(eac::DSPADR | an);
+                enc.push_word(w as u16);
+                Ok(enc)
+            } else {
+                // 32ビットディスプレースメント: 68020+ フルフォーマット拡張ワード
+                // IS=1 (index suppressed), BD=11 (long), I/IS=000 (no memory indirect)
+                let mut enc = EaEncoded::new(eac::IDXADR | an);
+                enc.push_word(0x0170);
+                enc.push_long(v as u32);
+                Ok(enc)
+            }
         }
 
         // ---- brief 拡張ワード（8ビットディスプレースメント + インデックス）----
@@ -199,6 +283,28 @@ pub fn encode_ea(ea: &EffectiveAddress, op_size: u8) -> Result<EaEncoded, Encode
             let ext = make_brief_ext(idx, d8);
             let mut enc = EaEncoded::new(eac::IDXPC);
             enc.push_word(ext);
+            Ok(enc)
+        }
+
+        // ---- 68020+ メモリ間接 ----
+        EffectiveAddress::MemIndPost { an, bd, idx, od } => {
+            let mut enc = EaEncoded::new(eac::IDXADR | an);
+            encode_mem_indirect(&mut enc, idx, bd, od, true)?;
+            Ok(enc)
+        }
+        EffectiveAddress::MemIndPre { an, bd, idx, od } => {
+            let mut enc = EaEncoded::new(eac::IDXADR | an);
+            encode_mem_indirect(&mut enc, idx, bd, od, false)?;
+            Ok(enc)
+        }
+        EffectiveAddress::PcMemIndPost { bd, idx, od } => {
+            let mut enc = EaEncoded::new(eac::IDXPC);
+            encode_mem_indirect(&mut enc, idx, bd, od, true)?;
+            Ok(enc)
+        }
+        EffectiveAddress::PcMemIndPre { bd, idx, od } => {
+            let mut enc = EaEncoded::new(eac::IDXPC);
+            encode_mem_indirect(&mut enc, idx, bd, od, false)?;
             Ok(enc)
         }
 
@@ -389,15 +495,18 @@ mod tests {
     // ---- エラーケース ----
 
     #[test]
-    fn test_encode_disp_overflow() {
+    fn test_encode_disp_overflow_uses_full_format() {
+        // 68020+: 16ビット超のディスプレースメントはフルフォーマット拡張ワードで処理
         let ea = EffectiveAddress::AddrRegDisp {
             an: 0,
             disp: Displacement { rpn: vec![], size: None, const_val: Some(0x10000) },
         };
-        assert!(matches!(
-            encode_ea(&ea, 1),
-            Err(EncodeError::DisplacementOutOfRange { bits: 16, .. })
-        ));
+        let enc = encode_ea(&ea, 1).unwrap();
+        assert_eq!(enc.ea_field, eac::IDXADR | 0); // mode 110, reg A0
+        // ext word (0x0170) + long BD (4 bytes) = 6 bytes
+        assert_eq!(enc.ext_bytes.len(), 6);
+        assert_eq!(enc.ext_bytes[0], 0x01); // full format: IS=1, BD=long
+        assert_eq!(enc.ext_bytes[1], 0x70);
     }
 
     #[test]

@@ -349,7 +349,59 @@ fn resolve_ea_for_pass2(
                 }
             }
         }
+        EffectiveAddress::MemIndPost { an, bd, idx, od } => {
+            let new_bd = resolve_disp_for_pass2(sym, bd, loc, sect, false);
+            let new_od = resolve_disp_for_pass2(sym, od, loc, sect, false);
+            EffectiveAddress::MemIndPost { an: *an, bd: new_bd, idx: idx.clone(), od: new_od }
+        }
+        EffectiveAddress::MemIndPre { an, bd, idx, od } => {
+            let new_bd = resolve_disp_for_pass2(sym, bd, loc, sect, false);
+            let new_od = resolve_disp_for_pass2(sym, od, loc, sect, false);
+            EffectiveAddress::MemIndPre { an: *an, bd: new_bd, idx: idx.clone(), od: new_od }
+        }
+        EffectiveAddress::PcMemIndPost { bd, idx, od } => {
+            let new_bd = resolve_disp_for_pass2(sym, bd, loc, sect, true);
+            let new_od = resolve_disp_for_pass2(sym, od, loc, sect, false);
+            EffectiveAddress::PcMemIndPost { bd: new_bd, idx: idx.clone(), od: new_od }
+        }
+        EffectiveAddress::PcMemIndPre { bd, idx, od } => {
+            let new_bd = resolve_disp_for_pass2(sym, bd, loc, sect, true);
+            let new_od = resolve_disp_for_pass2(sym, od, loc, sect, false);
+            EffectiveAddress::PcMemIndPre { bd: new_bd, idx: idx.clone(), od: new_od }
+        }
         _ => ea.clone(),
+    }
+}
+
+/// メモリ間接アドレッシングのディスプレースメントを解決する
+fn resolve_disp_for_pass2(
+    sym: &SymbolTable,
+    d: &Displacement,
+    loc: u32,
+    sect: u8,
+    is_pc_rel: bool,
+) -> Displacement {
+    if d.const_val.is_some() || d.rpn.is_empty() {
+        return d.clone();
+    }
+    if let Some(ev) = eval_rpn_with_sym(sym, &d.rpn, loc, sect) {
+        let val = if is_pc_rel {
+            ev.value - (loc as i32 + 2)
+        } else {
+            ev.value
+        };
+        Displacement {
+            rpn: vec![RPNToken::Value(val as u32), RPNToken::End],
+            size: d.size,
+            const_val: Some(val),
+        }
+    } else {
+        // 未解決: 非ゼロプレースホルダー（BD=0 だと null displacement 扱いになるため）
+        Displacement {
+            rpn: vec![RPNToken::Value(1), RPNToken::End],
+            size: d.size,
+            const_val: Some(1),
+        }
     }
 }
 
@@ -386,6 +438,8 @@ fn ea_ext_size(ea: &EffectiveAddress) -> u32 {
         EffectiveAddress::AbsLong(_) => 4,
         EffectiveAddress::Immediate(_) => 2,
         EffectiveAddress::AddrRegIdx { .. } | EffectiveAddress::PcIdx { .. } => 2,
+        EffectiveAddress::MemIndPost { .. } | EffectiveAddress::MemIndPre { .. }
+        | EffectiveAddress::PcMemIndPost { .. } | EffectiveAddress::PcMemIndPre { .. } => 6,
         EffectiveAddress::CcrReg | EffectiveAddress::SrReg
         | EffectiveAddress::FpReg(_) | EffectiveAddress::FpCtrlReg(_) => 0,
     }

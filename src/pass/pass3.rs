@@ -1253,6 +1253,57 @@ fn resolve_ea_with_ext(ctx: &P3Ctx<'_>, ea: &EffectiveAddress) -> (EffectiveAddr
                 }
             }
         }
+        EffectiveAddress::PcMemIndPost { bd, idx, od } => {
+            let resolve_disp = |d: &Displacement, is_pc_rel: bool| -> Displacement {
+                if d.const_val.is_some() || d.rpn.is_empty() {
+                    return d.clone();
+                }
+                match ctx.eval(&d.rpn) {
+                    Ok(v) => {
+                        let val = if is_pc_rel {
+                            // BD = target_addr - ext_word_addr; ext_word is at PC+2
+                            v.value - (ctx.location() as i32 + 2)
+                        } else {
+                            v.value
+                        };
+                        Displacement {
+                            rpn: vec![RPNToken::Value(val as u32), RPNToken::End],
+                            size: d.size,
+                            const_val: Some(val),
+                        }
+                    }
+                    Err(_) => d.clone(),
+                }
+            };
+            let new_bd = resolve_disp(bd, true);
+            let new_od = resolve_disp(od, false);
+            (EffectiveAddress::PcMemIndPost { bd: new_bd, idx: idx.clone(), od: new_od }, None)
+        }
+        EffectiveAddress::PcMemIndPre { bd, idx, od } => {
+            let resolve_disp = |d: &Displacement, is_pc_rel: bool| -> Displacement {
+                if d.const_val.is_some() || d.rpn.is_empty() {
+                    return d.clone();
+                }
+                match ctx.eval(&d.rpn) {
+                    Ok(v) => {
+                        let val = if is_pc_rel {
+                            v.value - (ctx.location() as i32 + 2)
+                        } else {
+                            v.value
+                        };
+                        Displacement {
+                            rpn: vec![RPNToken::Value(val as u32), RPNToken::End],
+                            size: d.size,
+                            const_val: Some(val),
+                        }
+                    }
+                    Err(_) => d.clone(),
+                }
+            };
+            let new_bd = resolve_disp(bd, true);
+            let new_od = resolve_disp(od, false);
+            (EffectiveAddress::PcMemIndPre { bd: new_bd, idx: idx.clone(), od: new_od }, None)
+        }
         other => (other.clone(), None),
     }
 }
@@ -1278,6 +1329,8 @@ fn ea_ext_size(ea: &EffectiveAddress) -> u32 {
         EffectiveAddress::AbsLong(_) => 4,
         EffectiveAddress::Immediate(_) => 2,
         EffectiveAddress::AddrRegIdx { .. } | EffectiveAddress::PcIdx { .. } => 2,
+        EffectiveAddress::MemIndPost { .. } | EffectiveAddress::MemIndPre { .. }
+        | EffectiveAddress::PcMemIndPost { .. } | EffectiveAddress::PcMemIndPre { .. } => 6,
         EffectiveAddress::CcrReg | EffectiveAddress::SrReg
         | EffectiveAddress::FpReg(_) | EffectiveAddress::FpCtrlReg(_) => 0,
     }

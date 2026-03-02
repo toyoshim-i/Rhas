@@ -166,6 +166,14 @@ pub enum EffectiveAddress {
     PcDisp(Displacement),
     /// PC相対インデックス (d8,PC,Rn)
     PcIdx { disp: Displacement, idx: IndexSpec },
+    /// メモリ間接ポストインデックス ([bd,An],Xn,od) (68020+)
+    MemIndPost { an: u8, bd: Displacement, idx: IndexSpec, od: Displacement },
+    /// メモリ間接プリインデックス ([bd,An,Xn],od) (68020+)
+    MemIndPre { an: u8, bd: Displacement, idx: IndexSpec, od: Displacement },
+    /// PC相対メモリ間接ポストインデックス ([bd,PC],Xn,od) (68020+)
+    PcMemIndPost { bd: Displacement, idx: IndexSpec, od: Displacement },
+    /// PC相対メモリ間接プリインデックス ([bd,PC,Xn],od) (68020+)
+    PcMemIndPre { bd: Displacement, idx: IndexSpec, od: Displacement },
     /// イミディエイト #imm
     Immediate(Rpn),
     /// CCR (Condition Code Register) - MOVE to/from CCR, ORI/ANDI/EORI #imm,CCR
@@ -193,6 +201,10 @@ impl EffectiveAddress {
             Self::AbsLong(_)        => ea::ABSL,
             Self::PcDisp(_)         => ea::DSPPC,
             Self::PcIdx { .. }      => ea::IDXPC,
+            Self::MemIndPost { .. } => ea::IDXADR,
+            Self::MemIndPre { .. }  => ea::IDXADR,
+            Self::PcMemIndPost { .. } => ea::IDXPC,
+            Self::PcMemIndPre { .. }  => ea::IDXPC,
             Self::Immediate(_)      => ea::IMM,
             Self::CcrReg            => 0,
             Self::SrReg             => 0,
@@ -455,6 +467,153 @@ fn parse_paren_with_base(
     }
 }
 
+/// 68020+ メモリ間接アドレッシングモード解析
+/// '(' は消費済み、pos は '[' を指している
+/// 形式: ([bd,An],Xn,od) / ([bd,An,Xn],od) / ([bd,PC],Xn,od) / ([bd,PC,Xn],od)
+fn parse_memory_indirect(
+    src: &[u8],
+    pos: &mut usize,
+    sym: &SymbolTable,
+    cpu_type: u16,
+) -> Result<EffectiveAddress, EaError> {
+    *pos += 1; // skip '['
+    skip_spaces(src, pos);
+
+    // '[' 内を解析: bd,An[,Xn] の形式
+    // まずオプションの base displacement（式）を試す
+    let mut bd = Displacement::zero();
+    let mut base_regno: Option<u8> = None;
+    let mut inner_idx: Option<IndexSpec> = None;
+
+    // 最初のトークンを解析：レジスタか式か
+    if let Some(regno) = try_parse_register(src, pos, sym, cpu_type) {
+        match regno {
+            0x08..=0x0F | 0x20 | 0x2E | 0x2F => {
+                // An or PC/ZPC as first token
+                base_regno = Some(regno);
+            }
+            _ => return Err(EaError::InvalidRegister),
+        }
+    } else {
+        // 式（base displacement）
+        let rpn = parse_expr(src, pos)?;
+        let size = try_parse_disp_size(src, pos);
+        bd = Displacement { rpn, size, const_val: None };
+    }
+
+    skip_spaces(src, pos);
+
+    // ',' の後にベースレジスタやインデックスが続く可能性
+    while src.get(*pos) == Some(&b',') {
+        *pos += 1;
+        skip_spaces(src, pos);
+        if let Some(regno) = try_parse_register(src, pos, sym, cpu_type) {
+            match regno {
+                0x08..=0x0F | 0x20 | 0x2E | 0x2F => {
+                    // An or PC — ベースレジスタ
+                    if base_regno.is_some() {
+                        return Err(EaError::InvalidRegister);
+                    }
+                    base_regno = Some(regno);
+                }
+                0x00..=0x07 => {
+                    // Dn — インデックスレジスタ（ブラケット内 = プリインデックス）
+                    let size = try_parse_idx_size(src, pos);
+                    let scale = try_parse_scale(src, pos)?;
+                    inner_idx = Some(IndexSpec { reg: regno, size, scale, suppress: false });
+                }
+                _ => return Err(EaError::InvalidRegister),
+            }
+        } else {
+            return Err(EaError::ExpectedRegister);
+        }
+        skip_spaces(src, pos);
+    }
+
+    // ']' を期待
+    if src.get(*pos) != Some(&b']') {
+        return Err(EaError::ExpectedCloseParen);
+    }
+    *pos += 1;
+    skip_spaces(src, pos);
+
+    let base = base_regno.ok_or(EaError::InvalidRegister)?;
+    let is_pc = base == reg::PC || base == reg::OPC;
+    let is_zpc = base == reg::ZPC;
+    let an = if is_pc || is_zpc { 0 } else { base - 0x08 };
+
+    // ']' の後: オプションの ',Xn,od' （ポストインデックス）または ',od'
+    let mut outer_idx: Option<IndexSpec> = None;
+    let mut od = Displacement::zero();
+
+    if src.get(*pos) == Some(&b',') {
+        *pos += 1;
+        skip_spaces(src, pos);
+        // Xn（インデックスレジスタ）を試す
+        let save = *pos;
+        if let Some(regno) = try_parse_register(src, pos, sym, cpu_type) {
+            if (0x00..=0x07).contains(&regno) {
+                let size = try_parse_idx_size(src, pos);
+                let scale = try_parse_scale(src, pos)?;
+                outer_idx = Some(IndexSpec { reg: regno, size, scale, suppress: false });
+                skip_spaces(src, pos);
+                // さらに ',od' があるか
+                if src.get(*pos) == Some(&b',') {
+                    *pos += 1;
+                    skip_spaces(src, pos);
+                    let rpn = parse_expr(src, pos)?;
+                    let size = try_parse_disp_size(src, pos);
+                    od = Displacement { rpn, size, const_val: None };
+                }
+            } else {
+                // レジスタだがインデックスではない → 式として再解析
+                *pos = save;
+                let rpn = parse_expr(src, pos)?;
+                let size = try_parse_disp_size(src, pos);
+                od = Displacement { rpn, size, const_val: None };
+            }
+        } else {
+            // 式（outer displacement）
+            let rpn = parse_expr(src, pos)?;
+            let size = try_parse_disp_size(src, pos);
+            od = Displacement { rpn, size, const_val: None };
+        }
+    }
+
+    skip_spaces(src, pos);
+    // ')' を期待
+    if src.get(*pos) != Some(&b')') {
+        return Err(EaError::ExpectedCloseParen);
+    }
+    *pos += 1;
+
+    // プリインデックス: Xn がブラケット内にある
+    // ポストインデックス: Xn がブラケット外にある
+    if let Some(idx) = inner_idx {
+        // プリインデックス: ([bd,An,Xn],od)
+        if is_pc || is_zpc {
+            Ok(EffectiveAddress::PcMemIndPre { bd, idx, od })
+        } else {
+            Ok(EffectiveAddress::MemIndPre { an, bd, idx, od })
+        }
+    } else if let Some(idx) = outer_idx {
+        // ポストインデックス: ([bd,An],Xn,od)
+        if is_pc || is_zpc {
+            Ok(EffectiveAddress::PcMemIndPost { bd, idx, od })
+        } else {
+            Ok(EffectiveAddress::MemIndPost { an, bd, idx, od })
+        }
+    } else {
+        // インデックスなし（suppressed）→ プリインデックスで IS=1
+        let idx = IndexSpec { reg: 0, size: IdxSize::Word, scale: Scale::S1, suppress: true };
+        if is_pc || is_zpc {
+            Ok(EffectiveAddress::PcMemIndPre { bd, idx, od })
+        } else {
+            Ok(EffectiveAddress::MemIndPre { an, bd, idx, od })
+        }
+    }
+}
+
 /// 括弧の中を解析する（'(' は消費済み）
 fn parse_paren_with_expr(
     src: &[u8],
@@ -463,6 +622,11 @@ fn parse_paren_with_expr(
     cpu_type: u16,
 ) -> Result<EffectiveAddress, EaError> {
     skip_spaces(src, pos);
+
+    // 68020+ メモリ間接: ([bd,An],Xn,od) / ([bd,An,Xn],od)
+    if src.get(*pos) == Some(&b'[') {
+        return parse_memory_indirect(src, pos, sym, cpu_type);
+    }
 
     // まずレジスタ名かどうかチェック（An や PC が来たらそれがベースレジスタ）
     if let Some(regno) = try_parse_register(src, pos, sym, cpu_type) {

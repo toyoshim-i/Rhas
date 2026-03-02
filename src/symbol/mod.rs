@@ -12,9 +12,7 @@
 pub mod types;
 
 use std::collections::HashMap;
-use types::{CpuMask, InsnHandler, SizeFlags};
-#[cfg(test)]
-use types::{DefAttrib, ExtAttrib, FirstDef};
+use types::{CpuMask, DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeFlags};
 use types::{cmask, sz, reg};
 pub use types::Symbol;
 
@@ -62,6 +60,21 @@ impl SymbolTable {
             self.reg_table.insert(
                 key,
                 Symbol::Register { arch: CpuMask(*arch), regno: *regno },
+            );
+        }
+        // HAS060X cache set specifiers (dc=1, ic=2, bc=3) for CINV/CPUSH
+        for (name, val) in [("dc", 1i32), ("ic", 2), ("bc", 3)] {
+            self.user_syms.insert(
+                name.as_bytes().to_vec(),
+                Symbol::Value {
+                    attrib: DefAttrib::Define,
+                    ext_attrib: ExtAttrib::None,
+                    section: 0,
+                    org_num: 0,
+                    first: FirstDef::Other,
+                    opt_count: 0,
+                    value: val,
+                },
             );
         }
         // 命令名・疑似命令名

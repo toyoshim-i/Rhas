@@ -618,16 +618,23 @@ fn encode_movem(size: SizeCode, operands: &[EffectiveAddress]) -> Result<Vec<u8>
         SizeCode::Long => 0x0040,
         _ => return Err(InsnError::InvalidSize),
     };
-    // operands[0] が Immediate → reg→mem 方向
-    // operands[1] が Immediate → mem→reg 方向
-    let (dir_bit, reglist_rpn, ea) = if let Some(rpn) = imm_rpn(&operands[0]) {
-        (0x0000u16, rpn, &operands[1])
+    // operands[0] が Immediate/DataReg/AddrReg → reg→mem 方向
+    // operands[1] が Immediate/DataReg/AddrReg → mem→reg 方向
+    let (dir_bit, mask, ea) = if let Some(rpn) = imm_rpn(&operands[0]) {
+        (0x0000u16, eval_const(rpn).ok_or(InsnError::DeferToLinker)?, &operands[1])
     } else if let Some(rpn) = imm_rpn(&operands[1]) {
-        (0x0400u16, rpn, &operands[0])
+        (0x0400u16, eval_const(rpn).ok_or(InsnError::DeferToLinker)?, &operands[0])
+    } else if let Some(n) = data_reg(&operands[0]) {
+        (0x0000u16, 1i32 << n, &operands[1])
+    } else if let Some(n) = addr_reg(&operands[0]) {
+        (0x0000u16, 1i32 << (n + 8), &operands[1])
+    } else if let Some(n) = data_reg(&operands[1]) {
+        (0x0400u16, 1i32 << n, &operands[0])
+    } else if let Some(n) = addr_reg(&operands[1]) {
+        (0x0400u16, 1i32 << (n + 8), &operands[0])
     } else {
         return Err(InsnError::InvalidOperand);
     };
-    let mask = eval_const(reglist_rpn).ok_or(InsnError::DeferToLinker)?;
     // -(An) の場合、レジスタマスクを反転する（D7→bit0, A7→bit8）
     let (mask_word, is_predec) = if matches!(ea, EffectiveAddress::AddrRegPreDec(_)) {
         (reverse_bits16(mask as u16), true)
@@ -1821,13 +1828,31 @@ fn encode_move16(operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
             Ok(v)
         }
         (EffectiveAddress::AddrRegPostInc(ax), EffectiveAddress::AbsLong(rpn)) => {
+            // MOVE16 (Ax)+,xxx.L → 0xF600 | ax
+            let addr = eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u32;
+            let mut v = Vec::new();
+            push_word(&mut v, 0xF600 | (*ax as u16));
+            push_long(&mut v, addr);
+            Ok(v)
+        }
+        (EffectiveAddress::AbsLong(rpn), EffectiveAddress::AddrRegPostInc(ay)) => {
+            // MOVE16 xxx.L,(Ay)+ → 0xF608 | ay
+            let addr = eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u32;
+            let mut v = Vec::new();
+            push_word(&mut v, 0xF608 | (*ay as u16));
+            push_long(&mut v, addr);
+            Ok(v)
+        }
+        (EffectiveAddress::AddrRegInd(ax), EffectiveAddress::AbsLong(rpn)) => {
+            // MOVE16 (Ax),xxx.L → 0xF610 | ax
             let addr = eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u32;
             let mut v = Vec::new();
             push_word(&mut v, 0xF610 | (*ax as u16));
             push_long(&mut v, addr);
             Ok(v)
         }
-        (EffectiveAddress::AbsLong(rpn), EffectiveAddress::AddrRegPostInc(ay)) => {
+        (EffectiveAddress::AbsLong(rpn), EffectiveAddress::AddrRegInd(ay)) => {
+            // MOVE16 xxx.L,(Ay) → 0xF618 | ay
             let addr = eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u32;
             let mut v = Vec::new();
             push_word(&mut v, 0xF618 | (*ay as u16));
@@ -1842,14 +1867,20 @@ fn encode_move16(operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
 /// キャッシュセット: BC=3, IC=2, DC=1 → bits 7-6
 fn encode_cinvpush_lp(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
     if operands.len() != 2 { return Err(InsnError::OperandCount); }
-    // キャッシュタイプは Immediate として解析
+    // キャッシュタイプは Immediate/AbsLong/AbsShort（定義済みシンボル dc/ic/bc）として解析
     let cache = match &operands[0] {
-        EffectiveAddress::Immediate(rpn) => {
+        EffectiveAddress::Immediate(rpn)
+        | EffectiveAddress::AbsLong(rpn)
+        | EffectiveAddress::AbsShort(rpn) => {
             eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u16 & 3
         }
         _ => return Err(InsnError::InvalidOperand),
     };
-    let an = addr_reg(&operands[1]).ok_or(InsnError::InvalidOperand)?;
+    // (An) はパーサから AddrRegInd として来ることがある
+    let an = match &operands[1] {
+        EffectiveAddress::AddrReg(n) | EffectiveAddress::AddrRegInd(n) => *n,
+        _ => return Err(InsnError::InvalidOperand),
+    };
     let mut v = Vec::new();
     push_word(&mut v, base | (cache << 6) | (an as u16));
     Ok(v)
@@ -1859,7 +1890,9 @@ fn encode_cinvpush_lp(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8
 fn encode_cinvpush_a(base: u16, operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError> {
     if operands.len() != 1 { return Err(InsnError::OperandCount); }
     let cache = match &operands[0] {
-        EffectiveAddress::Immediate(rpn) => {
+        EffectiveAddress::Immediate(rpn)
+        | EffectiveAddress::AbsLong(rpn)
+        | EffectiveAddress::AbsShort(rpn) => {
             eval_const(rpn).ok_or(InsnError::DeferToLinker)? as u16 & 3
         }
         _ => return Err(InsnError::InvalidOperand),
