@@ -279,10 +279,9 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
         // 文字定数 'A' / 'AB' または "A" / "AB"
-        if self.peek() == Some(b'\'') || self.peek() == Some(b'"') {
-            let close = self.peek().unwrap();
+        if let Some(quote @ (b'\'' | b'"')) = self.peek() {
             self.pos += 1;
-            let v = self.parse_char_const_with_close(close)?;
+            let v = self.parse_char_const_with_close(quote)?;
             self.push_value(v);
             return Ok(());
         }
@@ -448,8 +447,13 @@ impl<'a> Parser<'a> {
         self.pos += 1;
         if self.peek().map(is_ident_start).unwrap_or(false) {
             let mut name = vec![b'.'];
-            while self.peek().map(is_ident_cont).unwrap_or(false) {
-                name.push(self.advance().unwrap());
+            while let Some(c) = self.peek() {
+                if is_ident_cont(c) {
+                    self.pos += 1;
+                    name.push(c);
+                } else {
+                    break;
+                }
             }
             Some(name)
         } else {

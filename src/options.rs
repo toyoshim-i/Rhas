@@ -461,7 +461,7 @@ fn process_switch(
                 // -m <cpu>
                 let (s, n) = get_cmd_string(&chars[pos..], remaining_args, consumed)?;
                 consumed += n;
-                let num_str = std::str::from_utf8(&s).unwrap_or("");
+                let num_str = String::from_utf8_lossy(&s);
                 let num: u32 = num_str.trim().parse().unwrap_or(0);
                 if let Some((cnum, ctype)) = cpu_number_to_type(num) {
                     opts.cpu_number = cnum;

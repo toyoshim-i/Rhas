@@ -359,28 +359,26 @@ fn preprocess_numeric_local_labels(line: &[u8], counts: &mut HashMap<u32, u32>) 
                 while k < line.len() && line[k].is_ascii_digit() {
                     k += 1;
                 }
-                if k > i && k < line.len() {
-                    let suffix = line.get(k).copied();
-                    if matches!(suffix, Some(b'f' | b'b')) {
-                        let after = k + 1;
-                        let right_boundary = after >= line.len() || !is_num_local_ident_cont(line[after]);
-                        if right_boundary {
-                            if let Ok(num_str) = std::str::from_utf8(&line[i..k]) {
-                                if let Ok(num) = num_str.parse::<u32>() {
-                                    let cnt = *counts.get(&num).unwrap_or(&0);
-                                    let ref_idx = match suffix.unwrap() {
-                                        b'b' => cnt.saturating_sub(1),
-                                        _ => cnt,
-                                    };
-                                    let name = if suffix == Some(b'b') && cnt == 0 {
-                                        format!("__n{}_invalid_b", num)
-                                    } else {
-                                        format!("__n{}__{}", num, ref_idx)
-                                    };
-                                    result.extend_from_slice(name.as_bytes());
-                                    i = after;
-                                    continue;
-                                }
+                let suffix = line.get(k).copied();
+                if let Some(suffix_char @ (b'f' | b'b')) = suffix {
+                    let after = k + 1;
+                    let right_boundary = after >= line.len() || !is_num_local_ident_cont(line[after]);
+                    if right_boundary {
+                        if let Ok(num_str) = std::str::from_utf8(&line[i..k]) {
+                            if let Ok(num) = num_str.parse::<u32>() {
+                                let cnt = *counts.get(&num).unwrap_or(&0);
+                                let ref_idx = match suffix_char {
+                                    b'b' => cnt.saturating_sub(1),
+                                    _ => cnt,
+                                };
+                                let name = if suffix_char == b'b' && cnt == 0 {
+                                    format!("__n{}_invalid_b", num)
+                                } else {
+                                    format!("__n{}__{}", num, ref_idx)
+                                };
+                                result.extend_from_slice(name.as_bytes());
+                                i = after;
+                                continue;
                             }
                         }
                     }
@@ -834,12 +832,12 @@ fn handle_real_insn(
 
     // DBcc: ターゲットを RPN として保持
     if matches!(handler, InsnHandler::DBcc) {
-        let ops = parse_operands(line, pos, p1.sym, cpu);
+        let mut ops = parse_operands(line, pos, p1.sym, cpu);
         if ops.len() == 2 {
             // ops[0] = Dn, ops[1] = label (as AbsLong RPN)
-            let dn = ops[0].clone();
-            let target = if let EffectiveAddress::AbsLong(rpn) = &ops[1] {
-                rpn.clone()
+            let dn = ops.remove(0);
+            let target = if let EffectiveAddress::AbsLong(rpn) = ops.remove(0) {
+                rpn
             } else {
                 vec![RPNToken::Value(0), RPNToken::End]
             };
@@ -857,12 +855,12 @@ fn handle_real_insn(
 
     // FDBcc: Dn,ターゲットを保持（Pass3 でPC相対計算）
     if matches!(handler, InsnHandler::FDBcc) {
-        let ops = parse_operands(line, pos, p1.sym, cpu);
+        let mut ops = parse_operands(line, pos, p1.sym, cpu);
         if ops.len() == 2 {
             let opcode = (opcode & !0x0E00) | ((u16::from(p1.ctx.fpid & 0x07)) << 9);
-            let dn = ops[0].clone();
-            let target = if let EffectiveAddress::AbsLong(rpn) = &ops[1] {
-                rpn.clone()
+            let dn = ops.remove(0);
+            let target = if let EffectiveAddress::AbsLong(rpn) = ops.remove(0) {
+                rpn
             } else {
                 vec![RPNToken::Value(0), RPNToken::End]
             };

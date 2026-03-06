@@ -135,12 +135,10 @@ pub struct ObjectCode {
 
 impl ObjectCode {
     pub fn new(source_name: Vec<u8>) -> Self {
-        let source_file = source_name.clone();
-        let scd_file = source_file.clone();
         ObjectCode {
             source_name,
-            source_file,
-            scd_file,
+            source_file: Vec::new(),
+            scd_file: Vec::new(),
             sections: Vec::new(),
             ext_syms: Vec::new(),
             request_files: Vec::new(),

@@ -160,11 +160,21 @@ impl SourceStack {
     }
 
     /// 現在処理中のソースバッファへの参照
+    ///
+    /// # Panics
+    ///
+    /// スタックが空の場合にパニックする。
+    /// このスタックは常にメインソースファイルを含むため、通常は起こり得ない。
     pub fn current(&self) -> &SourceBuf {
         self.stack.last().expect("source stack is empty")
     }
 
     /// 現在処理中のソースバッファへの可変参照
+    ///
+    /// # Panics
+    ///
+    /// スタックが空の場合にパニックする。
+    /// このスタックは常にメインソースファイルを含むため、通常は起こり得ない。
     pub fn current_mut(&mut self) -> &mut SourceBuf {
         self.stack.last_mut().expect("source stack is empty")
     }

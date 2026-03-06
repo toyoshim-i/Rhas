@@ -272,27 +272,24 @@ fn sym_to_eval(sym: &Symbol) -> Option<EvalValue> {
 /// `abswarn reg abswarn2` の場合: "abswarn" → "abswarn2"
 /// チェーンが RegSym でなくなったとき、またはループ上限に達したとき終了。
 fn resolve_regsym_chain(sym: &SymbolTable, name: &[u8]) -> Vec<u8> {
-    let mut current: Vec<u8> = name.to_vec();
+    let mut current_name: &[u8] = name;
     let mut depth = 0u8;
     loop {
-        if depth >= 16 { return current; }
-        match sym.lookup_sym(&current) {
-            Some(Symbol::RegSym { define }) if define.len() == 1 && define[0].len() >= 2 => {
-                if let (RPNToken::SymbolRef(target), RPNToken::End) =
-                    (&define[0][define[0].len() - 2], &define[0][define[0].len() - 1])
-                {
-                    if define[0].len() == 2 {
-                        // シンプルな 1シンボル参照: [SymbolRef(target), End]
-                        current = target.clone();
-                        depth += 1;
-                        continue;
-                    }
+        if depth >= 16 {
+            break;
+        }
+        if let Some(Symbol::RegSym { define }) = sym.lookup_sym(current_name) {
+            if let Some(rpn) = define.get(0) {
+                if let [RPNToken::SymbolRef(target), RPNToken::End] = rpn.as_slice() {
+                    current_name = target;
+                    depth += 1;
+                    continue;
                 }
             }
-            _ => {}
         }
-        return current;
+        break;
     }
+    current_name.to_vec()
 }
 
 /// RPN がシンプルな外部参照 [SymbolRef(name), End] かチェック

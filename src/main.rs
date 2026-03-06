@@ -55,20 +55,20 @@ fn main() {
         print!("{}", options::title_message());
     }
 
-    // ソースファイルが指定されていない場合
-    if opts.source_file.is_none() {
+    // ソースファイルが指定されているか確認し、バイト列を取得
+    let source_file_bytes = if let Some(sf) = &opts.source_file {
+        sf
+    } else {
         print!("{}", options::usage_message());
         std::process::exit(1);
-    }
+    };
 
     // 出力ファイル名を決定
     let output_path: PathBuf = if let Some(ref o) = opts.object_file {
         PathBuf::from(String::from_utf8_lossy(o).as_ref())
     } else {
         // ソースファイルの拡張子を .o に変換
-        let src = PathBuf::from(
-            String::from_utf8_lossy(opts.source_file.as_deref().unwrap()).as_ref()
-        );
+        let src = PathBuf::from(String::from_utf8_lossy(source_file_bytes).as_ref());
         src.with_extension("o")
     };
 

@@ -131,7 +131,7 @@ pub enum Scale {
 }
 
 /// インデックスレジスタ指定
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct IndexSpec {
     /// 0-7: Dn、8-15: An
     pub reg: u8,
