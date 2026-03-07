@@ -7,13 +7,13 @@
 //! - section: Section switching directives (.text, .data, etc.)
 //! - data: Data definition directives (.dc, .ds, .dcb)
 //! - conditional: Conditional assembly (.if, .ifdef, .else, .endif)
-//! - macro: Macro and repetition (.macro, .rept, .irp)
+//! - macro_: Macro and repetition (.macro, .rept, .irp)
 //! - debug: SCD debugging directives
 //! - misc: Remaining directives (.org, .fail, .cpu, etc.)
 
 pub mod section;
 pub mod data;
 pub mod conditional;
-// TODO: pub mod macro_;
+pub mod macro_;
 // TODO: pub mod debug;
 // TODO: pub mod misc;
