@@ -32,7 +32,6 @@ pub enum ParseError {
     /// 数値が不正
     InvalidNumber,
     /// `>>>`（算術右シフトの別記法）サポートのための内部記号
-    #[allow(dead_code)]
     Internal,
 }
 
@@ -391,7 +390,6 @@ impl<'a> Parser<'a> {
     }
 
     /// 文字定数 'A' / 'AB' / 'ABC' / 'ABCD'（最大 4 文字）
-    #[allow(dead_code)]
     fn parse_char_const(&mut self) -> Result<u32, ParseError> {
         self.parse_char_const_with_close(b'\'')
     }

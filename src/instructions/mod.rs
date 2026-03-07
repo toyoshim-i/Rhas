@@ -2043,7 +2043,6 @@ mod tests {
         encode_insn(opcode, handler, size, &operands).unwrap()
     }
 
-    #[allow(dead_code)]
     fn encode_ok(handler: InsnHandler, opcode: u16, size: SizeCode, ops: Vec<&str>) -> Option<Vec<u8>> {
         let operands: Vec<EffectiveAddress> = ops.iter().map(|s| parse(s)).collect();
         encode_insn(opcode, handler, size, &operands).ok()

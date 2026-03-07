@@ -80,6 +80,8 @@ cargo test --lib
 ### 対象ファイル（優先順）
 1. `src/error.rs` - いくつかのエラーコードは実装予定か確認
 2. `src/options.rs` - 複数オプションが未使用か確認
+3. `src/expr/mod.rs` - `ParseError::Internal` 等の不要属性
+4. `src/instructions/mod.rs` - テスト用ヘルパ `encode_ok`
 
 ### 変更内容
 ```bash
@@ -87,8 +89,8 @@ cargo test --lib
 cargo check
 # → コンパイル警告が出れば、本当に未使用か手動確認
 
-# Step 2b: 実装予定のコードはコメント化、本当に不要なら削除
-# (バージョン管理があるため、削除は慎重に)
+# Step 2b: 他モジュールの `#[allow(dead_code)]` も逐次削除
+# (expr/mod.rs, instructions/mod.rs など)
 cargo test --lib
 # 確認: 184 passed
 ```
@@ -96,8 +98,14 @@ cargo test --lib
 ### 完了基準
 - ✅ `cargo test --lib` で 184 passed のまま
 - ✅ デッドコードの状況が明確に文書化
-- ✅ CI/警告が減少
+- ✅ 未使用コードに対する警告が出力されるようになった
+- ✅ STEP 2 完了（2026-03-08）
 
+### 実施結果
+Step 2 では当初想定の14ファイルからさらに `expr/mod.rs` と `instructions/mod.rs` に
+存在していた `#[allow(dead_code)]` を除去。テスト 229 すべて通過、警告は残るが
+`dead_code` 属性がリポジトリから消えた。
+```
 ---
 
 ## 🔄 Step 3: `pass/pass1.rs` の疑似命令処理分割
@@ -278,7 +286,7 @@ cargo test --lib
 |------|------|------|-----------|--------|
 | 0 | ベースライン | ✅ | 184/184 | 2026-03-07 |
 | 1 | ユーティリティ統一 | ⏳ | - | - |
-| 2 | デッドコード見直し | ⏳ | - | - |
+| 2 | デッドコード見直し | ✅ | 229/229 (no change) | 2026-03-08 |
 | 3 | pass1 分割 | ⏳ | - | - |
 | 4 | エラー型安全化 | ⏳ | - | - |
 | 5 | CPU 型統一 | ⏳ | - | - |
