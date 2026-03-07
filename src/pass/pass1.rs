@@ -5,7 +5,7 @@
 
 use crate::addressing::{parse_ea, parse_reg_list_mask, EffectiveAddress};
 use crate::context::{AssemblyContext, Section};
-use crate::error::{print_error, print_warning, ErrorCode, SourcePos, warn};
+use crate::error::{print_error, print_warning, ErrorCode, SourcePos, warn, ErrorContext, WarnContext};
 use crate::expr::{eval_rpn, parse_expr, Rpn};
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;
@@ -68,15 +68,23 @@ impl<'a> P1Ctx<'a> {
 
     /// エラーを報告して count を増やす（error.rs テーブル経由）
     fn error_code(&mut self, code: ErrorCode, sym: Option<&[u8]>) {
+        let err_ctx = match sym {
+            Some(s) => ErrorContext::with_symbol(self.current_pos.clone(), code, s),
+            None => ErrorContext::new(self.current_pos.clone(), code, None),
+        };
         let mut stderr = std::io::stderr();
-        print_error(&mut stderr, &self.current_pos, code, sym);
+        crate::error::print_error_context(&mut stderr, &err_ctx);
         self.ctx.add_error();
     }
 
     fn warn_code(&mut self, code: crate::error::WarnCode, sym: Option<&[u8]>) {
         let level = self.ctx.effective_warn_level();
+        let warn_ctx = match sym {
+            Some(s) => WarnContext::with_symbol(self.current_pos.clone(), code, s),
+            None => WarnContext::new(self.current_pos.clone(), code, None),
+        };
         let mut stderr = std::io::stderr();
-        print_warning(&mut stderr, &self.current_pos, code, sym, level);
+        crate::error::print_warning_context(&mut stderr, &warn_ctx, level);
         if level >= crate::error::warn_default_level(code) {
             self.ctx.add_warning();
         }
