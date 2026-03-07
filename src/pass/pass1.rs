@@ -15,6 +15,7 @@ use crate::source::{ReadResult, SourceStack};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol::types::{reg, DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeCode};
 use std::collections::HashMap;
+use super::pseudo;
 use super::temp::TempRecord;
 
 // ----------------------------------------------------------------
@@ -1791,45 +1792,11 @@ fn handle_pseudo(
     let _ = mnem;
     match handler {
         // ---- セクション切り替え ----
-        InsnHandler::TextSect => {
-            p1.set_section(Section::Text);
-            records.push(TempRecord::SectChange { id: 0x01 });
-        }
-        InsnHandler::DataSect => {
-            p1.set_section(Section::Data);
-            records.push(TempRecord::SectChange { id: 0x02 });
-        }
-        InsnHandler::BssSect => {
-            p1.set_section(Section::Bss);
-            records.push(TempRecord::SectChange { id: 0x03 });
-        }
-        InsnHandler::Stack => {
-            p1.set_section(Section::Stack);
-            records.push(TempRecord::SectChange { id: 0x04 });
-        }
-        InsnHandler::RdataSect => {
-            p1.set_section(Section::Rdata);
-            records.push(TempRecord::SectChange { id: 0x05 });
-        }
-        InsnHandler::RbssSect => {
-            p1.set_section(Section::Rbss);
-            records.push(TempRecord::SectChange { id: 0x06 });
-        }
-        InsnHandler::RstackSect => {
-            p1.set_section(Section::Rstack);
-            records.push(TempRecord::SectChange { id: 0x07 });
-        }
-        InsnHandler::RldataSect => {
-            p1.set_section(Section::Rldata);
-            records.push(TempRecord::SectChange { id: 0x08 });
-        }
-        InsnHandler::RlbssSect => {
-            p1.set_section(Section::Rlbss);
-            records.push(TempRecord::SectChange { id: 0x09 });
-        }
+        InsnHandler::TextSect | InsnHandler::DataSect | InsnHandler::BssSect |
+        InsnHandler::Stack | InsnHandler::RdataSect | InsnHandler::RbssSect |
+        InsnHandler::RstackSect | InsnHandler::RldataSect | InsnHandler::RlbssSect |
         InsnHandler::RlstackSect => {
-            p1.set_section(Section::Rlstack);
-            records.push(TempRecord::SectChange { id: 0x0A });
+            pseudo::section::handle_section(handler, p1.ctx, records);
         }
 
         // ---- .even / .quad / .align ----

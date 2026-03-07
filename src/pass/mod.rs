@@ -8,6 +8,7 @@ pub mod pass1;
 pub mod pass2;
 pub mod pass3;
 pub mod prn;
+pub mod pseudo;
 
 use crate::context::AssemblyContext;
 use crate::context::AsmPass;
