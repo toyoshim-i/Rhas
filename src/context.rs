@@ -59,6 +59,51 @@ impl Section {
 pub const N_SECTIONS: usize = 10;
 
 // ----------------------------------------------------------------
+// CPU型定義
+// ----------------------------------------------------------------
+
+/// CPU型情報（cpu_number と cpu_type を統一）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CpuType {
+    /// CPU番号（68000, 68010, 68020, ..., 68060）
+    pub number: u32,
+    /// CPUタイプビット（has060xx形式: 0x0001=C000, 0x0100=C010, ...）
+    pub features: u16,
+}
+
+impl CpuType {
+    /// 新しい CpuType を生成
+    pub const fn new(number: u32, features: u16) -> Self {
+        CpuType { number, features }
+    }
+
+    /// デフォルト値（68000, no features）
+    pub const fn default_68000() -> Self {
+        CpuType { number: 68000, features: 0x0001 }
+    }
+
+    /// 68010 CPU
+    pub const fn cpu_68010() -> Self {
+        CpuType { number: 68010, features: 0x0002 }
+    }
+
+    /// 68020 CPU
+    pub const fn cpu_68020() -> Self {
+        CpuType { number: 68020, features: 0x0004 }
+    }
+
+    /// CPU番号が古い世代か判定
+    pub fn is_older_than_020(&self) -> bool {
+        self.number < 68020
+    }
+
+    /// CPU番号が68060以降か判定
+    pub fn supports_060_extended(&self) -> bool {
+        self.number >= 68060
+    }
+}
+
+// ----------------------------------------------------------------
 // AssemblyContext
 // ----------------------------------------------------------------
 
@@ -238,6 +283,17 @@ impl AssemblyContext {
         self.cpu_type = cpu_type;
     }
 
+    /// CpuType を使用して CPU情報を設定（型安全版）
+    pub fn set_cpu_with_type(&mut self, cpu: CpuType) {
+        self.cpu_number = cpu.number;
+        self.cpu_type = cpu.features;
+    }
+
+    /// 現在のCPU情報を CpuType として取得
+    pub fn get_cpu_type(&self) -> CpuType {
+        CpuType::new(self.cpu_number, self.cpu_type)
+    }
+
     // ---- エラー処理 ----
 
     /// エラー数をインクリメントして返す
@@ -344,4 +400,51 @@ mod tests {
         let ctx = make_ctx();
         assert_eq!(ctx.cpu_number, 68000);
     }
-}
+
+    #[test]
+    fn test_cpu_type_creation() {
+        let cpu = CpuType::new(68020, 0x0004);
+        assert_eq!(cpu.number, 68020);
+        assert_eq!(cpu.features, 0x0004);
+    }
+
+    #[test]
+    fn test_cpu_type_factories() {
+        let cpu_000 = CpuType::default_68000();
+        assert_eq!(cpu_000.number, 68000);
+        
+        let cpu_010 = CpuType::cpu_68010();
+        assert_eq!(cpu_010.number, 68010);
+        
+        let cpu_020 = CpuType::cpu_68020();
+        assert_eq!(cpu_020.number, 68020);
+    }
+
+    #[test]
+    fn test_cpu_type_checks() {
+        let cpu_010 = CpuType::cpu_68010();
+        assert!(cpu_010.is_older_than_020());
+        
+        let cpu_020 = CpuType::cpu_68020();
+        assert!(!cpu_020.is_older_than_020());
+    }
+
+    #[test]
+    fn test_set_cpu_with_type() {
+        let mut ctx = make_ctx();
+        let cpu = CpuType::new(68030, 0x0008);
+        ctx.set_cpu_with_type(cpu);
+        
+        assert_eq!(ctx.cpu_number, 68030);
+        assert_eq!(ctx.cpu_type, 0x0008);
+    }
+
+    #[test]
+    fn test_get_cpu_type() {
+        let mut ctx = make_ctx();
+        ctx.set_cpu(68040, 0x0010);
+        
+        let cpu = ctx.get_cpu_type();
+        assert_eq!(cpu.number, 68040);
+        assert_eq!(cpu.features, 0x0010);
+    }}
