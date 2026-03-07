@@ -531,7 +531,7 @@ fn parse_line(
                     if !already {
                         // まだマッチしていない → .else ブロックを実行
                         p1.is_skip = false;
-                        if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+                        pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
                     }
                     // already_matched の場合はスキップを継続
                 }
@@ -548,7 +548,7 @@ fn parse_line(
                         } else { false };
                         if cond {
                             p1.is_skip = false;
-                            if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+                            pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
                         }
                     }
                     // already_matched の場合はスキップを継続
@@ -558,7 +558,7 @@ fn parse_line(
                 if p1.skip_nest == p1.if_nest {
                     p1.is_skip = false;
                     let idx = p1.if_nest as usize;
-                    if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
+                    pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
                     p1.if_nest -= 1;
                 } else {
                     p1.if_nest -= 1;
@@ -2086,13 +2086,13 @@ fn handle_pseudo(
         InsnHandler::If => {
             p1.if_nest += 1;
             let idx = p1.if_nest as usize;
-            if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
+            pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
             skip_spaces(line, pos);
             let cond = if let Ok(rpn) = parse_expr(line, pos) {
                 p1.eval_const(&rpn).map(|v| v.value != 0).unwrap_or(false)
             } else { false };
             if cond {
-                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
             } else {
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
@@ -2101,14 +2101,14 @@ fn handle_pseudo(
         InsnHandler::Iff => {
             p1.if_nest += 1;
             let idx = p1.if_nest as usize;
-            if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
+            pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
             skip_spaces(line, pos);
             let cond = if let Ok(rpn) = parse_expr(line, pos) {
                 p1.eval_const(&rpn).map(|v| v.value != 0).unwrap_or(false)
             } else { false };
             // Iff: condition is ZERO → execute
             if !cond {
-                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
             } else {
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
@@ -2117,12 +2117,12 @@ fn handle_pseudo(
         InsnHandler::Ifdef => {
             p1.if_nest += 1;
             let idx = p1.if_nest as usize;
-            if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
+            pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
             skip_spaces(line, pos);
             let name = read_ident(line, pos);
             let defined = !name.is_empty() && p1.sym.lookup_sym(&name).is_some();
             if defined {
-                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
             } else {
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
@@ -2131,12 +2131,12 @@ fn handle_pseudo(
         InsnHandler::Ifndef => {
             p1.if_nest += 1;
             let idx = p1.if_nest as usize;
-            if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
+            pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
             skip_spaces(line, pos);
             let name = read_ident(line, pos);
             let defined = !name.is_empty() && p1.sym.lookup_sym(&name).is_some();
             if !defined {
-                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
             } else {
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
@@ -2146,7 +2146,7 @@ fn handle_pseudo(
             if p1.if_nest > 0 {
                 // .else の対応する .if ブロックを完了 → already_matched を true に
                 let idx = p1.if_nest as usize;
-                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
             }
@@ -2156,7 +2156,7 @@ fn handle_pseudo(
             // 既に実行中のブロックは完了 → already_matched を true に
             if p1.if_nest > 0 {
                 let idx = p1.if_nest as usize;
-                if idx < p1.if_matched.len() { p1.if_matched[idx] = true; }
+                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
             }
@@ -2164,7 +2164,7 @@ fn handle_pseudo(
         InsnHandler::Endif => {
             if p1.if_nest > 0 {
                 let idx = p1.if_nest as usize;
-                if idx < p1.if_matched.len() { p1.if_matched[idx] = false; }
+                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
                 p1.if_nest -= 1;
             }
         }

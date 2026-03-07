@@ -13,7 +13,7 @@
 
 pub mod section;
 pub mod data;
-// TODO: pub mod conditional;
+pub mod conditional;
 // TODO: pub mod macro_;
 // TODO: pub mod debug;
 // TODO: pub mod misc;
