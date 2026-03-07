@@ -311,6 +311,60 @@ pub struct SourcePos {
     pub line: u32,
 }
 
+/// エラーレポート用の構造化コンテキスト
+#[derive(Debug, Clone)]
+pub struct ErrorContext {
+    /// ソースコード位置
+    pub pos: SourcePos,
+    /// エラーコード
+    pub code: ErrorCode,
+    /// 関連シンボル（オプション）
+    pub symbol: Option<Vec<u8>>,
+}
+
+impl ErrorContext {
+    /// 新しい ErrorContext を生成
+    pub fn new(pos: SourcePos, code: ErrorCode, symbol: Option<Vec<u8>>) -> Self {
+        ErrorContext { pos, code, symbol }
+    }
+
+    /// ErrorContext をシンボル付きで生成（&[u8] から）
+    pub fn with_symbol(pos: SourcePos, code: ErrorCode, symbol: &[u8]) -> Self {
+        ErrorContext {
+            pos,
+            code,
+            symbol: Some(symbol.to_vec()),
+        }
+    }
+}
+
+/// ワーニングレポート用の構造化コンテキスト
+#[derive(Debug, Clone)]
+pub struct WarnContext {
+    /// ソースコード位置
+    pub pos: SourcePos,
+    /// ワーニングコード
+    pub code: WarnCode,
+    /// 関連シンボル（オプション）
+    pub symbol: Option<Vec<u8>>,
+}
+
+impl WarnContext {
+    /// 新しい WarnContext を生成
+    pub fn new(pos: SourcePos, code: WarnCode, symbol: Option<Vec<u8>>) -> Self {
+        WarnContext { pos, code, symbol }
+    }
+
+    /// WarnContext をシンボル付きで生成（&[u8] から）
+    pub fn with_symbol(pos: SourcePos, code: WarnCode, symbol: &[u8]) -> Self {
+        WarnContext {
+            pos,
+            code,
+            symbol: Some(symbol.to_vec()),
+        }
+    }
+}
+
 impl SourcePos {
     pub fn new(filename: Vec<u8>, line: u32) -> Self {
         SourcePos { filename, line }
@@ -350,6 +404,14 @@ pub fn print_error(
     );
 }
 
+/// ErrorContext 版エラー出力（型安全性改善版）
+///
+/// フォーマット: `<filename>  <linenum>: Error: <message>\n`
+pub fn print_error_context(out: &mut dyn Write, ctx: &ErrorContext) {
+    let sym_ref = ctx.symbol.as_ref().map(|s| s.as_slice());
+    print_error(out, &ctx.pos, ctx.code, sym_ref);
+}
+
 /// ワーニング出力
 pub fn print_warning(
     out: &mut dyn Write,
@@ -369,6 +431,12 @@ pub fn print_warning(
         pos.line,
         msg
     );
+}
+
+/// WarnContext 版ワーニング出力（型安全性改善版）
+pub fn print_warning_context(out: &mut dyn Write, ctx: &WarnContext, warn_level: u8) {
+    let sym_ref = ctx.symbol.as_ref().map(|s| s.as_slice());
+    print_warning(out, &ctx.pos, ctx.code, sym_ref, warn_level);
 }
 
 /// `%s` を sym で置換する
@@ -441,4 +509,65 @@ mod tests {
         assert_eq!(warn_default_level(warn::ABS), 4);
         assert_eq!(warn_default_level(warn::REGL), 1);
     }
+
+    #[test]
+    fn test_error_context_new() {
+        let pos = SourcePos::new(b"test.s".to_vec(), 10);
+        let ctx = ErrorContext::new(pos.clone(), ErrorCode::BadOpe, None);
+        assert_eq!(ctx.code, ErrorCode::BadOpe);
+        assert_eq!(ctx.pos.line, 10);
+        assert!(ctx.symbol.is_none());
+    }
+
+    #[test]
+    fn test_error_context_with_symbol() {
+        let pos = SourcePos::new(b"test.s".to_vec(), 10);
+        let ctx = ErrorContext::with_symbol(pos, ErrorCode::UndefSym, b"LABEL");
+        assert_eq!(ctx.code, ErrorCode::UndefSym);
+        assert_eq!(ctx.symbol, Some(b"LABEL".to_vec()));
+    }
+
+    #[test]
+    fn test_warn_context_new() {
+        let pos = SourcePos::new(b"test.s".to_vec(), 20);
+        let ctx = WarnContext::new(pos.clone(), warn::ABS, None);
+        assert_eq!(ctx.code, warn::ABS);
+        assert_eq!(ctx.pos.line, 20);
+        assert!(ctx.symbol.is_none());
+    }
+
+    #[test]
+    fn test_warn_context_with_symbol() {
+        let pos = SourcePos::new(b"test.s".to_vec(), 20);
+        let ctx = WarnContext::with_symbol(pos, warn::REDEF_SET, b"VAR");
+        assert_eq!(ctx.code, warn::REDEF_SET);
+        assert_eq!(ctx.symbol, Some(b"VAR".to_vec()));
+    }
+
+    #[test]
+    fn test_print_error_context() {
+        let pos = SourcePos::new(b"prog.s".to_vec(), 42);
+        let ctx = ErrorContext::with_symbol(pos, ErrorCode::UndefSym, b"FOO");
+        let mut buf = Vec::new();
+        print_error_context(&mut buf, &ctx);
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("prog.s"));
+        assert!(output.contains("42"));
+        assert!(output.contains("Error"));
+        assert!(output.contains("FOO"));
+    }
+
+    #[test]
+    fn test_print_warning_context() {
+        let pos = SourcePos::new(b"prog.s".to_vec(), 50);
+        let ctx = WarnContext::new(pos, warn::ABS, None);
+        let mut buf = Vec::new();
+        print_warning_context(&mut buf, &ctx, 5);
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("prog.s"));
+        assert!(output.contains("50"));
+        assert!(output.contains("Warning"));
+    }
 }
+
+
