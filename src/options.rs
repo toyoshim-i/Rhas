@@ -4,6 +4,7 @@
 /// オリジナルと同じ単一文字スイッチ方式を採用する。
 /// 複数スイッチの連結（`-c4u` = `-c4 -u`）にも対応する。
 use std::ffi::OsStr;
+use crate::utils;
 
 // デフォルト値定数（has.equ / work.s より）
 pub const DEFAULT_PRN_WIDTH: u16 = 136;
@@ -461,7 +462,7 @@ fn process_switch(
                 // -m <cpu>
                 let (s, n) = get_cmd_string(&chars[pos..], remaining_args, consumed)?;
                 consumed += n;
-                let num_str = String::from_utf8_lossy(&s);
+                let num_str = utils::bytes_to_string(&s);
                 let num: u32 = num_str.trim().parse().unwrap_or(0);
                 if let Some((cnum, ctype)) = cpu_number_to_type(num) {
                     opts.cpu_number = cnum;
@@ -599,7 +600,7 @@ fn parse_c_option(chars: &[u8], opts: &mut Options) -> Result<usize, ParseError>
                 }
                 _ => return Err(ParseError::Usage(format!(
                     "-c: 不明なニーモニック '{}'",
-                    String::from_utf8_lossy(&mnem)
+                    utils::bytes_to_string(&mnem)
                 ))),
             }
             Ok(skip)

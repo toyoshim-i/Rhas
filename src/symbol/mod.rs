@@ -12,6 +12,7 @@
 pub mod types;
 
 use std::collections::HashMap;
+use crate::utils;
 use types::{CpuMask, DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeFlags};
 use types::{cmask, sz, reg};
 pub use types::Symbol;
@@ -56,7 +57,7 @@ impl SymbolTable {
     fn register_builtins(&mut self) {
         // レジスタ名
         for (name, arch, regno) in REGISTER_TABLE {
-            let key = to_lowercase_vec(name.as_bytes());
+            let key = utils::to_lowercase_vec(name.as_bytes());
             self.reg_table.insert(
                 key,
                 Symbol::Register { arch: CpuMask(*arch), regno: *regno },
@@ -105,7 +106,7 @@ impl SymbolTable {
         }
         // 命令名・疑似命令名
         for entry in OPCODE_TABLE {
-            let key = to_lowercase_vec(entry.name.as_bytes());
+            let key = utils::to_lowercase_vec(entry.name.as_bytes());
             self.cmd_table.insert(
                 key,
                 Symbol::Opcode {
@@ -138,7 +139,7 @@ impl SymbolTable {
     ///
     /// CPU タイプに一致しないレジスタは返さない。
     pub fn lookup_reg(&self, name: &[u8], cpu_type: u16) -> Option<&Symbol> {
-        let key = to_lowercase_vec(name);
+        let key = utils::to_lowercase_vec(name);
         let sym = self.reg_table.get(&key)?;
         if sym.is_available_for_cpu(cpu_type) {
             Some(sym)
@@ -152,7 +153,7 @@ impl SymbolTable {
     /// オリジナルの `isdefdmac`（マクロ）/ 命令テーブル検索に対応。
     /// CPU タイプに一致しない命令は返さない。
     pub fn lookup_cmd(&self, name: &[u8], cpu_type: u16) -> Option<&Symbol> {
-        let key = to_lowercase_vec(self.truncate_if_len8(name));
+        let key = utils::to_lowercase_vec(self.truncate_if_len8(name));
         let sym = self.cmd_table.get(&key)?;
         if sym.is_available_for_cpu(cpu_type) {
             Some(sym)
@@ -173,7 +174,7 @@ impl SymbolTable {
 
     /// マクロを登録する（.macro/.endm 処理後）
     pub fn define_macro(&mut self, name: Vec<u8>, sym: Symbol) {
-        let key = to_lowercase_vec(name);
+        let key = utils::to_lowercase_vec(name);
         self.cmd_table.insert(key, sym);
     }
 
@@ -226,11 +227,6 @@ impl SymbolTable {
     pub fn iter_user_syms(&self) -> impl Iterator<Item = (&Vec<u8>, &Symbol)> {
         self.user_syms.iter()
     }
-}
-
-/// バイト列を ASCII 小文字化する
-fn to_lowercase_vec<B: AsRef<[u8]>>(s: B) -> Vec<u8> {
-    s.as_ref().iter().map(|c| c.to_ascii_lowercase()).collect()
 }
 
 // ----------------------------------------------------------------

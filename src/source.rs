@@ -6,6 +6,7 @@
 //! インクルードファイルのネストは最大 INCLDMAXNEST(8) レベル。
 
 use crate::error::{FileError, FileErrorKind, SourcePos};
+use crate::utils;
 use std::path::{Path, PathBuf};
 
 /// インクルードネスト上限（has.equ: INCLDMAXNEST）
@@ -230,8 +231,8 @@ impl SourceStack {
     /// 1. カレントファイルと同じディレクトリを先に探す
     /// 2. -i で指定したパスを順番に探す
     fn resolve_include_path(&self, filename: &[u8]) -> Result<PathBuf, FileError> {
-        let name_str = String::from_utf8_lossy(filename);
-        let name_path = Path::new(name_str.as_ref());
+        let name_str = utils::bytes_to_string(filename);
+        let name_path = Path::new(&name_str);
 
         // 絶対パスならそのまま
         if name_path.is_absolute() {
@@ -287,8 +288,8 @@ pub fn parse_include_paths(raw: Option<&Vec<u8>>) -> Vec<PathBuf> {
     if let Some(data) = raw {
         for part in data.split(|&b| b == 0) {
             if !part.is_empty() {
-                let s = String::from_utf8_lossy(part);
-                result.push(PathBuf::from(s.as_ref()));
+                let s = utils::bytes_to_string(part);
+                result.push(PathBuf::from(&s));
             }
         }
     }

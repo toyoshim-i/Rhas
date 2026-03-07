@@ -7,6 +7,7 @@
 //! エラーコード・ワーニングコードは `errtbl` / `warntbl` マクロ定義から移植。
 
 use std::io::Write;
+use crate::utils;
 
 // ----------------------------------------------------------------
 // エラーコード
@@ -320,7 +321,7 @@ impl SourcePos {
 
     /// ファイル名を表示用文字列として取得（最大16文字）
     fn filename_display(&self) -> String {
-        let s = String::from_utf8_lossy(&self.filename);
+        let s = utils::bytes_to_string(&self.filename);
         if s.len() <= 16 {
             format!("{:<16}", s)
         } else {
@@ -376,7 +377,7 @@ pub fn print_warning(
 /// `%s` を sym で置換する
 fn format_message(template: &str, sym: Option<&[u8]>) -> String {
     if let Some(s) = sym {
-        let sym_str = String::from_utf8_lossy(s);
+        let sym_str = utils::bytes_to_string(s);
         template.replacen("%s", &sym_str, 1)
     } else {
         template.to_string()
@@ -405,7 +406,7 @@ pub enum FileErrorKind {
 
 impl std::fmt::Display for FileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let path = String::from_utf8_lossy(&self.path);
+        let path = utils::bytes_to_string(&self.path);
         match &self.kind {
             FileErrorKind::NotFound => write!(f, "ファイルが見つかりません: {}", path),
             FileErrorKind::AccessDenied => write!(f, "アクセス拒否: {}", path),

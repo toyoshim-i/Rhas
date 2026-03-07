@@ -15,6 +15,7 @@ mod symbol;
 use options::{parse_args, ParseError};
 use std::io::Write;
 use std::path::PathBuf;
+use rhas::utils;
 
 fn main() {
     // 実行ファイル名から g2as モードかどうかを判定（main.s: docmdline 冒頭）
@@ -65,10 +66,10 @@ fn main() {
 
     // 出力ファイル名を決定
     let output_path: PathBuf = if let Some(ref o) = opts.object_file {
-        PathBuf::from(String::from_utf8_lossy(o).as_ref())
+        utils::path_from_bytes(o)
     } else {
         // ソースファイルの拡張子を .o に変換
-        let src = PathBuf::from(String::from_utf8_lossy(source_file_bytes).as_ref());
+        let src = utils::path_from_bytes(source_file_bytes);
         src.with_extension("o")
     };
 
@@ -96,8 +97,11 @@ fn main() {
             }
         }
         Err(pass::AssembleError::SourceNotFound(path)) => {
-            let _ = writeln!(err_out, "エラー: ソースファイルが見つかりません: {}",
-                path.display());
+            let _ = writeln!(
+                err_out,
+                "エラー: ソースファイルが見つかりません: {}",
+                path.display()
+            );
             std::process::exit(1);
         }
         Err(pass::AssembleError::HasErrors(n)) => {
