@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! ソースファイル読み込み
 //!
 //! オリジナルの `file.s`（readline, readopen）に相当する。

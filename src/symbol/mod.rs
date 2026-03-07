@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! シンボルテーブル
 //!
 //! オリジナルの `symbol.s`（SYMHASHPTR / CMDHASHPTR）に対応する。

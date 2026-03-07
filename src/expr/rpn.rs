@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! 逆ポーランド式のトークン型
 //!
 //! オリジナルの RPN_* コード（tmpcode.equ）と演算子コード（has.equ: OP_NEG〜OP_OR）
