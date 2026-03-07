@@ -15,5 +15,5 @@ pub mod section;
 pub mod data;
 pub mod conditional;
 pub mod macro_;
-// TODO: pub mod debug;
+pub mod debug;
 // TODO: pub mod misc;
