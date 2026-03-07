@@ -12,7 +12,7 @@
 //! - misc: Remaining directives (.org, .fail, .cpu, etc.)
 
 pub mod section;
-// TODO: pub mod data;
+pub mod data;
 // TODO: pub mod conditional;
 // TODO: pub mod macro_;
 // TODO: pub mod debug;
