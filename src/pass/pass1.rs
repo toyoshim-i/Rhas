@@ -27,17 +27,17 @@ use super::temp::TempRecord;
 // ----------------------------------------------------------------
 
 /// Pass1 の作業状態
-struct P1Ctx<'a> {
-    sym:      &'a mut SymbolTable,
-    ctx:      &'a mut AssemblyContext,
+pub struct P1Ctx<'a> {
+    pub(crate) sym:      &'a mut SymbolTable,
+    pub(crate) ctx:      &'a mut AssemblyContext,
     /// .if ネスト深度（最大 64 段）
-    if_nest:  u16,
+    pub(crate) if_nest:  u16,
     /// スキップ中の .if ネスト深度（0 = スキップしていない）
-    skip_nest: u16,
+    pub(crate) skip_nest: u16,
     /// スキップ中（is_if_skip）
-    is_skip:  bool,
+    pub(crate) is_skip:  bool,
     /// 各 if-nesting レベルでマッチ済みブランチがあるか（.elseif/.else の重複実行防止）
-    if_matched: [bool; 65],
+    pub(crate) if_matched: [bool; 65],
     /// .end が来たか
     is_end:   bool,
     /// ローカルラベルベース（マクロ展開番号用、将来実装）
@@ -51,7 +51,7 @@ struct P1Ctx<'a> {
 }
 
 impl<'a> P1Ctx<'a> {
-    fn new(sym: &'a mut SymbolTable, ctx: &'a mut AssemblyContext) -> Self {
+    pub(crate) fn new(sym: &'a mut SymbolTable, ctx: &'a mut AssemblyContext) -> Self {
         P1Ctx {
             sym, ctx,
             if_nest: 0,
@@ -67,7 +67,7 @@ impl<'a> P1Ctx<'a> {
     }
 
     /// エラーを報告して count を増やす（error.rs テーブル経由）
-    fn error_code(&mut self, code: ErrorCode, sym: Option<&[u8]>) {
+    pub(crate) fn error_code(&mut self, code: ErrorCode, sym: Option<&[u8]>) {
         let err_ctx = match sym {
             Some(s) => ErrorContext::with_symbol(self.current_pos.clone(), code, s),
             None => ErrorContext::new(self.current_pos.clone(), code, None),
@@ -77,7 +77,7 @@ impl<'a> P1Ctx<'a> {
         self.ctx.add_error();
     }
 
-    fn warn_code(&mut self, code: crate::error::WarnCode, sym: Option<&[u8]>) {
+    pub(crate) fn warn_code(&mut self, code: crate::error::WarnCode, sym: Option<&[u8]>) {
         let level = self.ctx.effective_warn_level();
         let warn_ctx = match sym {
             Some(s) => WarnContext::with_symbol(self.current_pos.clone(), code, s),
@@ -93,11 +93,21 @@ impl<'a> P1Ctx<'a> {
     fn section_id(&self) -> u8 {
         if self.ctx.is_offset_mode { 0 } else { self.ctx.section as u8 }
     }
-    fn is_offset_mode(&self) -> bool { self.ctx.is_offset_mode }
+    pub(crate) fn is_offset_mode(&self) -> bool { self.ctx.is_offset_mode }
+
+    /// Return current local label base without modifying it.
+    pub(crate) fn local_base(&self) -> u32 { self.local_base }
+
+    /// Consume and increment the local base, returning the previous value.
+    pub(crate) fn next_local_base(&mut self) -> u32 {
+        let v = self.local_base;
+        self.local_base = self.local_base.wrapping_add(1);
+        v
+    }
     fn cpu_type(&self)   -> u16 { self.ctx.cpu_type }
     fn location(&self)   -> u32 { self.ctx.location() }
 
-    fn advance(&mut self, n: u32) {
+    pub(crate) fn advance(&mut self, n: u32) {
         self.ctx.advance_location(n);
     }
 
@@ -120,7 +130,7 @@ impl<'a> P1Ctx<'a> {
     }
 
     /// RPN 式を定数評価する
-    fn eval_const(&self, rpn: &Rpn) -> Option<EvalValue> {
+    pub(crate) fn eval_const(&self, rpn: &Rpn) -> Option<EvalValue> {
         let loc = self.ctx.loc_top;
         let cur = self.location();
         let sec = self.section_id();
@@ -516,56 +526,7 @@ fn parse_line(
     if p1.is_skip {
         let h = p1.sym.lookup_cmd(&mnem, p1.cpu_type())
             .and_then(|s| if let Symbol::Opcode { handler, .. } = s { Some(*handler) } else { None });
-        match h {
-            Some(InsnHandler::If | InsnHandler::Iff | InsnHandler::Ifdef | InsnHandler::Ifndef) => {
-                p1.if_nest += 1;
-                if (p1.if_nest as usize) < p1.if_matched.len() {
-                    p1.if_matched[p1.if_nest as usize] = false;
-                }
-                // まだスキップ中なのでネストを増やすだけ
-            }
-            Some(InsnHandler::Else) => {
-                if p1.skip_nest == p1.if_nest {
-                    let idx = p1.if_nest as usize;
-                    let already = idx < p1.if_matched.len() && p1.if_matched[idx];
-                    if !already {
-                        // まだマッチしていない → .else ブロックを実行
-                        p1.is_skip = false;
-                        pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
-                    }
-                    // already_matched の場合はスキップを継続
-                }
-            }
-            Some(InsnHandler::Elseif) => {
-                if p1.skip_nest == p1.if_nest {
-                    let idx = p1.if_nest as usize;
-                    let already = idx < p1.if_matched.len() && p1.if_matched[idx];
-                    if !already {
-                        // まだマッチしていない → .elseif 条件を評価
-                        skip_spaces(line, &mut pos);
-                        let cond = if let Ok(rpn) = parse_expr(line, &mut pos) {
-                            p1.eval_const(&rpn).map(|v| v.value != 0).unwrap_or(false)
-                        } else { false };
-                        if cond {
-                            p1.is_skip = false;
-                            pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
-                        }
-                    }
-                    // already_matched の場合はスキップを継続
-                }
-            }
-            Some(InsnHandler::Endif) => {
-                if p1.skip_nest == p1.if_nest {
-                    p1.is_skip = false;
-                    let idx = p1.if_nest as usize;
-                    pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
-                    p1.if_nest -= 1;
-                } else {
-                    p1.if_nest -= 1;
-                }
-            }
-            _ => {}
-        }
+        pseudo::conditional::handle_skip(h, line, &mut pos, p1);
         return;
     }
 
@@ -628,8 +589,8 @@ fn parse_line(
                 p1.sym.lookup_cmd(&mnem, p1.cpu_type()).cloned()
             {
                 let args = parse_macro_args(line, &mut pos);
-                expand_macro_body(&template, &params, &args, p1.local_base, records, p1, source);
-                p1.local_base = p1.local_base.wrapping_add(1);
+                let lb = p1.next_local_base();
+                expand_macro_body(&template, &params, &args, lb, records, p1, source);
             }
         }
         // ---- 未知のニーモニック ----
@@ -772,7 +733,7 @@ fn to_lowercase(s: &[u8]) -> Vec<u8> {
     s.iter().map(|c| c.to_ascii_lowercase()).collect()
 }
 
-fn skip_spaces(line: &[u8], pos: &mut usize) {
+pub(crate) fn skip_spaces(line: &[u8], pos: &mut usize) {
     while *pos < line.len() && matches!(line[*pos], b' ' | b'\t') {
         *pos += 1;
     }
@@ -1808,149 +1769,14 @@ fn handle_pseudo(
         }
 
         // ---- .even / .quad / .align ----
-        InsnHandler::Even => {
-            if p1.ctx.offsym_with_symbol {
-                p1.error_code(ErrorCode::OffsymAlign, Some(b".even"));
-                return;
-            }
-            if p1.is_offset_mode() {
-                // .offset モードでは実データを出力しない（カウンタを偶数に揃えるだけ）
-                let loc = p1.location();
-                if !loc.is_multiple_of(2) { p1.advance(1); }
-            } else {
-                let sec = p1.section_id();
-                let pad = if sec == 0x01 { 0x4E71u16 } else { 0u16 };
-                // .even does NOT set MAKEALIGN in HAS (unlike .align/.quad)
-                records.push(TempRecord::Align { n: 1, pad, section: sec });
-            }
-        }
-        InsnHandler::Quad => {
-            if p1.ctx.offsym_with_symbol {
-                p1.error_code(ErrorCode::OffsymAlign, Some(b".quad"));
-                return;
-            }
-            if p1.is_offset_mode() {
-                let loc = p1.location();
-                let mask = 4u32 - 1;
-                if loc & mask != 0 { p1.advance(4 - (loc & mask)); }
-            } else {
-                let sec = p1.section_id();
-                if 2 > p1.ctx.max_align { p1.ctx.max_align = 2; }
-                records.push(TempRecord::Align { n: 2, pad: 0, section: sec });
-            }
-        }
-        InsnHandler::Align => {
-            if p1.ctx.offsym_with_symbol {
-                p1.error_code(ErrorCode::OffsymAlign, Some(b".align"));
-                return;
-            }
-            skip_spaces(line, pos);
-            let n = parse_align_n(line, pos, p1);
-            if let Some(n) = n {
-                if p1.is_offset_mode() {
-                    // .offset モードでは仮想カウンタを整列するだけ
-                    let align = 1u32 << n;
-                    let loc = p1.location();
-                    if !loc.is_multiple_of(align) { p1.advance(align - (loc % align)); }
-                } else {
-                    let sec = p1.section_id();
-                    // パディング値（オプション）
-                    let pad = parse_align_pad(line, pos, p1).unwrap_or({
-                        if sec == 0x01 { 0x4E71 } else { 0 }
-                    });
-                    // max_align を更新（B204 レコード用）
-                    if n > p1.ctx.max_align {
-                        p1.ctx.max_align = n;
-                    }
-                    records.push(TempRecord::Align { n, pad, section: sec });
-                }
-            }
+        InsnHandler::Even | InsnHandler::Quad | InsnHandler::Align => {
+            pseudo::misc::handle_misc(handler, &label, line, pos, p1, records);
         }
 
-        // ---- .dc ----
-        InsnHandler::Dc => {
-            // .offset モードでは .dc は出力しない（通常 .offset ブロック内には .dc は現れないが念のため）
-            if !p1.is_offset_mode() {
-                let byte_size: u8 = match size {
-                    Some(SizeCode::Byte)   => 1,
-                    Some(SizeCode::Long)   => 4,
-                    None | Some(SizeCode::Word) => 2,
-                    _ => 2,
-                };
-                parse_dc(line, pos, byte_size, records, p1);
-            }
-        }
-
-        // ---- .ds ----
-        InsnHandler::Ds => {
-            let item_size: u32 = match size {
-                Some(SizeCode::Byte) => 1,
-                Some(SizeCode::Long) => 4,
-                None | Some(SizeCode::Word) => 2,
-                _ => 2,
-            };
-            skip_spaces(line, pos);
-            if let Ok(rpn) = parse_expr(line, pos) {
-                if let Some(v) = p1.eval_const(&rpn) {
-                    let count = v.value as u32;
-                    let byte_count = count * item_size;
-                    p1.advance(byte_count);
-                    // .offset モード（SECT_ABS）では仮想カウンタのみ進め実データは出力しない
-                    if !p1.is_offset_mode() {
-                        records.push(TempRecord::Ds { byte_count });
-                    }
-                }
-            }
-        }
-
-        // ---- .dcb ----
-        InsnHandler::Dcb => {
-            let item_size: u32 = match size {
-                Some(SizeCode::Byte) => 1,
-                Some(SizeCode::Long) => 4,
-                None | Some(SizeCode::Word) => 2,
-                _ => 2,
-            };
-            skip_spaces(line, pos);
-            // .dcb count, fill_val
-            if let Ok(count_rpn) = parse_expr(line, pos) {
-                let count = p1.eval_const(&count_rpn).map(|v| v.value as u32).unwrap_or(0);
-                skip_spaces(line, pos);
-                let fill = if *pos < line.len() && line[*pos] == b',' {
-                    *pos += 1;
-                    skip_spaces(line, pos);
-                    let mut fill_bytes = vec![0u8; item_size as usize];
-                    if let Ok(rpn) = parse_expr(line, pos) {
-                        if let Some(v) = p1.eval_const(&rpn) {
-                            match item_size {
-                                1 => fill_bytes[0] = v.value as u8,
-                                2 => {
-                                    let w = v.value as u16;
-                                    fill_bytes[0] = (w >> 8) as u8;
-                                    fill_bytes[1] = w as u8;
-                                }
-                                4 => {
-                                    let l = v.value as u32;
-                                    fill_bytes[0] = (l >> 24) as u8;
-                                    fill_bytes[1] = (l >> 16) as u8;
-                                    fill_bytes[2] = (l >> 8) as u8;
-                                    fill_bytes[3] = l as u8;
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                    fill_bytes
-                } else {
-                    vec![0u8; item_size as usize]
-                };
-                // 繰り返しバイト列
-                let mut all = Vec::with_capacity((count * item_size) as usize);
-                for _ in 0..count { all.extend_from_slice(&fill); }
-                let len = all.len() as u32;
-                p1.advance(len);
-                records.push(TempRecord::Const(all));
-            }
+        // ---- .dc/.ds/.dcb ----
+        InsnHandler::Dc | InsnHandler::Ds | InsnHandler::Dcb => {
+            // delegate to pseudo/data module
+            pseudo::data::handle_data(handler, size, line, pos, p1, records, source);
         }
 
         // ---- .equ / .set ----
@@ -2027,146 +1853,13 @@ fn handle_pseudo(
 
         // ---- .xref ----
         InsnHandler::Xref => {
-            skip_spaces(line, pos);
-            while *pos < line.len() && line[*pos] != b';' {
-                let name = read_ident(line, pos);
-                if name.is_empty() { break; }
-                records.push(TempRecord::XRef { name: name.clone() });
-                // 未定義シンボルとして登録
-                if p1.sym.lookup_sym(&name).is_none() {
-                    let sym = Symbol::Value {
-                        attrib:     DefAttrib::Undef,
-                        ext_attrib: ExtAttrib::XRef,
-                        section:    0xFF,
-                        org_num:    0,
-                        first:      FirstDef::Other,
-                        opt_count:  0,
-                        value:      0,
-                    };
-                    p1.sym.define(name, sym);
-                }
-                skip_spaces(line, pos);
-                if *pos < line.len() && line[*pos] == b',' {
-                    *pos += 1;
-                    skip_spaces(line, pos);
-                } else { break; }
-            }
+            pseudo::misc::handle_misc(handler, &label, line, pos, p1, records);
         }
 
-        // ---- .globl ----
-        InsnHandler::Globl => {
-            skip_spaces(line, pos);
-            while *pos < line.len() && line[*pos] != b';' {
-                let name = read_ident(line, pos);
-                if name.is_empty() { break; }
-                records.push(TempRecord::Globl { name: name.clone() });
-                skip_spaces(line, pos);
-                if *pos < line.len() && line[*pos] == b',' {
-                    *pos += 1;
-                    skip_spaces(line, pos);
-                } else { break; }
-            }
-        }
-
-        // ---- .org ----
-        InsnHandler::Offset => {
-            // .offset は SECT_ABS（仮想オフセットセクション）に切り替える
-            // 実セクションのカウンタは変更せず、仮想オフセットカウンタのみを設定する
-            skip_spaces(line, pos);
-            let val = if *pos < line.len() {
-                if let Ok(rpn) = parse_expr(line, pos) {
-                    p1.eval_const(&rpn).map(|v| v.value as u32).unwrap_or(0)
-                } else { 0 }
-            } else { 0 };
-            p1.ctx.offsym_with_symbol = false;
-            p1.ctx.set_offset_mode(val);
-        }
-
-        // ---- .if / .ifdef / .ifndef ----
-        InsnHandler::If => {
-            p1.if_nest += 1;
-            let idx = p1.if_nest as usize;
-            pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
-            skip_spaces(line, pos);
-            let cond = if let Ok(rpn) = parse_expr(line, pos) {
-                p1.eval_const(&rpn).map(|v| v.value != 0).unwrap_or(false)
-            } else { false };
-            if cond {
-                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
-            } else {
-                p1.is_skip = true;
-                p1.skip_nest = p1.if_nest;
-            }
-        }
-        InsnHandler::Iff => {
-            p1.if_nest += 1;
-            let idx = p1.if_nest as usize;
-            pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
-            skip_spaces(line, pos);
-            let cond = if let Ok(rpn) = parse_expr(line, pos) {
-                p1.eval_const(&rpn).map(|v| v.value != 0).unwrap_or(false)
-            } else { false };
-            // Iff: condition is ZERO → execute
-            if !cond {
-                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
-            } else {
-                p1.is_skip = true;
-                p1.skip_nest = p1.if_nest;
-            }
-        }
-        InsnHandler::Ifdef => {
-            p1.if_nest += 1;
-            let idx = p1.if_nest as usize;
-            pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
-            skip_spaces(line, pos);
-            let name = read_ident(line, pos);
-            let defined = !name.is_empty() && p1.sym.lookup_sym(&name).is_some();
-            if defined {
-                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
-            } else {
-                p1.is_skip = true;
-                p1.skip_nest = p1.if_nest;
-            }
-        }
-        InsnHandler::Ifndef => {
-            p1.if_nest += 1;
-            let idx = p1.if_nest as usize;
-            pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
-            skip_spaces(line, pos);
-            let name = read_ident(line, pos);
-            let defined = !name.is_empty() && p1.sym.lookup_sym(&name).is_some();
-            if !defined {
-                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
-            } else {
-                p1.is_skip = true;
-                p1.skip_nest = p1.if_nest;
-            }
-        }
-        InsnHandler::Else => {
-            if p1.if_nest > 0 {
-                // .else の対応する .if ブロックを完了 → already_matched を true に
-                let idx = p1.if_nest as usize;
-                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
-                p1.is_skip = true;
-                p1.skip_nest = p1.if_nest;
-            }
-        }
-        InsnHandler::Elseif => {
-            // .elseif = .else + .if
-            // 既に実行中のブロックは完了 → already_matched を true に
-            if p1.if_nest > 0 {
-                let idx = p1.if_nest as usize;
-                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, true);
-                p1.is_skip = true;
-                p1.skip_nest = p1.if_nest;
-            }
-        }
-        InsnHandler::Endif => {
-            if p1.if_nest > 0 {
-                let idx = p1.if_nest as usize;
-                pseudo::conditional::set_if_matched(&mut p1.if_matched, idx, false);
-                p1.if_nest -= 1;
-            }
+        // ---- .if / .ifdef / .ifndef / .else / .elseif / .endif ----
+        InsnHandler::If | InsnHandler::Iff | InsnHandler::Ifdef | InsnHandler::Ifndef
+        | InsnHandler::Else | InsnHandler::Elseif | InsnHandler::Endif => {
+            pseudo::conditional::handle_conditional(handler, line, pos, p1);
         }
 
         // ---- .include ----
@@ -2194,59 +1887,11 @@ fn handle_pseudo(
         }
 
         // ---- .cpu / CPU 指定 ----
-        InsnHandler::Cpu => {
-            skip_spaces(line, pos);
-            if let Ok(rpn) = parse_expr(line, pos) {
-                if let Some(v) = p1.eval_const(&rpn) {
-                    let num = v.value as u32;
-                    if let Some((cnum, ctype)) = crate::options::cpu_number_to_type(num) {
-                        p1.ctx.set_cpu(cnum, ctype);
-                        records.push(TempRecord::Cpu { number: cnum, cpu_type: ctype });
-                    } else {
-                        p1.error_code(ErrorCode::FeatureCpu, None);
-                    }
-                } else {
-                    p1.error_code(ErrorCode::Expr, None);
-                }
-            } else {
-                p1.error_code(ErrorCode::Expr, None);
-            }
-        }
-        InsnHandler::Cpu68000 => {
-            p1.ctx.set_cpu(68000, cpuconst::C000);
-            records.push(TempRecord::Cpu { number: 68000, cpu_type: cpuconst::C000 });
-        }
-        InsnHandler::Cpu68010 => {
-            p1.ctx.set_cpu(68010, cpuconst::C010);
-            records.push(TempRecord::Cpu { number: 68010, cpu_type: cpuconst::C010 });
-        }
-        InsnHandler::Cpu68020 => {
-            p1.ctx.set_cpu(68020, cpuconst::C020);
-            records.push(TempRecord::Cpu { number: 68020, cpu_type: cpuconst::C020 });
-        }
-        InsnHandler::Cpu68030 => {
-            p1.ctx.set_cpu(68030, cpuconst::C030);
-            records.push(TempRecord::Cpu { number: 68030, cpu_type: cpuconst::C030 });
-        }
-        InsnHandler::Cpu68040 => {
-            p1.ctx.set_cpu(68040, cpuconst::C040);
-            records.push(TempRecord::Cpu { number: 68040, cpu_type: cpuconst::C040 });
-        }
-        InsnHandler::Cpu68060 => {
-            p1.ctx.set_cpu(68060, cpuconst::C060);
-            records.push(TempRecord::Cpu { number: 68060, cpu_type: cpuconst::C060 });
-        }
-        InsnHandler::Cpu5200 => {
-            p1.ctx.set_cpu(5200, cpuconst::C520);
-            records.push(TempRecord::Cpu { number: 5200, cpu_type: cpuconst::C520 });
-        }
-        InsnHandler::Cpu5300 => {
-            p1.ctx.set_cpu(5300, cpuconst::C530);
-            records.push(TempRecord::Cpu { number: 5300, cpu_type: cpuconst::C530 });
-        }
-        InsnHandler::Cpu5400 => {
-            p1.ctx.set_cpu(5400, cpuconst::C540);
-            records.push(TempRecord::Cpu { number: 5400, cpu_type: cpuconst::C540 });
+        InsnHandler::Cpu
+        | InsnHandler::Cpu68000 | InsnHandler::Cpu68010 | InsnHandler::Cpu68020
+        | InsnHandler::Cpu68030 | InsnHandler::Cpu68040 | InsnHandler::Cpu68060
+        | InsnHandler::Cpu5200 | InsnHandler::Cpu5300 | InsnHandler::Cpu5400 => {
+            pseudo::misc::handle_misc(handler, &label, line, pos, p1, records);
         }
 
         // ---- リスト制御 ----
@@ -2304,84 +1949,14 @@ fn handle_pseudo(
 
         // ---- .fail ----
         InsnHandler::Fail => {
-            // .fail <式> — 式が非0（または式なし）のときアセンブルエラー
-            skip_spaces(line, pos);
-            let should_fail = if *pos < line.len() {
-                if let Ok(rpn) = parse_expr(line, pos) {
-                    p1.eval_const(&rpn).map(|v| v.value != 0).unwrap_or(true)
-                } else {
-                    true
-                }
-            } else {
-                true
-            };
-            if should_fail {
-                p1.error_code(ErrorCode::Forced, None);
-            }
+            pseudo::misc::handle_misc(handler, &label, line, pos, p1, records);
         }
 
-        // ---- .macro ----
-        InsnHandler::MacroDef => {
-            // マクロ名はラベルフィールドに書く
-            let mac_name = label.clone().unwrap_or_default();
-            if mac_name.is_empty() {
-                p1.error_code(ErrorCode::NoSymMacro, None);
-                return;
-            }
-            // 仮引数リストを解析
-            let params = parse_macro_params(line, pos);
-            // ボディを収集（.endm まで）
-            let (template, local_count) = collect_macro_body(source, p1.sym, p1.ctx, &params);
-            let sym = Symbol::Macro { params, local_count, template };
-            p1.sym.define_macro(mac_name, sym);
+        // ---- macro-style pseudos ----
+        InsnHandler::MacroDef | InsnHandler::Rept | InsnHandler::Irp | InsnHandler::Irpc => {
+            pseudo::macro_::handle_macro(handler, label.clone(), line, pos, source, p1, records);
         }
 
-        // ---- .rept ----
-        InsnHandler::Rept => {
-            let count = if let Ok(rpn) = parse_expr(line, pos) {
-                p1.eval_const(&rpn).map(|v| v.value as u32).unwrap_or(0)
-            } else { 0 };
-            let (body, _) = collect_macro_body(source, p1.sym, p1.ctx, &[]);
-            for _ in 0..count {
-                expand_macro_body(&body, &[], &[], p1.local_base, records, p1, source);
-                p1.local_base = p1.local_base.wrapping_add(1);
-            }
-        }
-
-        // ---- .irp ----
-        InsnHandler::Irp => {
-            // .irp param, arg1, arg2, ...
-            skip_spaces(line, pos);
-            let param_name = read_ident(line, pos);
-            skip_spaces(line, pos);
-            if *pos < line.len() && line[*pos] == b',' { *pos += 1; }
-            let args = parse_macro_args(line, pos);
-            let params = if param_name.is_empty() { vec![] } else { vec![param_name] };
-            let (body, _) = collect_macro_body(source, p1.sym, p1.ctx, &params);
-            for arg in &args {
-                expand_macro_body(&body, &params, std::slice::from_ref(arg), p1.local_base, records, p1, source);
-                p1.local_base = p1.local_base.wrapping_add(1);
-            }
-        }
-
-        // ---- .irpc ----
-        InsnHandler::Irpc => {
-            // .irpc param, string
-            skip_spaces(line, pos);
-            let param_name = read_ident(line, pos);
-            skip_spaces(line, pos);
-            if *pos < line.len() && line[*pos] == b',' { *pos += 1; }
-            skip_spaces(line, pos);
-            // 文字列（クォートあり/なし）
-            let s = parse_string_or_ident(line, pos);
-            let params = if param_name.is_empty() { vec![] } else { vec![param_name] };
-            let (body, _) = collect_macro_body(source, p1.sym, p1.ctx, &params);
-            for &ch in &s {
-                let arg = vec![ch];
-                expand_macro_body(&body, &params, std::slice::from_ref(&arg), p1.local_base, records, p1, source);
-                p1.local_base = p1.local_base.wrapping_add(1);
-            }
-        }
 
         // ---- .endm / .exitm / .local / .sizem（マクロ外では無視）----
         InsnHandler::EndM | InsnHandler::ExitM | InsnHandler::Local | InsnHandler::SizeM => {}
@@ -2390,320 +1965,7 @@ fn handle_pseudo(
         InsnHandler::FileScd | InsnHandler::Def | InsnHandler::Endef | InsnHandler::Val | InsnHandler::Scl
         | InsnHandler::TypeScd | InsnHandler::Tag | InsnHandler::Ln | InsnHandler::Line
         | InsnHandler::SizeScd | InsnHandler::Dim => {
-            // HAS互換:
-            // -g 指定時（MAKESYMDEB=true）は SCD 疑似命令を無視する。
-            if p1.ctx.opts.make_sym_deb {
-                return;
-            }
-            // HAS 互換: `.file` で SCD モード有効化されるまで、.file 以外は無視する。
-            if handler != InsnHandler::FileScd && !p1.ctx.scd_enabled {
-                return;
-            }
-            match handler {
-                InsnHandler::FileScd => {
-                    skip_spaces(line, pos);
-                    let name = parse_filename(line, pos);
-                    if name.is_empty() {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    p1.ctx.scd_enabled = true;
-                    p1.ctx.scd_file = name;
-                }
-                InsnHandler::Def => {
-                    skip_spaces(line, pos);
-                    let name = read_ident(line, pos);
-                    if name.is_empty() {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    let mut temp = crate::context::ScdTemp {
-                        name: name.iter().take(8).copied().collect(),
-                        size: p1.ctx.scd_ln as u32,
-                        ..Default::default()
-                    };
-                    p1.ctx.scd_ln = 0;
-                    if let Some(attr) = scd_special_attr(&temp.name) {
-                        temp.attrib = attr;
-                        temp.is_long = true;
-                    }
-                    p1.ctx.scd_temp = temp;
-                }
-                InsnHandler::Endef => {
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    // HAS互換: .endef 時に attrib を type/scl から補完する。
-                    let mut attrib = p1.ctx.scd_temp.attrib;
-                    let mut is_long = p1.ctx.scd_temp.is_long;
-                    if (attrib & 0x0F) == 0 {
-                        let t = p1.ctx.scd_temp.type_code & 0x0030;
-                        if t == 0x0020 {
-                            // 関数定義開始
-                            attrib = 0x21;
-                            is_long = true;
-                        } else {
-                            match p1.ctx.scd_temp.scl {
-                                // struct/union/enum タグ定義開始
-                                10 | 12 | 15 => {
-                                    attrib = 0x11;
-                                    is_long = true;
-                                }
-                                // extern 変数
-                                2 | 80 | 82 => attrib = 0x50,
-                                // static 変数/その他
-                                _ if attrib == 0 => attrib = 0x30,
-                                _ => {}
-                            }
-                        }
-                    }
-                    // HAS互換: `.scl -1`（attrib=0x2F）後の `.endef` は出力しない。
-                    if attrib != 0x2F {
-                        records.push(TempRecord::ScdEndef {
-                            name: p1.ctx.scd_temp.name.clone(),
-                            attrib,
-                            value: p1.ctx.scd_temp.value,
-                            section: p1.ctx.scd_temp.section,
-                            scl: p1.ctx.scd_temp.scl,
-                            type_code: p1.ctx.scd_temp.type_code,
-                            size: p1.ctx.scd_temp.size,
-                            dim: p1.ctx.scd_temp.dim,
-                            is_long,
-                        });
-                    }
-                    p1.ctx.scd_temp = crate::context::ScdTemp::default();
-                }
-                InsnHandler::Val => {
-                    skip_spaces(line, pos);
-                    if *pos >= line.len() || line[*pos] == b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    let rpn = if line[*pos] == b'.' {
-                        let mut p = *pos + 1;
-                        skip_spaces(line, &mut p);
-                        if p >= line.len() || line[p] == b';' {
-                            *pos = p;
-                            vec![RPNToken::Location, RPNToken::End]
-                        } else {
-                            match parse_expr(line, pos) {
-                                Ok(rpn) => rpn,
-                                Err(_) => {
-                                    p1.error_code(ErrorCode::Expr, None);
-                                    return;
-                                }
-                            }
-                        }
-                    } else {
-                        match parse_expr(line, pos) {
-                            Ok(rpn) => rpn,
-                            Err(_) => {
-                                p1.error_code(ErrorCode::Expr, None);
-                                return;
-                            }
-                        }
-                    };
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    if let Some(ev) = p1.eval_const(&rpn) {
-                        p1.ctx.scd_temp.value = ev.value as u32;
-                        p1.ctx.scd_temp.section = if ev.section == 0 { -1 } else { ev.section as i16 };
-                    } else {
-                        // 非定数でも未定義シンボルでなければ section/value は保持できる場合がある。
-                        // ここでは旧実装同様に未更新（必要なら Pass3 で ScdVal イベントを評価）。
-                    }
-                    records.push(TempRecord::ScdVal { rpn });
-                }
-                InsnHandler::Scl => {
-                    skip_spaces(line, pos);
-                    let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
-                        Some(v) if v.section == 0 => v.value,
-                        _ => {
-                            p1.error_code(ErrorCode::Expr, None);
-                            return;
-                        }
-                    };
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    if value == -1 {
-                        p1.ctx.scd_temp.attrib = 0x2F;
-                        records.push(TempRecord::ScdFuncEnd {
-                            location: p1.ctx.location(),
-                            section: p1.section_id(),
-                        });
-                    } else if (0..=255).contains(&value) {
-                        p1.ctx.scd_temp.scl = value as u8;
-                    } else {
-                        p1.error_code(ErrorCode::IlValue, None);
-                    }
-                }
-                InsnHandler::TypeScd => {
-                    skip_spaces(line, pos);
-                    let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
-                        Some(v) if v.section == 0 => v.value,
-                        _ => {
-                            p1.error_code(ErrorCode::Expr, None);
-                            return;
-                        }
-                    };
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    if !(0..=65535).contains(&value) {
-                        p1.error_code(ErrorCode::IlValue, None);
-                        return;
-                    }
-                    p1.ctx.scd_temp.type_code = value as u16;
-                    // HAS互換: ロングテーブル化は .type の 0x30 ビット群が
-                    // 0x20(関数) または 0x30(配列) の場合のみ行う。
-                    let kind = value & 0x0030;
-                    if kind == 0x0020 || kind == 0x0030 {
-                        p1.ctx.scd_temp.is_long = true;
-                    }
-                }
-                InsnHandler::Tag => {
-                    skip_spaces(line, pos);
-                    let tag_name = read_ident(line, pos);
-                    if tag_name.is_empty() {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    records.push(TempRecord::ScdTag { name: tag_name });
-                    p1.ctx.scd_temp.is_long = true;
-                }
-                InsnHandler::Ln => {
-                    skip_spaces(line, pos);
-                    let line_no = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
-                        Some(v) if v.section == 0 => v.value,
-                        _ => {
-                            p1.error_code(ErrorCode::Expr, None);
-                            return;
-                        }
-                    };
-                    let mut loc_rpn = vec![RPNToken::Location, RPNToken::End];
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] == b',' {
-                        *pos += 1;
-                        skip_spaces(line, pos);
-                        loc_rpn = match parse_expr(line, pos) {
-                            Ok(rpn) => rpn,
-                            Err(_) => {
-                                p1.error_code(ErrorCode::Expr, None);
-                                return;
-                            }
-                        };
-                        skip_spaces(line, pos);
-                    }
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    // HAS互換: .ln の行番号は move.w 相当で下位16bitを保持する。
-                    let line_u16 = line_no as u16;
-                    records.push(TempRecord::ScdLn { line: line_u16, loc: loc_rpn });
-                    p1.ctx.scd_ln = line_u16;
-                }
-                InsnHandler::Line => {
-                    skip_spaces(line, pos);
-                    let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
-                        Some(v) if v.section == 0 => v.value,
-                        _ => {
-                            p1.error_code(ErrorCode::Expr, None);
-                            return;
-                        }
-                    };
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    p1.ctx.scd_temp.is_long = true;
-                    // HAS互換: .line は move.w 相当で下位16bitのみ反映する。
-                    p1.ctx.scd_temp.size = (value as u16) as u32;
-                }
-                InsnHandler::SizeScd => {
-                    skip_spaces(line, pos);
-                    let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
-                        Some(v) if v.section == 0 => v.value,
-                        _ => {
-                            p1.error_code(ErrorCode::Expr, None);
-                            return;
-                        }
-                    };
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    if value != 0 {
-                        p1.ctx.scd_temp.is_long = true;
-                        p1.ctx.scd_temp.size = value as u32;
-                    }
-                }
-                InsnHandler::Dim => {
-                    skip_spaces(line, pos);
-                    let mut dims = [0u16; 4];
-                    let mut i = 0usize;
-                    if *pos >= line.len() || line[*pos] == b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    loop {
-                        if i >= 4 {
-                            p1.error_code(ErrorCode::IlOprTooMany, Some(b".dim"));
-                            return;
-                        }
-                        let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
-                            Some(v) if v.section == 0 => v.value,
-                            _ => {
-                                p1.error_code(ErrorCode::Expr, None);
-                                return;
-                            }
-                        };
-                        dims[i] = value as u16;
-                        i += 1;
-                        skip_spaces(line, pos);
-                        if *pos < line.len() && line[*pos] == b',' {
-                            *pos += 1;
-                            skip_spaces(line, pos);
-                            continue;
-                        }
-                        break;
-                    }
-                    if *pos < line.len() && line[*pos] != b';' {
-                        p1.error_code(ErrorCode::IlOpr, None);
-                        return;
-                    }
-                    p1.ctx.scd_temp.dim = dims;
-                    p1.ctx.scd_temp.is_long = true;
-                }
-                _ => {}
-            }
+            pseudo::debug::handle_scd(handler, line, pos, p1, records);
         }
 
         // ---- .reg ----
@@ -2767,68 +2029,7 @@ fn handle_pseudo(
 
         // ---- .comm / .rcomm / .rlcomm ----
         InsnHandler::Comm | InsnHandler::Rcomm | InsnHandler::Rlcomm => {
-            let ext = match handler {
-                InsnHandler::Comm => ExtAttrib::Comm,
-                InsnHandler::Rcomm => ExtAttrib::RComm,
-                InsnHandler::Rlcomm => ExtAttrib::RLComm,
-                _ => ExtAttrib::Comm,
-            };
-            skip_spaces(line, pos);
-            let name = read_ident(line, pos);
-            if name.is_empty() {
-                p1.error_code(ErrorCode::NoSymPseudo, Some(b".comm"));
-                return;
-            }
-            skip_spaces(line, pos);
-            if *pos >= line.len() || line[*pos] != b',' {
-                p1.error_code(ErrorCode::IlOpr, None);
-                return;
-            }
-            *pos += 1;
-            skip_spaces(line, pos);
-
-            let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
-                Some(v) if v.section == 0 && v.value > 0 => v.value,
-                _ => {
-                    p1.error_code(ErrorCode::IlValue, None);
-                    return;
-                }
-            };
-
-            skip_spaces(line, pos);
-            if *pos < line.len() && line[*pos] != b';' {
-                p1.error_code(ErrorCode::IlOpr, None);
-                return;
-            }
-
-            match p1.sym.lookup_sym_mut(&name) {
-                Some(Symbol::Value { attrib, ext_attrib, value: sym_value, .. }) => {
-                    if *attrib != DefAttrib::Undef {
-                        p1.error_code(ErrorCode::Redef, Some(&name));
-                        return;
-                    }
-                    *ext_attrib = ext;
-                    *sym_value = value;
-                }
-                Some(_) => {
-                    p1.error_code(ErrorCode::IlSymValue, None);
-                    return;
-                }
-                None => {
-                    let sym = Symbol::Value {
-                        attrib:     DefAttrib::Undef,
-                        ext_attrib: ext,
-                        section:    0,
-                        org_num:    0,
-                        first:      FirstDef::Other,
-                        opt_count:  0,
-                        value,
-                    };
-                    p1.sym.define(name.clone(), sym);
-                }
-            }
-
-            records.push(TempRecord::Comm { name, ext });
+            pseudo::misc::handle_misc(handler, &label, line, pos, p1, records);
         }
 
         // ---- .offsym ----
@@ -2941,225 +2142,6 @@ fn handle_pseudo(
     }
 }
 
-// ----------------------------------------------------------------
-// .dc 解析
-// ----------------------------------------------------------------
-
-fn parse_dc(
-    line:      &[u8],
-    pos:       &mut usize,
-    byte_size: u8,
-    records:   &mut Vec<TempRecord>,
-    p1:        &mut P1Ctx<'_>,
-) {
-    skip_spaces(line, pos);
-    loop {
-        if *pos >= line.len() || line[*pos] == b';' { break; }
-
-        // 単一引用符の文字列リテラル '...' がスタンドアロン（次が , ; EOL）の場合
-        // HAS 互換: .dc.b 'd0' → 全バイトを出力（文字列モード）
-        // .dc.w 'AB' → 2文字を1ワードにパック, .dc.l も同様
-        // 式の一部（'A'+1 等）は式として評価（スタンドアロンでない場合）
-        if line[*pos] == b'\'' {
-            // 文字列を抽出してスタンドアロンか確認
-            let saved_pos = *pos;
-            *pos += 1; // opening '
-            let mut s: Vec<u8> = Vec::new();
-            let mut valid = false;
-            while *pos < line.len() {
-                if line[*pos] == b'\'' {
-                    *pos += 1; // closing '
-                    // 次の文字がスタンドアロン境界か確認（スペース、,、;、EOL）
-                    let mut check = *pos;
-                    while check < line.len() && (line[check] == b' ' || line[check] == b'\t') {
-                        check += 1;
-                    }
-                    if check >= line.len() || line[check] == b',' || line[check] == b';' {
-                        valid = true;
-                    }
-                    break;
-                }
-                // Shift-JIS 2バイト文字の考慮
-                let b = line[*pos];
-                s.push(b);
-                *pos += 1;
-                let is_sjis = (0x81..=0x9F).contains(&b) || (0xE0..=0xFC).contains(&b);
-                if is_sjis && *pos < line.len() {
-                    s.push(line[*pos]);
-                    *pos += 1;
-                }
-            }
-            if valid && !s.is_empty() {
-                // スタンドアロン文字列として出力
-                match byte_size {
-                    1 => {
-                        // .dc.b: 全バイトをそのまま出力
-                        p1.advance(s.len() as u32);
-                        records.push(TempRecord::Const(s));
-                    }
-                    2 => {
-                        // .dc.w: 2文字ずつワードにパック（奇数バイトは上位ゼロ）
-                        let mut bytes = Vec::new();
-                        let mut i = 0;
-                        while i < s.len() {
-                            if i + 1 < s.len() {
-                                bytes.push(s[i]);
-                                bytes.push(s[i+1]);
-                                i += 2;
-                            } else {
-                                bytes.push(0);
-                                bytes.push(s[i]);
-                                i += 1;
-                            }
-                        }
-                        p1.advance(bytes.len() as u32);
-                        records.push(TempRecord::Const(bytes));
-                    }
-                    4 => {
-                        // .dc.l: 4文字ずつロングにパック
-                        let mut bytes = Vec::new();
-                        let mut i = 0;
-                        while i < s.len() {
-                            let remaining = s.len() - i;
-                            let pad = 4usize.saturating_sub(remaining);
-                            bytes.extend(std::iter::repeat_n(0u8, pad));
-                            let take = remaining.min(4);
-                            bytes.extend_from_slice(&s[i..i+take]);
-                            i += take;
-                        }
-                        p1.advance(bytes.len() as u32);
-                        records.push(TempRecord::Const(bytes));
-                    }
-                    _ => {}
-                }
-                // カンマ区切りへ続く
-                skip_spaces(line, pos);
-                if *pos < line.len() && line[*pos] == b',' {
-                    *pos += 1;
-                    skip_spaces(line, pos);
-                } else {
-                    break;
-                }
-                continue;
-            } else {
-                // スタンドアロンでない → posをリセットして式として評価
-                *pos = saved_pos;
-            }
-        }
-
-        // 文字列リテラル "..." → バイト列として埋め込む
-        if line[*pos] == b'"' {
-            *pos += 1;
-            let mut s = Vec::new();
-            while *pos < line.len() && line[*pos] != b'"' {
-                s.push(line[*pos]);
-                *pos += 1;
-            }
-            if *pos < line.len() { *pos += 1; } // closing "
-            // byte_size == 1 なら各バイト, word → 2バイト並び
-            match byte_size {
-                1 => {
-                    p1.advance(s.len() as u32);
-                    records.push(TempRecord::Const(s));
-                }
-                2 => {
-                    // 各文字を 2 バイトワード（上位ゼロ）で埋め込む
-                    let mut bytes = Vec::with_capacity(s.len() * 2);
-                    for b in &s { bytes.push(0); bytes.push(*b); }
-                    p1.advance(bytes.len() as u32);
-                    records.push(TempRecord::Const(bytes));
-                }
-                4 => {
-                    let mut bytes = Vec::with_capacity(s.len() * 4);
-                    for b in &s { bytes.push(0); bytes.push(0); bytes.push(0); bytes.push(*b); }
-                    p1.advance(bytes.len() as u32);
-                    records.push(TempRecord::Const(bytes));
-                }
-                _ => {}
-            }
-        } else {
-            // 式
-            match parse_expr(line, pos) {
-                Ok(rpn) => {
-                    // .reg シンボル（RegSym）の展開チェック
-                    // 例: .dc.b CRLF,0 → CRLF が {CR, LF} の RegSym なら各要素を個別に展開
-                    let regsym_elems: Option<Vec<Rpn>> = {
-                        if let [RPNToken::SymbolRef(sym_name), RPNToken::End] = rpn.as_slice() {
-                            match p1.sym.lookup_sym(sym_name) {
-                                Some(Symbol::RegSym { define }) => Some(define.clone()),
-                                _ => None,
-                            }
-                        } else { None }
-                    };
-                    if let Some(elem_rpns) = regsym_elems {
-                        for elem_rpn in &elem_rpns {
-                            if is_literal_only_rpn(elem_rpn) {
-                                if let Some(v) = p1.eval_const(elem_rpn) {
-                                    let bytes = val_to_bytes(v.value, byte_size);
-                                    p1.advance(bytes.len() as u32);
-                                    records.push(TempRecord::Const(bytes));
-                                    continue;
-                                }
-                            }
-                            {
-                                p1.advance(byte_size as u32);
-                                records.push(TempRecord::Data { size: byte_size, rpn: elem_rpn.clone() });
-                            }
-                        }
-                    } else if is_literal_only_rpn(&rpn) {
-                        if let Some(v) = p1.eval_const(&rpn) {
-                            // リテラルのみの式は Pass1 で確定
-                            let bytes = val_to_bytes(v.value, byte_size);
-                            p1.advance(bytes.len() as u32);
-                            records.push(TempRecord::Const(bytes));
-                        } else {
-                            p1.advance(byte_size as u32);
-                            records.push(TempRecord::Data { size: byte_size, rpn });
-                        }
-                    } else {
-                        // シンボル/ロケーション依存式は Pass3 で最終評価する
-                        p1.advance(byte_size as u32);
-                        records.push(TempRecord::Data { size: byte_size, rpn });
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-
-        // カンマ区切り
-        skip_spaces(line, pos);
-        if *pos < line.len() && line[*pos] == b',' {
-            *pos += 1;
-            skip_spaces(line, pos);
-        } else {
-            break;
-        }
-    }
-}
-
-fn val_to_bytes(v: i32, size: u8) -> Vec<u8> {
-    match size {
-        1 => vec![v as u8],
-        2 => { let w = v as u16; vec![(w >> 8) as u8, w as u8] }
-        4 => {
-            let l = v as u32;
-            vec![(l>>24) as u8, (l>>16) as u8, (l>>8) as u8, l as u8]
-        }
-        _ => vec![],
-    }
-}
-
-fn is_literal_only_rpn(rpn: &Rpn) -> bool {
-    rpn.iter().all(|tok| matches!(
-        tok,
-        RPNToken::ValueByte(_)
-        | RPNToken::ValueWord(_)
-        | RPNToken::Value(_)
-        | RPNToken::Op(_)
-        | RPNToken::End
-    ))
-}
-
 fn is_dynamic_equ_expr(rpn: &Rpn, sym: &SymbolTable) -> bool {
     for tok in rpn {
         match tok {
@@ -3185,7 +2167,7 @@ fn is_dynamic_equ_expr(rpn: &Rpn, sym: &SymbolTable) -> bool {
 // ----------------------------------------------------------------
 
 /// .align n の n 値 (2^n バイト境界 → n) を解析
-fn parse_align_n(line: &[u8], pos: &mut usize, p1: &mut P1Ctx<'_>) -> Option<u8> {
+pub(crate) fn parse_align_n(line: &[u8], pos: &mut usize, p1: &mut P1Ctx<'_>) -> Option<u8> {
     if let Ok(rpn) = parse_expr(line, pos) {
         if let Some(v) = p1.eval_const(&rpn) {
             let align = v.value as u32;
@@ -3201,7 +2183,7 @@ fn parse_align_n(line: &[u8], pos: &mut usize, p1: &mut P1Ctx<'_>) -> Option<u8>
     None
 }
 
-fn parse_align_pad(line: &[u8], pos: &mut usize, p1: &mut P1Ctx<'_>) -> Option<u16> {
+pub(crate) fn parse_align_pad(line: &[u8], pos: &mut usize, p1: &mut P1Ctx<'_>) -> Option<u16> {
     skip_spaces(line, pos);
     if *pos < line.len() && line[*pos] == b',' {
         *pos += 1;
@@ -3215,28 +2197,13 @@ fn parse_align_pad(line: &[u8], pos: &mut usize, p1: &mut P1Ctx<'_>) -> Option<u
     None
 }
 
-fn scd_special_attr(name: &[u8]) -> Option<u8> {
-    if name.eq_ignore_ascii_case(b".eos") {
-        Some(0x1F)
-    } else if name.eq_ignore_ascii_case(b".bb") {
-        Some(0x2B)
-    } else if name.eq_ignore_ascii_case(b".eb") {
-        Some(0x2C)
-    } else if name.eq_ignore_ascii_case(b".bf") {
-        Some(0x2D)
-    } else if name.eq_ignore_ascii_case(b".ef") {
-        Some(0x2E)
-    } else {
-        None
-    }
-}
 
 // ----------------------------------------------------------------
 // ユーティリティ
 // ----------------------------------------------------------------
 
 /// 識別子を読む
-fn read_ident(line: &[u8], pos: &mut usize) -> Vec<u8> {
+pub(crate) fn read_ident(line: &[u8], pos: &mut usize) -> Vec<u8> {
     let start = *pos;
     while *pos < line.len() {
         let b = line[*pos];
@@ -3250,7 +2217,7 @@ fn read_ident(line: &[u8], pos: &mut usize) -> Vec<u8> {
 }
 
 /// 文字列リテラル（"..." または 'bare'）またはそのまま識別子を読む
-fn parse_string_or_ident(line: &[u8], pos: &mut usize) -> Vec<u8> {
+pub(crate) fn parse_string_or_ident(line: &[u8], pos: &mut usize) -> Vec<u8> {
     if *pos >= line.len() { return Vec::new(); }
     if line[*pos] == b'"' || line[*pos] == b'\'' {
         let quote = line[*pos];
@@ -3267,7 +2234,7 @@ fn parse_string_or_ident(line: &[u8], pos: &mut usize) -> Vec<u8> {
 
 /// ファイル名を読む（引用符付きまたは空白/セミコロン区切りのパス）
 /// `/tmp/foo.s` のような絶対パスや相対パスをサポートする
-fn parse_filename(line: &[u8], pos: &mut usize) -> Vec<u8> {
+pub(crate) fn parse_filename(line: &[u8], pos: &mut usize) -> Vec<u8> {
     if *pos >= line.len() { return Vec::new(); }
     if line[*pos] == b'"' || line[*pos] == b'\'' {
         let quote = line[*pos];
@@ -3322,7 +2289,7 @@ fn parse_prn_text(line: &[u8], pos: &mut usize) -> Vec<u8> {
 // ----------------------------------------------------------------
 
 /// .macro の仮引数リストを解析する（カンマ区切り識別子）
-fn parse_macro_params(line: &[u8], pos: &mut usize) -> Vec<Vec<u8>> {
+pub(crate) fn parse_macro_params(line: &[u8], pos: &mut usize) -> Vec<Vec<u8>> {
     let mut params = Vec::new();
     skip_spaces(line, pos);
     while *pos < line.len() && line[*pos] != b';' && line[*pos] != b'*' {
@@ -3341,7 +2308,7 @@ fn parse_macro_params(line: &[u8], pos: &mut usize) -> Vec<Vec<u8>> {
 }
 
 /// マクロ実引数リストを解析する（カンマ区切り、< > や ' ' で囲まれた引数をサポート）
-fn parse_macro_args(line: &[u8], pos: &mut usize) -> Vec<Vec<u8>> {
+pub(crate) fn parse_macro_args(line: &[u8], pos: &mut usize) -> Vec<Vec<u8>> {
     let mut args = Vec::new();
     skip_spaces(line, pos);
     while *pos < line.len() && line[*pos] != b';' && line[*pos] != b'*' {
@@ -3400,7 +2367,7 @@ fn parse_one_macro_arg(line: &[u8], pos: &mut usize) -> Vec<u8> {
 ///
 /// ネストした .macro/.rept/.irp/.irpc も処理する。
 /// 返値: (template バイト列, ローカルラベル数)
-fn collect_macro_body(
+pub(crate) fn collect_macro_body(
     source: &mut SourceStack,
     sym:    &SymbolTable,
     ctx:    &mut AssemblyContext,
@@ -3597,7 +2564,7 @@ fn convert_line_params(
 ///
 /// テンプレート内の .rept/.irp/.irpc は、ファイルソースではなく
 /// テンプレートの残り部分からボディを収集することで正しく処理する。
-fn expand_macro_body(
+pub(crate) fn expand_macro_body(
     template: &[u8],
     params:   &[Vec<u8>],
     args:     &[Vec<u8>],
@@ -3643,8 +2610,8 @@ fn expand_macro_body(
                         p1.eval_const(&rpn).map(|v| v.value as u32).unwrap_or(0)
                     } else { 0 };
                     for _ in 0..count {
-                        expand_macro_body(&body, &[], &[], p1.local_base, records, p1, source);
-                        p1.local_base = p1.local_base.wrapping_add(1);
+                        let lb = p1.next_local_base();
+                        expand_macro_body(&body, &[], &[], lb, records, p1, source);
                     }
                 }
                 continue;
@@ -3668,9 +2635,9 @@ fn expand_macro_body(
 
                 if !p1.is_skip {
                     for irp_arg in &irp_args {
+                        let lb = p1.next_local_base();
                         expand_macro_body(&body, &irp_params,
-                            std::slice::from_ref(irp_arg), p1.local_base, records, p1, source);
-                        p1.local_base = p1.local_base.wrapping_add(1);
+                            std::slice::from_ref(irp_arg), lb, records, p1, source);
                     }
                 }
                 continue;
@@ -3695,9 +2662,9 @@ fn expand_macro_body(
                 if !p1.is_skip {
                     for &ch in &s {
                         let arg = vec![ch];
+                        let lb = p1.next_local_base();
                         expand_macro_body(&body, &irpc_params,
-                            std::slice::from_ref(&arg), p1.local_base, records, p1, source);
-                        p1.local_base = p1.local_base.wrapping_add(1);
+                            std::slice::from_ref(&arg), lb, records, p1, source);
                     }
                 }
                 continue;
