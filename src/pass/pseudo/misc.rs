@@ -78,7 +78,8 @@ pub fn is_visibility_directive(name: &[u8]) -> bool {
 // bring in utilities needed by handler
 use crate::expr::parse_expr;
 use crate::error::ErrorCode;
-use crate::symbol::{Symbol, SymbolTable};
+use crate::options::cpu as cpuconst;
+use crate::symbol::Symbol;
 use crate::symbol::types::{DefAttrib, ExtAttrib, FirstDef, InsnHandler};
 use super::super::temp::TempRecord;
 use crate::pass::pass1::{skip_spaces, read_ident, parse_align_n, parse_align_pad};
@@ -310,7 +311,7 @@ pub fn handle_misc(
             skip_spaces(line, pos);
 
             let value = match parse_expr(line, pos).ok().and_then(|rpn| p1.eval_const(&rpn)) {
-                Some(v) => v.value as u32,
+                Some(v) => v.value,
                 None => {
                     p1.error_code(ErrorCode::Expr, None);
                     0
@@ -326,7 +327,7 @@ pub fn handle_misc(
                 value,
             };
             p1.sym.define(name.clone(), sym);
-            records.push(TempRecord::Comm { name, size: value });
+            records.push(TempRecord::Comm { name, ext });
         }
         _ => {}
     }

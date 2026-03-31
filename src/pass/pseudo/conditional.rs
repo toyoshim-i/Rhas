@@ -4,9 +4,8 @@
 //! Complex control flow for assembler-time conditional compilation.
 
 use crate::expr::parse_expr;
-use crate::error::ErrorCode;
-use crate::symbol::{Symbol, SymbolTable};
-use crate::symbol::types::{InsnHandler, DefAttrib, ExtAttrib, FirstDef};
+use crate::symbol::SymbolTable;
+use crate::symbol::types::InsnHandler;
 
 /// Helper to read identifier from line starting at pos
 pub fn read_ident(line: &[u8], pos: &mut usize) -> Vec<u8> {
@@ -31,7 +30,7 @@ pub fn skip_spaces(line: &[u8], pos: &mut usize) {
 /// Returns (success, value) where value is true if condition matches
 pub fn evaluate_condition_expr(line: &[u8], pos: &mut usize) -> (bool, bool) {
     skip_spaces(line, pos);
-    if let Ok(rpn) = parse_expr(line, pos) {
+    if parse_expr(line, pos).is_ok() {
         // Note: eval_const needs P1Ctx context - this returns (can_evaluate, parsed_ok)
         (true, true)  // Placeholder: actual eval deferred to caller
     } else {
@@ -94,6 +93,10 @@ pub fn handle_skip(
         }
         Some(InsnHandler::Endif) => {
             if p1.if_nest > 0 {
+                if p1.skip_nest == p1.if_nest {
+                    p1.is_skip = false;
+                    p1.skip_nest = 0;
+                }
                 let idx = p1.if_nest as usize;
                 set_if_matched(&mut p1.if_matched, idx, false);
                 p1.if_nest -= 1;

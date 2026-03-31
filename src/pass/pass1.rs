@@ -4,8 +4,8 @@
 //! ソーステキストをスキャンし、シンボルを定義しながら TempRecord 列を構築する。
 
 use crate::addressing::{parse_ea, parse_reg_list_mask, EffectiveAddress};
-use crate::context::{AssemblyContext, Section};
-use crate::error::{print_error, print_warning, ErrorCode, SourcePos, warn, ErrorContext, WarnContext};
+use crate::context::AssemblyContext;
+use crate::error::{ErrorCode, SourcePos, warn, ErrorContext, WarnContext};
 use crate::expr::{eval_rpn, parse_expr, Rpn};
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;
@@ -90,13 +90,10 @@ impl<'a> P1Ctx<'a> {
         }
     }
 
-    fn section_id(&self) -> u8 {
+    pub(crate) fn section_id(&self) -> u8 {
         if self.ctx.is_offset_mode { 0 } else { self.ctx.section as u8 }
     }
     pub(crate) fn is_offset_mode(&self) -> bool { self.ctx.is_offset_mode }
-
-    /// Return current local label base without modifying it.
-    pub(crate) fn local_base(&self) -> u32 { self.local_base }
 
     /// Consume and increment the local base, returning the previous value.
     pub(crate) fn next_local_base(&mut self) -> u32 {
@@ -104,15 +101,11 @@ impl<'a> P1Ctx<'a> {
         self.local_base = self.local_base.wrapping_add(1);
         v
     }
-    fn cpu_type(&self)   -> u16 { self.ctx.cpu_type }
-    fn location(&self)   -> u32 { self.ctx.location() }
+    pub(crate) fn cpu_type(&self)   -> u16 { self.ctx.cpu_type }
+    pub(crate) fn location(&self)   -> u32 { self.ctx.location() }
 
     pub(crate) fn advance(&mut self, n: u32) {
         self.ctx.advance_location(n);
-    }
-
-    fn set_section(&mut self, sec: Section) {
-        self.ctx.set_section(sec);
     }
 
     /// シンボル定義（ロケーションラベル）

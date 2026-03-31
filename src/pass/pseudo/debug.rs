@@ -41,6 +41,7 @@ pub fn handle_scd(
 ) {
     use crate::expr::parse_expr;
     use crate::error::ErrorCode;
+    use crate::expr::rpn::RPNToken;
     use crate::pass::pass1::{skip_spaces, read_ident, parse_filename};
 
     // HAS互換:
@@ -75,7 +76,11 @@ pub fn handle_scd(
                 p1.error_code(ErrorCode::IlOpr, None);
                 return;
             }
-            p1.ctx.scd_sym = name;
+            p1.ctx.scd_temp = crate::context::ScdTemp::default();
+            p1.ctx.scd_temp.name = name.clone();
+            if let Some(attr) = scd_special_attr(&name) {
+                p1.ctx.scd_temp.attrib = attr;
+            }
             skip_spaces(line, pos);
             if *pos < line.len() && line[*pos] != b';' {
                 p1.error_code(ErrorCode::IlOpr, None);
@@ -83,7 +88,19 @@ pub fn handle_scd(
             }
         }
         crate::symbol::types::InsnHandler::Endef => {
-            p1.ctx.scd_sym = Vec::new();
+            let t = p1.ctx.scd_temp.clone();
+            records.push(crate::pass::temp::TempRecord::ScdEndef {
+                name: t.name,
+                attrib: t.attrib,
+                value: t.value,
+                section: t.section,
+                scl: t.scl,
+                type_code: t.type_code,
+                size: t.size,
+                dim: t.dim,
+                is_long: t.is_long,
+            });
+            p1.ctx.scd_temp = crate::context::ScdTemp::default();
             skip_spaces(line, pos);
             if *pos < line.len() && line[*pos] != b';' {
                 p1.error_code(ErrorCode::IlOpr, None);
@@ -92,31 +109,42 @@ pub fn handle_scd(
         }
         crate::symbol::types::InsnHandler::Val => {
             skip_spaces(line, pos);
-            // <value> <operationspec>
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
-                    skip_spaces(line, pos);
-                    if *pos < line.len() && line[*pos] != b';' {
-                        let op = read_ident(line, pos);
-                        // TODO: op が指定されていない場合は .val の挙動どうなるのか
-                        records.push(crate::pass::temp::TempRecord::ScdVal { value: v.value as u32, op });
-                    }
+                    p1.ctx.scd_temp.value = v.value as u32;
+                    p1.ctx.scd_temp.section = if v.section == 0 { -1 } else { v.section as i16 };
                 }
+                records.push(crate::pass::temp::TempRecord::ScdVal { rpn });
+            } else {
+                p1.error_code(ErrorCode::Expr, None);
             }
         }
         crate::symbol::types::InsnHandler::Scl => {
             skip_spaces(line, pos);
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
-                    records.push(crate::pass::temp::TempRecord::ScdScl { choice: v.value as u32 });
+                    let scl = v.value as i32;
+                    if scl == -1 {
+                        p1.ctx.scd_temp.scl = 0xFF;
+                        records.push(crate::pass::temp::TempRecord::ScdFuncEnd {
+                            location: p1.location(),
+                            section: p1.section_id(),
+                        });
+                    } else if (0..=255).contains(&scl) {
+                        p1.ctx.scd_temp.scl = scl as u8;
+                    } else {
+                        p1.error_code(ErrorCode::IlValue, None);
+                    }
                 }
+            } else {
+                p1.error_code(ErrorCode::Expr, None);
             }
         }
         crate::symbol::types::InsnHandler::TypeScd => {
             skip_spaces(line, pos);
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
-                    records.push(crate::pass::temp::TempRecord::ScdType { rec_type: v.value as u8 });
+                    p1.ctx.scd_temp.type_code = v.value as u16;
                 }
             }
         }
@@ -124,14 +152,23 @@ pub fn handle_scd(
             skip_spaces(line, pos);
             let tag = read_ident(line, pos);
             if !tag.is_empty() {
-                records.push(crate::pass::temp::TempRecord::ScdTag { tag });
+                records.push(crate::pass::temp::TempRecord::ScdTag { name: tag });
             }
         }
         crate::symbol::types::InsnHandler::Ln => {
             skip_spaces(line, pos);
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
-                    records.push(crate::pass::temp::TempRecord::ScdLn { line: v.value as u32 });
+                    let line_no = v.value as u16;
+                    skip_spaces(line, pos);
+                    let loc = if *pos < line.len() && line[*pos] == b',' {
+                        *pos += 1;
+                        skip_spaces(line, pos);
+                        parse_expr(line, pos).unwrap_or_else(|_| vec![RPNToken::Location, RPNToken::End])
+                    } else {
+                        vec![RPNToken::Location, RPNToken::End]
+                    };
+                    records.push(crate::pass::temp::TempRecord::ScdLn { line: line_no, loc });
                 }
             }
         }
@@ -139,7 +176,11 @@ pub fn handle_scd(
             skip_spaces(line, pos);
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
-                    records.push(crate::pass::temp::TempRecord::ScdLine { line: v.value as u32 });
+                    let line_no = v.value as u16;
+                    records.push(crate::pass::temp::TempRecord::ScdLn {
+                        line: line_no,
+                        loc: vec![RPNToken::Location, RPNToken::End],
+                    });
                 }
             }
         }
@@ -147,16 +188,27 @@ pub fn handle_scd(
             skip_spaces(line, pos);
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
-                    records.push(crate::pass::temp::TempRecord::ScdSize { size: v.value as u32 });
+                    p1.ctx.scd_temp.size = v.value as u32;
                 }
             }
         }
         crate::symbol::types::InsnHandler::Dim => {
             skip_spaces(line, pos);
-            if let Ok(rpn) = parse_expr(line, pos) {
-                if let Some(v) = p1.eval_const(&rpn) {
-                    records.push(crate::pass::temp::TempRecord::ScdDim { dim: v.value as u32 });
+            let mut dim_idx = 0usize;
+            while *pos < line.len() && dim_idx < 4 {
+                if let Ok(rpn) = parse_expr(line, pos) {
+                    if let Some(v) = p1.eval_const(&rpn) {
+                        p1.ctx.scd_temp.dim[dim_idx] = v.value as u16;
+                    }
+                    dim_idx += 1;
+                    skip_spaces(line, pos);
+                    if *pos < line.len() && line[*pos] == b',' {
+                        *pos += 1;
+                        skip_spaces(line, pos);
+                        continue;
+                    }
                 }
+                break;
             }
         }
         _ => {}
