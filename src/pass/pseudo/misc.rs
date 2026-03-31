@@ -317,6 +317,10 @@ pub fn handle_misc(
                     0
                 }
             };
+            if value <= 0 {
+                p1.error_code(ErrorCode::IlValue, None);
+                return;
+            }
             let sym = Symbol::Value {
                 attrib: DefAttrib::Define,
                 ext_attrib: ext,

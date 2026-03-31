@@ -80,6 +80,7 @@ pub fn handle_scd(
             p1.ctx.scd_temp.name = name.clone();
             if let Some(attr) = scd_special_attr(&name) {
                 p1.ctx.scd_temp.attrib = attr;
+                p1.ctx.scd_temp.is_long = true;
             }
             skip_spaces(line, pos);
             if *pos < line.len() && line[*pos] != b';' {
@@ -88,18 +89,40 @@ pub fn handle_scd(
             }
         }
         crate::symbol::types::InsnHandler::Endef => {
-            let t = p1.ctx.scd_temp.clone();
-            records.push(crate::pass::temp::TempRecord::ScdEndef {
-                name: t.name,
-                attrib: t.attrib,
-                value: t.value,
-                section: t.section,
-                scl: t.scl,
-                type_code: t.type_code,
-                size: t.size,
-                dim: t.dim,
-                is_long: t.is_long,
-            });
+            let mut t = p1.ctx.scd_temp.clone();
+            // HAS互換: `.scl -1` の後の `.endef` は出力しない。
+            if t.attrib != 0x2F {
+                // HAS互換: 属性未設定(下位4bit=0)なら .type/.scl から自動決定する。
+                if (t.attrib & 0x0F) == 0 {
+                    let ty = t.type_code & 0x0030;
+                    if ty == 0x0020 {
+                        // function begin
+                        t.attrib = 0x21;
+                        t.is_long = true;
+                    } else if matches!(t.scl, 10 | 12 | 15) {
+                        // struct/union/enum tag
+                        t.attrib = 0x11;
+                        t.is_long = true;
+                    } else if matches!(t.scl, 2 | 80 | 82) {
+                        // extern symbol
+                        t.attrib = 0x50;
+                    } else if t.attrib == 0 {
+                        t.attrib = 0x30;
+                    }
+                }
+
+                records.push(crate::pass::temp::TempRecord::ScdEndef {
+                    name: t.name,
+                    attrib: t.attrib,
+                    value: t.value,
+                    section: t.section,
+                    scl: t.scl,
+                    type_code: t.type_code,
+                    size: t.size,
+                    dim: t.dim,
+                    is_long: t.is_long,
+                });
+            }
             p1.ctx.scd_temp = crate::context::ScdTemp::default();
             skip_spaces(line, pos);
             if *pos < line.len() && line[*pos] != b';' {
@@ -109,7 +132,20 @@ pub fn handle_scd(
         }
         crate::symbol::types::InsnHandler::Val => {
             skip_spaces(line, pos);
-            if let Ok(rpn) = parse_expr(line, pos) {
+            // HAS互換: `.val .` は `.val *`（行頭ロケーション）として扱う。
+            let rpn = if *pos < line.len() && line[*pos] == b'.' {
+                let next = if *pos + 1 < line.len() { line[*pos + 1] } else { b' ' };
+                if next <= b' ' || next == b';' {
+                    *pos += 1;
+                    Ok(vec![RPNToken::Location, RPNToken::End])
+                } else {
+                    parse_expr(line, pos)
+                }
+            } else {
+                parse_expr(line, pos)
+            };
+
+            if let Ok(rpn) = rpn {
                 if let Some(v) = p1.eval_const(&rpn) {
                     p1.ctx.scd_temp.value = v.value as u32;
                     p1.ctx.scd_temp.section = if v.section == 0 { -1 } else { v.section as i16 };
@@ -125,7 +161,8 @@ pub fn handle_scd(
                 if let Some(v) = p1.eval_const(&rpn) {
                     let scl = v.value as i32;
                     if scl == -1 {
-                        p1.ctx.scd_temp.scl = 0xFF;
+                        // HAS互換: 関数定義終了マーカー。`.endef` での出力を抑止する。
+                        p1.ctx.scd_temp.attrib = 0x2F;
                         records.push(crate::pass::temp::TempRecord::ScdFuncEnd {
                             location: p1.location(),
                             section: p1.section_id(),
@@ -145,6 +182,10 @@ pub fn handle_scd(
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
                     p1.ctx.scd_temp.type_code = v.value as u16;
+                    let ty = p1.ctx.scd_temp.type_code & 0x0030;
+                    if ty == 0x0020 || ty == 0x0030 {
+                        p1.ctx.scd_temp.is_long = true;
+                    }
                 }
             }
         }
@@ -153,6 +194,7 @@ pub fn handle_scd(
             let tag = read_ident(line, pos);
             if !tag.is_empty() {
                 records.push(crate::pass::temp::TempRecord::ScdTag { name: tag });
+                p1.ctx.scd_temp.is_long = true;
             }
         }
         crate::symbol::types::InsnHandler::Ln => {
@@ -160,6 +202,7 @@ pub fn handle_scd(
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
                     let line_no = v.value as u16;
+                    p1.ctx.scd_ln = line_no;
                     skip_spaces(line, pos);
                     let loc = if *pos < line.len() && line[*pos] == b',' {
                         *pos += 1;
@@ -176,11 +219,8 @@ pub fn handle_scd(
             skip_spaces(line, pos);
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
-                    let line_no = v.value as u16;
-                    records.push(crate::pass::temp::TempRecord::ScdLn {
-                        line: line_no,
-                        loc: vec![RPNToken::Location, RPNToken::End],
-                    });
+                    p1.ctx.scd_temp.size = (v.value as u16) as u32;
+                    p1.ctx.scd_temp.is_long = true;
                 }
             }
         }
@@ -210,6 +250,7 @@ pub fn handle_scd(
                 }
                 break;
             }
+            p1.ctx.scd_temp.is_long = true;
         }
         _ => {}
     }

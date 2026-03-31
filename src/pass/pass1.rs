@@ -1761,8 +1761,8 @@ fn handle_pseudo(
             pseudo::section::handle_section(handler, p1.ctx, records);
         }
 
-        // ---- .even / .quad / .align ----
-        InsnHandler::Even | InsnHandler::Quad | InsnHandler::Align => {
+        // ---- .offset / .even / .quad / .align ----
+        InsnHandler::Offset | InsnHandler::Even | InsnHandler::Quad | InsnHandler::Align => {
             pseudo::misc::handle_misc(handler, &label, line, pos, p1, records);
         }
 
