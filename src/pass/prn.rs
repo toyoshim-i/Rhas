@@ -214,7 +214,7 @@ mod tests {
             false,
             58,
         );
-        let s = String::from_utf8_lossy(&out);
+        let s = crate::utils::bytes_to_string(&out);
         // Check structure: "    1 00000000  1200            ..."
         assert!(s.contains("    1 00000000 "));
         assert!(s.contains("1200"));
@@ -241,7 +241,7 @@ mod tests {
             false,
             58,
         );
-        let s = String::from_utf8_lossy(&out);
+        let s = crate::utils::bytes_to_string(&out);
         // Should have 2 lines (first 8 bytes + last 2 bytes)
         assert_eq!(s.lines().count(), 2);
     }
@@ -265,7 +265,7 @@ mod tests {
             false,
             58,
         );
-        let s = String::from_utf8_lossy(&out);
+        let s = crate::utils::bytes_to_string(&out);
         // '*' marker for macro
         assert!(s.contains('*'));
     }
@@ -281,7 +281,7 @@ mod tests {
             false,
             58,
         );
-        let s = String::from_utf8_lossy(&out);
+        let s = crate::utils::bytes_to_string(&out);
         assert!(s.contains("MyTitle"));
         assert!(s.contains("MySub"));
     }

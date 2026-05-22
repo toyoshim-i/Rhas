@@ -714,7 +714,7 @@ fn parse_mnemonic(line: &[u8], pos: &mut usize) -> (Vec<u8>, Option<SizeCode>) {
         None
     };
 
-    let mnem = to_lowercase(mnem_raw);
+    let mnem = crate::utils::to_lowercase_vec(mnem_raw);
     (mnem, size)
 }
 
@@ -722,9 +722,6 @@ fn is_mnem_char(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
 
-fn to_lowercase(s: &[u8]) -> Vec<u8> {
-    s.iter().map(|c| c.to_ascii_lowercase()).collect()
-}
 
 pub(crate) fn skip_spaces(line: &[u8], pos: &mut usize) {
     while *pos < line.len() && matches!(line[*pos], b' ' | b'\t') {
@@ -1198,7 +1195,7 @@ fn single_operand_has_explicit_long_suffix(line: &[u8], pos: usize) -> bool {
     let mut s = &line[pos..end];
     while !s.is_empty() && matches!(s[0], b' ' | b'\t') { s = &s[1..]; }
     while !s.is_empty() && matches!(s[s.len() - 1], b' ' | b'\t') { s = &s[..s.len() - 1]; }
-    let sl = to_lowercase(s);
+    let sl = crate::utils::to_lowercase_vec(s);
     sl.ends_with(b".l")
 }
 
