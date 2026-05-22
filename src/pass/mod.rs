@@ -132,7 +132,9 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     ctx.pass = AsmPass::Pass3;
     let prn_enable = ctx.opts.make_prn;
     let max_align = ctx.max_align;
-    let (mut obj, prn_lines) = pass3::pass3(&records, &sym, source_name.clone(), source_file.clone(), prn_enable, max_align);
+    let (mut obj, prn_lines, p3_errors, p3_warnings) = pass3::pass3(&records, &sym, source_name.clone(), source_file.clone(), prn_enable, max_align);
+    ctx.num_errors += p3_errors;
+    ctx.num_warnings += p3_warnings;
     obj.has_debug_info = ctx.opts.make_sym_deb;
     obj.scd_enabled = ctx.scd_enabled;
     // HAS互換:

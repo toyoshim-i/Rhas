@@ -106,6 +106,9 @@ pub enum TempRecord {
     },
     /// SCD: `.scl -1`（関数定義終了）
     ScdFuncEnd { location: u32, section: u8 },
+
+    /// 位置情報マーカー（Pass3のエラー表示用）
+    PositionMarker(crate::error::SourcePos),
 }
 
 impl TempRecord {

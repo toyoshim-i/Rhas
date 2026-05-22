@@ -2296,3 +2296,27 @@ fn test_fbcc_long_xref_generates_rpn_reloc() {
     assert!(bytes.windows(2).any(|w| w[0] == 0x92 && w[1] == 0x00),
             "0x9200 long size terminator should exist");
 }
+
+#[test]
+fn test_pass3_displacement_overflow_error() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\
+\t.text\n\
+\tbra.s\tlabel\n\
+\t.ds.b\t200\n\
+label:\n\
+\tnop\n").expect("write");
+    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+
+    let opts = rhas::options::Options {
+        source_file: Some(path),
+        ..Default::default()
+    };
+    let mut ctx = rhas::context::AssemblyContext::new(opts);
+    match rhas::pass::assemble(&mut ctx) {
+        Err(rhas::pass::AssembleError::HasErrors(n)) => assert_eq!(n, 1),
+        Err(other) => panic!("unexpected error: {:?}", other),
+        Ok(_) => panic!("assemble should fail due to displacement overflow in pass 3"),
+    }
+}
+

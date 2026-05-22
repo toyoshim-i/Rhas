@@ -436,6 +436,7 @@ fn parse_line(
 
     // 現在のソース位置を更新（エラーメッセージ用）
     p1.current_pos = source.source_pos();
+    records.push(TempRecord::PositionMarker(p1.current_pos.clone()));
 
     // 行頭の '*' → コメント行
     if line.first() == Some(&b'*') { return; }

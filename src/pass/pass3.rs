@@ -73,10 +73,12 @@ struct P3Ctx<'a> {
     prn_pending: Option<PrnPendingInfo>,
     /// 収集済みのPRN行リスト
     pub prn_lines: Vec<PrnLine>,
+    /// 現在のソース位置情報（エラー報告用）
+    current_pos: crate::error::SourcePos,
 }
 
 impl<'a> P3Ctx<'a> {
-    fn new(sym: &'a SymbolTable, prn_enable: bool) -> Self {
+    fn new(sym: &'a SymbolTable, prn_enable: bool, source_file: Vec<u8>) -> Self {
         P3Ctx {
             sym,
             cur_sect: 1,
@@ -91,7 +93,18 @@ impl<'a> P3Ctx<'a> {
             prn_enable,
             prn_pending: None,
             prn_lines: Vec::new(),
+            current_pos: crate::error::SourcePos::new(source_file, 0),
         }
+    }
+
+    fn error_code(&mut self, code: crate::error::ErrorCode, sym: Option<&[u8]>) {
+        let err_ctx = match sym {
+            Some(s) => crate::error::ErrorContext::with_symbol(self.current_pos.clone(), code, s),
+            None => crate::error::ErrorContext::new(self.current_pos.clone(), code, None),
+        };
+        let mut stderr = std::io::stderr();
+        crate::error::print_error_context(&mut stderr, &err_ctx);
+        self.num_errors += 1;
     }
 
     /// code_buf を 10xx ブロックとして code_body にフラッシュする
@@ -529,8 +542,8 @@ pub fn pass3(
     source_file: Vec<u8>,
     prn_enable:  bool,
     max_align:   u8,
-) -> (ObjectCode, Vec<PrnLine>) {
-    let mut ctx = P3Ctx::new(sym, prn_enable);
+) -> (ObjectCode, Vec<PrnLine>, u32, u32) {
+    let mut ctx = P3Ctx::new(sym, prn_enable, source_file.clone());
     let mut obj = ObjectCode::new(source_name);
     obj.source_file = source_file;
     if max_align > 0 {
@@ -542,6 +555,10 @@ pub fn pass3(
         ctx.loc_top = ctx.location();
 
         match rec {
+            TempRecord::PositionMarker(pos) => {
+                ctx.current_pos = pos.clone();
+            }
+
             TempRecord::Const(bytes) => {
                 ctx.emit(bytes);
             }
@@ -836,7 +853,7 @@ pub fn pass3(
     }
 
     obj.ext_syms = ctx.ext_syms;
-    (obj, prn_lines)
+    (obj, prn_lines, ctx.num_errors, 0)
 }
 
 // ----------------------------------------------------------------
@@ -861,12 +878,11 @@ fn process_deferred(
 
     let has_ext = ext_info.iter().any(|e| e.is_some());
 
-    // DBcc は encode_insn では常に DeferToLinker を返すため、ここで特別処理する
     if matches!(handler, InsnHandler::DBcc) {
         let pc = ctx.location();
         let dn = match resolved_ops.first() {
             Some(EffectiveAddress::DataReg(n)) => *n,
-            _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; }
+            _ => { ctx.emit_zeros(4); ctx.error_code(crate::error::ErrorCode::IlAdr, None); return; }
         };
         let opcode_word = base | (dn as u16);
         match ext_info.get(1) {
@@ -889,7 +905,7 @@ fn process_deferred(
                                (dw >> 8) as u8, (dw & 0xFF) as u8]);
                 } else {
                     ctx.emit_zeros(4);
-                    ctx.num_errors += 1;
+                    ctx.error_code(crate::error::ErrorCode::IlRelOutside, None);
                 }
             }
             Some(Some(EaExtKind::SimpleAbs(name))) => {
@@ -909,7 +925,7 @@ fn process_deferred(
             }
             _ => {
                 ctx.emit_zeros(4);
-                ctx.num_errors += 1;
+                ctx.error_code(crate::error::ErrorCode::IlAdr, None);
             }
         }
         return;
@@ -925,10 +941,10 @@ fn process_deferred(
                     Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
                         match rpn.first() {
                             Some(RPNToken::Value(v)) => *v as i32,
-                            _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; }
+                            _ => { ctx.emit_zeros(4); ctx.error_code(crate::error::ErrorCode::IlAdr, None); return; }
                         }
                     }
-                    _ => { ctx.emit_zeros(4); ctx.num_errors += 1; return; }
+                    _ => { ctx.emit_zeros(4); ctx.error_code(crate::error::ErrorCode::IlAdr, None); return; }
                 };
                 let disp = target_addr - (pc as i32 + 2);
                 let mut opcode_word = base;
@@ -952,7 +968,7 @@ fn process_deferred(
                                 ]);
                             } else {
                                 ctx.emit_zeros(4);
-                                ctx.num_errors += 1;
+                                ctx.error_code(crate::error::ErrorCode::IlRelOutside, None);
                             }
                         } else {
                             let dw = disp as i16 as u16;
@@ -964,7 +980,7 @@ fn process_deferred(
                     }
                     _ => {
                         ctx.emit_zeros(4);
-                        ctx.num_errors += 1;
+                        ctx.error_code(crate::error::ErrorCode::IlSize, None);
                     }
                 }
             }
@@ -999,13 +1015,13 @@ fn process_deferred(
                     }
                     _ => {
                         ctx.emit_zeros(4);
-                        ctx.num_errors += 1;
+                        ctx.error_code(crate::error::ErrorCode::IlSize, None);
                     }
                 }
             }
             _ => {
                 ctx.emit_zeros(4);
-                ctx.num_errors += 1;
+                ctx.error_code(crate::error::ErrorCode::IlAdr, None);
             }
         }
         return;
@@ -1016,7 +1032,7 @@ fn process_deferred(
         let pc = ctx.location();
         let dn = match resolved_ops.first() {
             Some(EffectiveAddress::DataReg(n)) => *n,
-            _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
+            _ => { ctx.emit_zeros(6); ctx.error_code(crate::error::ErrorCode::IlAdr, None); return; }
         };
         let opcode_word = 0xF048u16 | (base & 0x0E00) | (dn as u16);
         let cond_word = base & 0x001F;
@@ -1027,15 +1043,15 @@ fn process_deferred(
                     Some(EffectiveAddress::AbsLong(rpn)) | Some(EffectiveAddress::AbsShort(rpn)) => {
                         match rpn.first() {
                             Some(RPNToken::Value(v)) => *v as i32,
-                            _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
+                            _ => { ctx.emit_zeros(6); ctx.error_code(crate::error::ErrorCode::IlAdr, None); return; }
                         }
                     }
-                    _ => { ctx.emit_zeros(6); ctx.num_errors += 1; return; }
+                    _ => { ctx.emit_zeros(6); ctx.error_code(crate::error::ErrorCode::IlAdr, None); return; }
                 };
                 let disp = target_addr - (pc as i32 + 4);
                 if !(-32768..=32767).contains(&disp) {
                     ctx.emit_zeros(6);
-                    ctx.num_errors += 1;
+                    ctx.error_code(crate::error::ErrorCode::IlRelOutside, None);
                     return;
                 }
                 let dw = disp as i16 as u16;
@@ -1065,7 +1081,7 @@ fn process_deferred(
             }
             _ => {
                 ctx.emit_zeros(6);
-                ctx.num_errors += 1;
+                ctx.error_code(crate::error::ErrorCode::IlAdr, None);
             }
         }
         return;
@@ -1157,11 +1173,17 @@ fn process_deferred(
                 pos += ext_sz;
             }
         }
-        Err(_) => {
+        Err(e) => {
             // 未解決のまま → ゼロバイトで埋める
             let est = 2 + resolved_ops.iter().map(|ea| ea_ext_size_for_insn(ea, size)).sum::<u32>();
             ctx.emit_zeros(est);
-            ctx.num_errors += 1;
+            let code = match e {
+                crate::instructions::InsnError::InvalidSize => crate::error::ErrorCode::IlSize,
+                crate::instructions::InsnError::OutOfRange { .. } => crate::error::ErrorCode::Overflow,
+                crate::instructions::InsnError::OperandCount => crate::error::ErrorCode::Expr,
+                _ => crate::error::ErrorCode::IlAdr,
+            };
+            ctx.error_code(code, None);
         }
     }
 }
@@ -1452,7 +1474,7 @@ fn process_branch(
                 ctx.emit(&[b0, b1]);
             } else {
                 ctx.emit_zeros(2);
-                ctx.num_errors += 1;
+                ctx.error_code(crate::error::ErrorCode::IlRelOutside, None);
             }
         }
         Some(SizeCode::Long) => {
@@ -1473,11 +1495,11 @@ fn process_branch(
             if (-32768..=32767).contains(&offset_w) {
                 let w = offset_w as i16 as u16;
                 let b0 = (opcode >> 8) as u8;
-                let b1 = opcode as u8; // 下位バイトは 0x00 for .w
+                let b1 = opcode as u8; // 下位バイト is 0x00 for .w
                 ctx.emit(&[b0, b1, (w >> 8) as u8, w as u8]);
             } else {
                 ctx.emit_zeros(4);
-                ctx.num_errors += 1;
+                ctx.error_code(crate::error::ErrorCode::IlRelOutside, None);
             }
         }
     }
