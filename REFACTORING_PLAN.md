@@ -314,6 +314,39 @@ cargo test
 
 ---
 
+## 🔄 Step 7: `pass/pass1.rs` の命令・オペランドパースの分割
+
+### 目的
+`pass1.rs`（約2300行）をサブモジュール化して見通しを改善する。特に複雑なオペランドパース（FPUレジスタリストやペアのパースなど）と、命令サイズ・アドレッシングモード検証ロジックを分割する。
+
+### 対象ファイル
+- `src/pass/pass1.rs` (本体を軽量化)
+- `src/pass/pass1/mod.rs` (新規: `pass1` エントリポイント)
+- `src/pass/pass1/operand.rs` (新規: `parse_operands` および各種 FPU/レジスタパースヘルパー)
+- `src/pass/pass1/insn.rs` (新規: `handle_real_insn`, `estimate_insn_size` などの実命令解析処理)
+- `src/pass/pass1/preprocess.rs` (新規: `preprocess_anon_labels`, `preprocess_numeric_local_labels`)
+
+### 変更内容
+`pass1.rs` を `pass1` ディレクトリ下の `mod.rs` にし、以下のようにモジュールを分割する。
+
+- `src/pass/pass1/operand.rs`: `parse_operands`, `parse_fp_reg_list_token`, `parse_fp_ctrl_list_token`, `parse_fp_pair_token`, `parse_fp_register_token` などのオペランドパーサー群を配置。
+- `src/pass/pass1/insn.rs`: `handle_real_insn`, `estimate_insn_size`, `resolve_ea_const_for_size` などの命令デコード・サイズ見積もり処理を配置。
+- `src/pass/pass1/preprocess.rs`: `preprocess_anon_labels`, `preprocess_numeric_local_labels` などのアセンブル前ラベル正規化ヘルパー群を配置。
+- `src/pass/pass1/mod.rs` (旧 `pass1.rs`): `pass1` エントリポイントおよびメインループ、行パース `parse_line` とディレクティブ分岐処理 `handle_pseudo` のディスパッチ処理のみに集中させる。
+
+### テスト方法
+```bash
+cargo test
+# 確認: すべてのテストがパスすること
+```
+
+### 完了基準
+- ✅ `cargo test` ですべてのテストがパスすること
+- ✅ `src/pass/pass1.rs` (現在の `mod.rs`) のファイルサイズが 800 行以下に削減されること
+- ✅ 各モジュールの責務が明確になり、循環参照が発生しないこと
+
+---
+
 ## 📊 進捗チェックリスト
 
 | Step | 説明 | 状態 | テスト結果 | 実施日 |
@@ -325,6 +358,7 @@ cargo test
 | 4 | エラー型安全化 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-23 |
 | 5 | CPU 型統一 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-23 |
 | 6 | pass3 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-24 |
+| 7 | pass1 再分割（命令・オペランドパース） | ⏳ | - | - |
 
 ---
 
@@ -382,7 +416,8 @@ git reset --hard origin/refactor/step-X
 | 4 | 1-1.5 時間 | ⭐⭐☆ |
 | 5 | 1-1.5 時間 | ⭐⭐☆ |
 | 6 | 2-3 時間 | ⭐⭐⭐ |
-| **合計** | **7-11 時間** | |
+| 7 | 2-3 時間 | ⭐⭐⭐ |
+| **合計** | **9-14 時間** | |
 
 ---
 
