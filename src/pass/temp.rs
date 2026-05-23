@@ -79,7 +79,7 @@ pub enum TempRecord {
     End,
 
     /// .cpu（CPU 変更）
-    Cpu { number: u32, cpu_type: u16 },
+    Cpu { cpu: crate::context::CpuType },
 
     /// PRNリストファイル用ソース行情報（-p オプション有効時のみ挿入）
     LineInfo { line_num: u32, text: Vec<u8>, is_macro: bool },

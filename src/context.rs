@@ -79,17 +79,17 @@ impl CpuType {
 
     /// デフォルト値（68000, no features）
     pub const fn default_68000() -> Self {
-        CpuType { number: 68000, features: 0x0001 }
+        CpuType { number: 68000, features: 0x0100 }
     }
 
     /// 68010 CPU
     pub const fn cpu_68010() -> Self {
-        CpuType { number: 68010, features: 0x0002 }
+        CpuType { number: 68010, features: 0x0200 }
     }
 
     /// 68020 CPU
     pub const fn cpu_68020() -> Self {
-        CpuType { number: 68020, features: 0x0004 }
+        CpuType { number: 68020, features: 0x0400 }
     }
 
     /// CPU番号が古い世代か判定
@@ -133,10 +133,8 @@ pub struct AssemblyContext {
     pub loc_top: u32,
 
     // ---- CPU ----
-    /// 現在の CPU 番号（CPUNUMBER）
-    pub cpu_number: u32,
-    /// 現在の CPU タイプビット（CPUTYPE, CPUTYPE2）
-    pub cpu_type: u16,
+    /// 現在の CPU 情報（CPUNUMBER, CPUTYPE）
+    pub cpu: CpuType,
     /// FPU コプロセッサ ID（.fpid で設定、0..7）
     pub fpid: u8,
 
@@ -197,8 +195,7 @@ pub struct AssemblyContext {
 impl AssemblyContext {
     /// オプションからコンテキストを初期化する
     pub fn new(opts: Options) -> Self {
-        let cpu_number = opts.cpu_number;
-        let cpu_type = opts.cpu_type;
+        let cpu = opts.cpu;
 
         AssemblyContext {
             opts,
@@ -209,8 +206,7 @@ impl AssemblyContext {
             loc_offset: [0u32; N_SECTIONS],
             loc_top: 0,
 
-            cpu_number,
-            cpu_type,
+            cpu,
             fpid: 1,
 
             num_errors: 0,
@@ -278,20 +274,13 @@ impl AssemblyContext {
     // ---- CPU 操作 ----
 
     /// CPU を変更する（.cpu 疑似命令用）
-    pub fn set_cpu(&mut self, cpu_number: u32, cpu_type: u16) {
-        self.cpu_number = cpu_number;
-        self.cpu_type = cpu_type;
-    }
-
-    /// CpuType を使用して CPU情報を設定（型安全版）
-    pub fn set_cpu_with_type(&mut self, cpu: CpuType) {
-        self.cpu_number = cpu.number;
-        self.cpu_type = cpu.features;
+    pub fn set_cpu(&mut self, cpu: CpuType) {
+        self.cpu = cpu;
     }
 
     /// 現在のCPU情報を CpuType として取得
     pub fn get_cpu_type(&self) -> CpuType {
-        CpuType::new(self.cpu_number, self.cpu_type)
+        self.cpu
     }
 
     // ---- エラー処理 ----
@@ -398,7 +387,7 @@ mod tests {
     #[test]
     fn test_cpu_init() {
         let ctx = make_ctx();
-        assert_eq!(ctx.cpu_number, 68000);
+        assert_eq!(ctx.cpu.number, 68000);
     }
 
     #[test]
@@ -430,19 +419,19 @@ mod tests {
     }
 
     #[test]
-    fn test_set_cpu_with_type() {
+    fn test_set_cpu() {
         let mut ctx = make_ctx();
         let cpu = CpuType::new(68030, 0x0008);
-        ctx.set_cpu_with_type(cpu);
+        ctx.set_cpu(cpu);
         
-        assert_eq!(ctx.cpu_number, 68030);
-        assert_eq!(ctx.cpu_type, 0x0008);
+        assert_eq!(ctx.cpu.number, 68030);
+        assert_eq!(ctx.cpu.features, 0x0008);
     }
 
     #[test]
     fn test_get_cpu_type() {
         let mut ctx = make_ctx();
-        ctx.set_cpu(68040, 0x0010);
+        ctx.set_cpu(CpuType::new(68040, 0x0010));
         
         let cpu = ctx.get_cpu_type();
         assert_eq!(cpu.number, 68040);

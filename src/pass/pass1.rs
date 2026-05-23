@@ -101,7 +101,7 @@ impl<'a> P1Ctx<'a> {
         self.local_base = self.local_base.wrapping_add(1);
         v
     }
-    pub(crate) fn cpu_type(&self)   -> u16 { self.ctx.cpu_type }
+    pub(crate) fn cpu_type(&self)   -> u16 { self.ctx.cpu.features }
     pub(crate) fn location(&self)   -> u32 { self.ctx.location() }
 
     pub(crate) fn advance(&mut self, n: u32) {
@@ -947,7 +947,7 @@ fn handle_real_insn(
     if matches!(handler, InsnHandler::Clr)
         && p1.ctx.opts.opt_clr
         && enc_size == SizeCode::Long
-        && p1.ctx.cpu_number < 68020
+        && p1.ctx.cpu.number < 68020
         && ops.len() == 1
         && matches!(ops[0], EffectiveAddress::DataReg(_))
     {
@@ -1042,7 +1042,7 @@ fn handle_real_insn(
     if matches!(handler, InsnHandler::CmpA)
         && p1.ctx.opts.opt_cmpa
         && enc_size == SizeCode::Long
-        && p1.ctx.cpu_number >= 68020
+        && p1.ctx.cpu.number >= 68020
         && ops.len() == 2
         && matches!(ops[1], EffectiveAddress::AddrReg(_))
     {
@@ -1116,7 +1116,7 @@ fn handle_real_insn(
     // ASL #1,Dn → ADD Dn,Dn（68060以外）
     if matches!(handler, InsnHandler::Asl)
         && p1.ctx.opts.opt_asl
-        && p1.ctx.cpu_number < 68060
+        && p1.ctx.cpu.number < 68060
         && ops.len() == 2
     {
         if let (EffectiveAddress::Immediate(rpn), EffectiveAddress::DataReg(dn)) = (&ops[0], &ops[1]) {
@@ -1970,7 +1970,7 @@ fn handle_pseudo(
             if let Some(ref name) = label {
                 let saved_pos = *pos;
                 // まずレジスタリスト（MOVEM 用）として解析を試みる
-                let reg_mask = parse_reg_list_mask(line, pos, p1.sym, p1.ctx.cpu_type);
+                let reg_mask = parse_reg_list_mask(line, pos, p1.sym, p1.ctx.cpu.features);
                 let rpns: Vec<Rpn> = if let Some(mask) = reg_mask {
                     // レジスタリスト → 定数マスクとして保存
                     vec![vec![RPNToken::ValueWord(mask), RPNToken::End]]
@@ -2120,7 +2120,7 @@ fn handle_pseudo(
             }
             if value < 0 {
                 // 負値は FPU 命令を禁止
-                p1.ctx.cpu_type &= !cpuconst::CFPP;
+                p1.ctx.cpu.features &= !cpuconst::CFPP;
             } else if value <= 7 {
                 p1.ctx.fpid = value as u8;
             } else {
@@ -2376,7 +2376,7 @@ pub(crate) fn collect_macro_body(
 
         // ニーモニックを解析してネスト深度を調整
         let mnem = extract_mnemonic(line);
-        let handler = sym.lookup_cmd(&mnem, ctx.cpu_type)
+        let handler = sym.lookup_cmd(&mnem, ctx.cpu.features)
             .and_then(|s| if let Symbol::Opcode { handler, .. } = s { Some(*handler) } else { None });
 
         match handler {
@@ -2721,7 +2721,7 @@ fn collect_body_from_slice_impl(
         let next_pos = if end < slice.len() { end + 1 } else { slice.len() };
 
         let mnem = extract_mnemonic(line);
-        let handler = sym.lookup_cmd(&mnem, ctx.cpu_type)
+        let handler = sym.lookup_cmd(&mnem, ctx.cpu.features)
             .and_then(|s| if let Symbol::Opcode { handler, .. } = s { Some(*handler) } else { None });
 
         match handler {

@@ -188,9 +188,9 @@ pub fn handle_misc(
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
                     let num = v.value as u32;
-                    if let Some((cnum, ctype)) = crate::options::cpu_number_to_type(num) {
-                        p1.ctx.set_cpu(cnum, ctype);
-                        records.push(TempRecord::Cpu { number: cnum, cpu_type: ctype });
+                    if let Some(cpu) = crate::options::cpu_number_to_type(num) {
+                        p1.ctx.set_cpu(cpu);
+                        records.push(TempRecord::Cpu { cpu });
                     } else {
                         p1.error_code(ErrorCode::FeatureCpu, None);
                     }
@@ -202,40 +202,49 @@ pub fn handle_misc(
             }
         }
         InsnHandler::Cpu68000 => {
-            p1.ctx.set_cpu(68000, cpuconst::C000);
-            records.push(TempRecord::Cpu { number: 68000, cpu_type: cpuconst::C000 });
+            let cpu = crate::context::CpuType::new(68000, cpuconst::C000);
+            p1.ctx.set_cpu(cpu);
+            records.push(TempRecord::Cpu { cpu });
         }
         InsnHandler::Cpu68010 => {
-            p1.ctx.set_cpu(68010, cpuconst::C010);
-            records.push(TempRecord::Cpu { number: 68010, cpu_type: cpuconst::C010 });
+            let cpu = crate::context::CpuType::new(68010, cpuconst::C010);
+            p1.ctx.set_cpu(cpu);
+            records.push(TempRecord::Cpu { cpu });
         }
         InsnHandler::Cpu68020 => {
-            p1.ctx.set_cpu(68020, cpuconst::C020);
-            records.push(TempRecord::Cpu { number: 68020, cpu_type: cpuconst::C020 });
+            let cpu = crate::context::CpuType::new(68020, cpuconst::C020);
+            p1.ctx.set_cpu(cpu);
+            records.push(TempRecord::Cpu { cpu });
         }
         InsnHandler::Cpu68030 => {
-            p1.ctx.set_cpu(68030, cpuconst::C030);
-            records.push(TempRecord::Cpu { number: 68030, cpu_type: cpuconst::C030 });
+            let cpu = crate::context::CpuType::new(68030, cpuconst::C030);
+            p1.ctx.set_cpu(cpu);
+            records.push(TempRecord::Cpu { cpu });
         }
         InsnHandler::Cpu68040 => {
-            p1.ctx.set_cpu(68040, cpuconst::C040);
-            records.push(TempRecord::Cpu { number: 68040, cpu_type: cpuconst::C040 });
+            let cpu = crate::context::CpuType::new(68040, cpuconst::C040);
+            p1.ctx.set_cpu(cpu);
+            records.push(TempRecord::Cpu { cpu });
         }
         InsnHandler::Cpu68060 => {
-            p1.ctx.set_cpu(68060, cpuconst::C060);
-            records.push(TempRecord::Cpu { number: 68060, cpu_type: cpuconst::C060 });
+            let cpu = crate::context::CpuType::new(68060, cpuconst::C060);
+            p1.ctx.set_cpu(cpu);
+            records.push(TempRecord::Cpu { cpu });
         }
         InsnHandler::Cpu5200 => {
-            p1.ctx.set_cpu(5200, cpuconst::C520);
-            records.push(TempRecord::Cpu { number: 5200, cpu_type: cpuconst::C520 });
+            let cpu = crate::context::CpuType::new(5200, cpuconst::C520);
+            p1.ctx.set_cpu(cpu);
+            records.push(TempRecord::Cpu { cpu });
         }
         InsnHandler::Cpu5300 => {
-            p1.ctx.set_cpu(5300, cpuconst::C530);
-            records.push(TempRecord::Cpu { number: 5300, cpu_type: cpuconst::C530 });
+            let cpu = crate::context::CpuType::new(5300, cpuconst::C530);
+            p1.ctx.set_cpu(cpu);
+            records.push(TempRecord::Cpu { cpu });
         }
         InsnHandler::Cpu5400 => {
-            p1.ctx.set_cpu(5400, cpuconst::C540);
-            records.push(TempRecord::Cpu { number: 5400, cpu_type: cpuconst::C540 });
+            let cpu = crate::context::CpuType::new(5400, cpuconst::C540);
+            p1.ctx.set_cpu(cpu);
+            records.push(TempRecord::Cpu { cpu });
         }
         InsnHandler::Even => {
             if p1.ctx.offsym_with_symbol {
@@ -393,10 +402,10 @@ mod tests {
         let mut pos = 0;
         let line = b"68020";
         handle_misc(InsnHandler::Cpu, &None, line, &mut pos, &mut p1, &mut records);
-        assert_eq!(p1.ctx.cpu_number, 68020);
+        assert_eq!(p1.ctx.cpu.number, 68020);
         assert_eq!(records.len(), 1);
-        if let TempRecord::Cpu { number, cpu_type: _ } = &records[0] {
-            assert_eq!(*number, 68020);
+        if let TempRecord::Cpu { cpu } = &records[0] {
+            assert_eq!(cpu.number, 68020);
         } else { panic!("expected Cpu record"); }
     }
 

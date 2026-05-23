@@ -118,10 +118,8 @@ pub struct Options {
     pub all_xdef: bool,
 
     // ---- CPU ----
-    /// 初期CPUナンバー（-m）
-    pub cpu_number: u32,
-    /// 初期CPUタイプビット
-    pub cpu_type: u16,
+    /// 初期CPU型情報（-m）
+    pub cpu: crate::context::CpuType,
 
     // ---- シンボル ----
     /// シンボル識別長を8バイトに（-8）
@@ -214,8 +212,7 @@ impl Default for Options {
             all_xref: false,
             all_xdef: false,
 
-            cpu_number: DEFAULT_CPU_NUMBER,
-            cpu_type: cpu::C000,
+            cpu: crate::context::CpuType::default_68000(),
 
             sym_len8: false,
             predefine: false,
@@ -463,9 +460,8 @@ fn process_switch(
                 consumed += n;
                 let num_str = utils::bytes_to_string(&s);
                 let num: u32 = num_str.trim().parse().unwrap_or(0);
-                if let Some((cnum, ctype)) = cpu_number_to_type(num) {
-                    opts.cpu_number = cnum;
-                    opts.cpu_type = ctype;
+                if let Some(cpu) = cpu_number_to_type(num) {
+                    opts.cpu = cpu;
                 } else if num > 1000 && num < 32768 {
                     // 最大シンボル数指定（無視）
                 } else {
@@ -858,18 +854,18 @@ fn flatten_paths(paths: &[Vec<u8>]) -> Vec<u8> {
 }
 
 /// CPU番号をCPUタイプビットに変換する。
-/// 返値: Some（CPUナンバー, CPUタイプ）または None（不正な値）
-pub fn cpu_number_to_type(n: u32) -> Option<(u32, u16)> {
+/// 返値: Some(CpuType) または None（不正な値）
+pub fn cpu_number_to_type(n: u32) -> Option<crate::context::CpuType> {
     match n {
-        68000 => Some((68000, cpu::C000)),
-        68010 => Some((68010, cpu::C010)),
-        68020 => Some((68020, cpu::C020)),
-        68030 => Some((68030, cpu::C030)),
-        68040 => Some((68040, cpu::C040)),
-        68060 => Some((68060, cpu::C060)),
-        5200 => Some((5200, cpu::C520)),
-        5300 => Some((5300, cpu::C530)),
-        5400 => Some((5400, cpu::C540)),
+        68000 => Some(crate::context::CpuType::new(68000, cpu::C000)),
+        68010 => Some(crate::context::CpuType::new(68010, cpu::C010)),
+        68020 => Some(crate::context::CpuType::new(68020, cpu::C020)),
+        68030 => Some(crate::context::CpuType::new(68030, cpu::C030)),
+        68040 => Some(crate::context::CpuType::new(68040, cpu::C040)),
+        68060 => Some(crate::context::CpuType::new(68060, cpu::C060)),
+        5200 => Some(crate::context::CpuType::new(5200, cpu::C520)),
+        5300 => Some(crate::context::CpuType::new(5300, cpu::C530)),
+        5400 => Some(crate::context::CpuType::new(5400, cpu::C540)),
         _ => None,
     }
 }
@@ -928,8 +924,8 @@ mod tests {
     #[test]
     fn test_defaults() {
         let opts = Options::default();
-        assert_eq!(opts.cpu_number, 68000);
-        assert_eq!(opts.cpu_type, cpu::C000);
+        assert_eq!(opts.cpu.number, 68000);
+        assert_eq!(opts.cpu.features, cpu::C000);
         assert_eq!(opts.local_len_max, 4);
         assert_eq!(opts.local_num_max, 10000);
     }
@@ -970,8 +966,8 @@ mod tests {
     fn test_m_option() {
         let result = parse_args(["-m68020", "foo.s"], false);
         let opts = result.unwrap();
-        assert_eq!(opts.cpu_number, 68020);
-        assert_eq!(opts.cpu_type, cpu::C020);
+        assert_eq!(opts.cpu.number, 68020);
+        assert_eq!(opts.cpu.features, cpu::C020);
     }
 
     #[test]

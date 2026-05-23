@@ -531,7 +531,7 @@ fn test_fpid_sets_id_and_can_disable_fpu() {
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
     assert_eq!(ctx.fpid, 3);
-    assert_eq!(ctx.cpu_type & rhas::options::cpu::CFPP, 0, "negative .fpid should disable CFPP");
+    assert_eq!(ctx.cpu.features & rhas::options::cpu::CFPP, 0, "negative .fpid should disable CFPP");
 }
 
 /// `.fpid` は 0..7 以外を拒否する。
@@ -2182,24 +2182,24 @@ fn test_c4_lea_disp_to_addq() {
 fn test_coldfire_cpu5200_directive() {
     let src = b"\t.5200\n\tnop\n";
     let (_result, ctx) = assemble_with_ctx(src);
-    assert_eq!(ctx.cpu_number, 5200);
-    assert_ne!(ctx.cpu_type & rhas::options::cpu::C520, 0);
+    assert_eq!(ctx.cpu.number, 5200);
+    assert_ne!(ctx.cpu.features & rhas::options::cpu::C520, 0);
 }
 
 #[test]
 fn test_coldfire_cpu5300_directive() {
     let src = b"\t.5300\n\tnop\n";
     let (_result, ctx) = assemble_with_ctx(src);
-    assert_eq!(ctx.cpu_number, 5300);
-    assert_ne!(ctx.cpu_type & rhas::options::cpu::C530, 0);
+    assert_eq!(ctx.cpu.number, 5300);
+    assert_ne!(ctx.cpu.features & rhas::options::cpu::C530, 0);
 }
 
 #[test]
 fn test_coldfire_cpu5400_directive() {
     let src = b"\t.5400\n\tnop\n";
     let (_result, ctx) = assemble_with_ctx(src);
-    assert_eq!(ctx.cpu_number, 5400);
-    assert_ne!(ctx.cpu_type & rhas::options::cpu::C540, 0);
+    assert_eq!(ctx.cpu.number, 5400);
+    assert_ne!(ctx.cpu.features & rhas::options::cpu::C540, 0);
 }
 
 // ---- .cpu 式指定 ----
@@ -2208,16 +2208,16 @@ fn test_coldfire_cpu5400_directive() {
 fn test_cpu_directive_68020() {
     let src = b"\t.cpu\t68020\n\tnop\n";
     let (_result, ctx) = assemble_with_ctx(src);
-    assert_eq!(ctx.cpu_number, 68020);
-    assert_ne!(ctx.cpu_type & rhas::options::cpu::C020, 0);
+    assert_eq!(ctx.cpu.number, 68020);
+    assert_ne!(ctx.cpu.features & rhas::options::cpu::C020, 0);
 }
 
 #[test]
 fn test_cpu_directive_5200() {
     let src = b"\t.cpu\t5200\n\tnop\n";
     let (_result, ctx) = assemble_with_ctx(src);
-    assert_eq!(ctx.cpu_number, 5200);
-    assert_ne!(ctx.cpu_type & rhas::options::cpu::C520, 0);
+    assert_eq!(ctx.cpu.number, 5200);
+    assert_ne!(ctx.cpu.features & rhas::options::cpu::C520, 0);
 }
 
 // ---- FBcc/FDBcc 外部参照 ----
