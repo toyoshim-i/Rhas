@@ -280,6 +280,40 @@ cargo test --lib
 
 ---
 
+## 🔄 Step 6: `pass/pass3.rs` のモジュール分割・整理
+
+### 目的
+`pass3.rs`（現在約1500行）をサブモジュールに分割して見通しを改善する。主に実効アドレス（EA）解決ロジックや分岐・命令エンコード処理を分割する。
+
+### 対象ファイル
+- `src/pass/pass3.rs` (本体を軽量化)
+- `src/pass/pass3/mod.rs` (新規)
+- `src/pass/pass3/ea.rs` (新規: EA解決・リロケーション関連)
+- `src/pass/pass3/branch.rs` (新規: 分岐命令・DBcc/FBcc/FDBcc の解決)
+- `src/pass/pass3/insn.rs` (新規: 未解決命令のエンコード委譲処理)
+
+### 変更内容
+`pass3.rs` を `pass3` ディレクトリ下の `mod.rs` にし、以下のようにモジュールを分割する。
+
+- `src/pass/pass3/ea.rs`: `resolve_ea_with_ext`, `ea_ext_size_for_insn` などの EA / 外部参照解析関連ヘルパ関数群を配置する。
+- `src/pass/pass3/branch.rs`: `process_branch` などの分岐命令ハンドリングロジックを配置する。
+- `src/pass/pass3/insn.rs`: `encode_insn` の呼び出しとフォールバックハンドリングなど命令エンコードに関連するロジックを配置する。
+- `src/pass/pass3/mod.rs` (旧 `pass3.rs`): `pass3()` エントリポイントと `P3Ctx` 定義、主要な中間コードレコードディスパッチャ（レコードループ）のみに集中させる。
+
+### テスト方法
+```bash
+# 各モジュールをスタブで追加した後に徐々に移行する
+cargo test
+# 確認: 98 passed (integration), 63 passed (golden)
+```
+
+### 完了基準
+- ✅ `cargo test` ですべてのテストがパスすること
+- ✅ `src/pass/pass3.rs` のファイルサイズが 500 行以下に削減されること
+- ✅ 各モジュールの責務が明確になり、循環参照が発生しないこと
+
+---
+
 ## 📊 進捗チェックリスト
 
 | Step | 説明 | 状態 | テスト結果 | 実施日 |
@@ -290,6 +324,7 @@ cargo test --lib
 | 3 | pass1 分割 | ✅ | 229/229 | 2026-04-01 |
 | 4 | エラー型安全化 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-23 |
 | 5 | CPU 型統一 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-23 |
+| 6 | pass3 分割 | ⏳ | - | - |
 
 ---
 
@@ -346,7 +381,8 @@ git reset --hard origin/refactor/step-X
 | 3 | 2-3 時間 | ⭐⭐⭐ |
 | 4 | 1-1.5 時間 | ⭐⭐☆ |
 | 5 | 1-1.5 時間 | ⭐⭐☆ |
-| **合計** | **5-8 時間** | |
+| 6 | 2-3 時間 | ⭐⭐⭐ |
+| **合計** | **7-11 時間** | |
 
 ---
 
