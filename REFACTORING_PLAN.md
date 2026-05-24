@@ -347,6 +347,30 @@ cargo test
 
 ---
 
+## 🔄 Step 8: `symbol/mod.rs` のテーブル分割・整理 (built-in データの分離)
+
+### 目的
+`src/symbol/mod.rs` (約1100行) から、静的な命令定義テーブル (`OPCODE_TABLE`) やレジスタ定義テーブル (`REGISTER_TABLE`) などの built-in データを別ファイル (`table.rs`) に分割し、シンボルテーブル管理のコアロジックを読みやすく簡潔にする。
+
+### 対象ファイル
+- `src/symbol/mod.rs` (本体を軽量化)
+- `src/symbol/table.rs` (新規: built-in テーブルデータ定義)
+
+### 変更内容
+`REGISTER_TABLE`, `OPCODE_TABLE`, `OpcodeEntry`, `RegEntry` および関連する定数群を `src/symbol/table.rs` へ移行する。
+
+### テスト方法
+```bash
+cargo test
+# 確認: すべてのテストがパスすること
+```
+
+### 完了基準
+- ✅ `cargo test` ですべてのテストがパスすること
+- ✅ `src/symbol/mod.rs` のファイルサイズが 400 行以下に削減されること
+
+---
+
 ## 📊 進捗チェックリスト
 
 | Step | 説明 | 状態 | テスト結果 | 実施日 |
@@ -359,6 +383,7 @@ cargo test
 | 5 | CPU 型統一 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-23 |
 | 6 | pass3 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-24 |
 | 7 | pass1 再分割（命令・オペランドパース） | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-24 |
+| 8 | symbol built-in テーブル分離 | ⏳ | - | - |
 
 ---
 
@@ -417,7 +442,8 @@ git reset --hard origin/refactor/step-X
 | 5 | 1-1.5 時間 | ⭐⭐☆ |
 | 6 | 2-3 時間 | ⭐⭐⭐ |
 | 7 | 2-3 時間 | ⭐⭐⭐ |
-| **合計** | **9-14 時間** | |
+| 8 | 45-60 分 | ⭐☆☆ |
+| **合計** | **10-15 時間** | |
 
 ---
 
