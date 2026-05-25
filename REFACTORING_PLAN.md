@@ -371,6 +371,30 @@ cargo test
 
 ---
 
+## 🔄 Step 9: `options.rs` のモジュール分割・整理
+
+### 目的
+`src/options.rs`（現在約980行）を `src/options/` ディレクトリ配下に分割・整理し、コマンドライン引数の定義、CPU種別、パース処理の責務を分離することで可読性と保守性を向上させる。
+
+### 対象ファイル
+- `src/options.rs` (削除)
+- `src/options/mod.rs` (新規: エントリポイント)
+- `src/options/cpu.rs` (新規: CPU種別定義)
+- `src/options/types.rs` (新規: Options構造体定義)
+- `src/options/parser.rs` (新規: 引数パース処理)
+
+### テスト方法
+```bash
+cargo test
+# 確認: すべてのテストがパスすること
+```
+
+### 完了基準
+- ✅ `cargo test` ですべてのテストがパスすること
+- ✅ `src/options.rs` が削除され、`src/options/mod.rs` が 150 行以下に削減されること
+
+---
+
 ## 📊 進捗チェックリスト
 
 | Step | 説明 | 状態 | テスト結果 | 実施日 |
@@ -384,6 +408,7 @@ cargo test
 | 6 | pass3 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-24 |
 | 7 | pass1 再分割（命令・オペランドパース） | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-24 |
 | 8 | symbol built-in テーブル分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-25 |
+| 9 | options 分割 | ⏳ | - | - |
 
 ---
 
