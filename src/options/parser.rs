@@ -1,270 +1,7 @@
-/// HAS060X.X コマンドラインオプション（完全互換）
-///
-/// オリジナルと同じ単一文字スイッチ方式を採用する。
-/// 複数スイッチの連結（`-c4u` = `-c4 -u`）にも対応する。
 use std::ffi::OsStr;
 use crate::utils;
-
-// デフォルト値定数（has.equ / work.s より）
-pub const DEFAULT_PRN_WIDTH: u16 = 136;
-pub const DEFAULT_PRN_PAGE_LINES: u16 = 58;
-pub const DEFAULT_PRN_CODE_WIDTH: u16 = 16;
-pub const DEFAULT_LOCAL_LEN_MAX: u16 = 4;
-pub const DEFAULT_LOCAL_NUM_MAX: u16 = 10000;
-pub const DEFAULT_CPU_NUMBER: u32 = 68000;
-
-/// CPUタイプビット（cputype.equ より）
-pub mod cpu {
-    pub const C000: u16 = 1 << 8;
-    pub const C010: u16 = 1 << 9;
-    pub const C020: u16 = 1 << 10;
-    pub const C030: u16 = 1 << 11;
-    pub const C040: u16 = 1 << 12;
-    pub const C060: u16 = 1 << 13;
-    pub const CMMU: u16 = 1 << 14;
-    pub const CFPP: u16 = 1 << 15;
-    pub const C520: u16 = 1 << 0;
-    pub const C530: u16 = 1 << 1;
-    pub const C540: u16 = 1 << 2;
-}
-
-/// -b オプション：PC間接→絶対ロング変換モード
-#[derive(Debug, Clone, PartialEq)]
-pub enum PcToAbslMode {
-    Disabled,  // 0: 禁止
-    M68k,      // 1: 68000コード生成（BRATOJBRA, LONGABS）
-    Mem,       // 2: i-cache回避（lea/pea以外）
-    M68kMem,   // 3: 1+2
-    All,       // 4: デバッグ用（全て）
-    M68kAll,   // 5: 1+4
-}
-
-/// コマンドラインオプション全体
-#[derive(Debug)]
-pub struct Options {
-    // ---- ファイル ----
-    /// ソースファイル名（バイト列）
-    pub source_file: Option<Vec<u8>>,
-    /// オブジェクトファイル名（None = ソースと同名.o）
-    pub object_file: Option<Vec<u8>>,
-    /// PRNファイル名（None = ソースと同名.prn）
-    pub prn_file: Option<Vec<u8>>,
-    /// シンボルファイル名（None = 標準出力）
-    pub sym_file: Option<Vec<u8>>,
-    /// テンポラリパス（-t）
-    pub temp_path: Option<Vec<u8>>,
-    /// インクルードパスリスト（-i、複数可）
-    pub include_paths_env: Option<Vec<u8>>,   // 環境変数で指定
-    pub include_paths_cmd: Option<Vec<u8>>,   // コマンドラインで指定
-
-    // ---- 出力制御 ----
-    /// PRNファイル作成（-p）
-    pub make_prn: bool,
-    /// シンボルファイル作成（-x）
-    pub make_sym: bool,
-    /// SCDデバッグ情報出力（-g）
-    pub make_sym_deb: bool,
-    /// 起動時タイトル表示（-l）
-    pub disp_title: bool,
-    /// ワーニングレベル（0-4、デフォルト0xFF→2相当）（-w）
-    pub warn_level: i8,   // -1 = デフォルト(2)
-
-    // ---- 最適化 ----
-    /// 前方参照最適化禁止（-n）
-    pub no_forward_opt: bool,
-    /// -c0 の禁止フラグも含む（-c0,-c4等で変化）
-    pub optimize_disabled: bool,
-    /// v2互換モード（-c2）
-    pub compat_mode: bool,
-    pub compat_sw_a: bool,   // -a スイッチが指定された（v2互換時）
-    pub compat_sw_q: bool,   // -q スイッチが指定された（v2互換時）
-    /// 絶対ショート変換禁止
-    pub no_abs_short: bool,
-    /// クイックイミディエイト変換禁止
-    pub no_quick: bool,
-    /// ゼロディスプレースメント削除禁止
-    pub no_null_disp: bool,
-    /// 分岐命令削除禁止
-    pub no_bra_cut: bool,
-    /// 拡張最適化フラグ群（-c4 で全て有効）
-    pub opt_clr: bool,
-    pub opt_movea: bool,
-    pub opt_adda_suba: bool,
-    pub opt_cmpa: bool,
-    pub opt_lea: bool,
-    pub opt_asl: bool,
-    pub opt_cmp0: bool,
-    pub opt_move0: bool,
-    pub opt_cmpi0: bool,
-    pub opt_sub_addi0: bool,
-    pub opt_bsr: bool,
-    pub opt_jmp_jsr: bool,
-    /// BRA/BSR/BccをJBRA/JBSR/JBccにする（-b1等）
-    pub bra_to_jbra: bool,
-
-    // ---- PC間接/絶対変換 ----
-    /// PC間接→絶対ロング変換モード（-b）
-    pub pc_to_absl_mode: PcToAbslMode,
-    /// 絶対ロングをoptional PC間接にする（-1）
-    pub absl_to_opc: bool,
-
-    // ---- 外部参照 ----
-    /// 外部参照オフセットデフォルトをロングに（-e）
-    pub ext_short: bool,
-    pub ext_size_flag: bool,
-    /// 未定義シンボルを外部参照に（-u）
-    pub all_xref: bool,
-    /// 全シンボルを外部定義に（-d）
-    pub all_xdef: bool,
-
-    // ---- CPU ----
-    /// 初期CPU型情報（-m）
-    pub cpu: crate::context::CpuType,
-
-    // ---- シンボル ----
-    /// シンボル識別長を8バイトに（-8）
-    pub sym_len8: bool,
-    /// プレデファインシンボルを定義する（-y1）
-    pub predefine: bool,
-    /// コマンドラインで定義するシンボル（-s symbol[=n]）
-    pub symbol_defs: Vec<(Vec<u8>, i32)>,
-    /// シンボル上書き禁止強化（-j bit0: SET, bit1: OFFSYM）
-    pub ow_set: bool,
-    pub ow_offsym: bool,
-
-    // ---- ローカルラベル ----
-    /// 数字ローカルラベルの最大桁数（-s n, 1-4）
-    pub local_len_max: u16,
-    /// 数字ローカルラベルの最大番号+1
-    pub local_num_max: u16,
-
-    // ---- PRNフォーマット ----
-    pub prn_no_page_ff: bool,
-    pub prn_is_lall: bool,
-    pub prn_width: u16,
-    pub prn_page_lines: u16,
-    pub prn_code_width: u16,
-
-    // ---- ソフトウェアエミュレーション展開 ----
-    /// FScc→FBcc展開（-cfscc[=6]）: 0=禁止, 0xFF00=全CPU, C060=68060のみ
-    pub expand_fscc: u16,
-    /// MOVEP→MOVE展開（-cmovep[=6]）
-    pub expand_movep: u16,
-
-    // ---- 68060エラッタ対策 ----
-    /// エラッタ対策禁止（-k1）
-    pub ignore_errata: bool,
-    pub f43g_test: bool,
-
-    // ---- g2asモード ----
-    /// 実行ファイル名が 'g2as' で始まる
-    pub g2as_mode: bool,
-
-    // ---- 拡張アライン ----
-    pub make_align: bool,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Options {
-            source_file: None,
-            object_file: None,
-            prn_file: None,
-            sym_file: None,
-            temp_path: None,
-            include_paths_env: None,
-            include_paths_cmd: None,
-
-            make_prn: false,
-            make_sym: false,
-            make_sym_deb: false,
-            disp_title: false,
-            warn_level: -1, // デフォルト: 後で 2 に解決
-
-            no_forward_opt: false,
-            optimize_disabled: false,
-            compat_mode: false,
-            compat_sw_a: false,
-            compat_sw_q: false,
-            no_abs_short: false,
-            no_quick: false,
-            no_null_disp: false,
-            no_bra_cut: false,
-            opt_clr: false,
-            opt_movea: false,
-            opt_adda_suba: false,
-            opt_cmpa: false,
-            opt_lea: false,
-            opt_asl: false,
-            opt_cmp0: false,
-            opt_move0: false,
-            opt_cmpi0: false,
-            opt_sub_addi0: false,
-            opt_bsr: false,
-            opt_jmp_jsr: false,
-            bra_to_jbra: false,
-
-            pc_to_absl_mode: PcToAbslMode::Disabled,
-            absl_to_opc: false,
-
-            ext_short: false,
-            ext_size_flag: false,
-            all_xref: false,
-            all_xdef: false,
-
-            cpu: crate::context::CpuType::default_68000(),
-
-            sym_len8: false,
-            predefine: false,
-            symbol_defs: Vec::new(),
-            ow_set: false,
-            ow_offsym: false,
-
-            local_len_max: DEFAULT_LOCAL_LEN_MAX,
-            local_num_max: DEFAULT_LOCAL_NUM_MAX,
-
-            prn_no_page_ff: false,
-            prn_is_lall: false,
-            prn_width: DEFAULT_PRN_WIDTH,
-            prn_page_lines: DEFAULT_PRN_PAGE_LINES,
-            prn_code_width: DEFAULT_PRN_CODE_WIDTH,
-
-            expand_fscc: 0,
-            expand_movep: 0,
-
-            ignore_errata: false,
-            f43g_test: true,
-
-            g2as_mode: false,
-            make_align: false,
-        }
-    }
-}
-
-impl Options {
-    /// 実効ワーニングレベル（-1 = デフォルト2）
-    pub fn effective_warn_level(&self) -> u8 {
-        if self.warn_level < 0 { 2 } else { self.warn_level as u8 }
-    }
-}
-
-/// コマンドライン解析エラー
-#[derive(Debug)]
-pub enum ParseError {
-    /// 使用法エラー（usage表示が必要）
-    Usage(String),
-    /// ソースファイルが複数指定された
-    MultipleSourceFiles,
-}
-
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ParseError::Usage(msg) => write!(f, "{}", msg),
-            ParseError::MultipleSourceFiles => write!(f, "複数のファイル名は指定できません"),
-        }
-    }
-}
+use super::types::{Options, ParseError, PcToAbslMode};
+use super::cpu::{self, cpu_number_to_type};
 
 /// コマンドライン全体の引数リスト（環境変数+コマンドライン）を解析する
 ///
@@ -384,14 +121,14 @@ fn process_switch(
         match ch {
             b't' => {
                 // -t path
-                let (s, n) = get_cmd_string(&chars[pos..], remaining_args, consumed)?;
+                let (s, n) = get_cmd_string(chars, remaining_args, consumed, pos)?;
                 opts.temp_path = Some(s);
                 consumed += n;
                 break; // 次の引数へ
             }
             b'o' => {
                 // -o name
-                let (mut name, n) = get_cmd_string(&chars[pos..], remaining_args, consumed)?;
+                let (mut name, n) = get_cmd_string(chars, remaining_args, consumed, pos)?;
                 consumed += n;
                 // 拡張子がなければ .o を付ける
                 if !name.contains(&b'.') {
@@ -402,7 +139,7 @@ fn process_switch(
             }
             b'i' => {
                 // -i path
-                let (path, n) = get_cmd_string(&chars[pos..], remaining_args, consumed)?;
+                let (path, n) = get_cmd_string(chars, remaining_args, consumed, pos)?;
                 consumed += n;
                 inc_list.push(path);
                 break;
@@ -456,7 +193,7 @@ fn process_switch(
             b'g' => opts.make_sym_deb = true,
             b'm' => {
                 // -m <cpu>
-                let (s, n) = get_cmd_string(&chars[pos..], remaining_args, consumed)?;
+                let (s, n) = get_cmd_string(chars, remaining_args, consumed, pos)?;
                 consumed += n;
                 let num_str = utils::bytes_to_string(&s);
                 let num: u32 = num_str.trim().parse().unwrap_or(0);
@@ -481,8 +218,8 @@ fn process_switch(
                     opts.local_len_max = d;
                     opts.local_num_max = [10, 100, 1000, 10000][(d - 1) as usize];
                 } else {
-                    // シンボル定義
-                    let (sym_str, n) = get_cmd_string(rest, remaining_args, consumed)?;
+                    // -s symbol[=n] もしくは次の引数
+                    let (sym_str, n) = get_cmd_string(chars, remaining_args, consumed, pos)?;
                     consumed += n;
                     let (name, val) = parse_symbol_def(&sym_str)?;
                     opts.symbol_defs.push((name, val));
@@ -772,10 +509,11 @@ fn get_cmd_string(
     chars: &[u8],
     remaining: &[Vec<u8>],
     already_consumed: usize,
+    pos: usize,
 ) -> Result<(Vec<u8>, usize), ParseError> {
-    if !chars.is_empty() {
+    if pos < chars.len() {
         // スイッチに続く文字列（例: -tpath）
-        return Ok((chars.to_vec(), 0));
+        return Ok((chars[pos..].to_vec(), 0));
     }
     // 次の引数
     let next_idx = already_consumed;
@@ -851,129 +589,4 @@ fn flatten_paths(paths: &[Vec<u8>]) -> Vec<u8> {
         result.push(0);
     }
     result
-}
-
-/// CPU番号をCPUタイプビットに変換する。
-/// 返値: Some(CpuType) または None（不正な値）
-pub fn cpu_number_to_type(n: u32) -> Option<crate::context::CpuType> {
-    match n {
-        68000 => Some(crate::context::CpuType::new(68000, cpu::C000)),
-        68010 => Some(crate::context::CpuType::new(68010, cpu::C010)),
-        68020 => Some(crate::context::CpuType::new(68020, cpu::C020)),
-        68030 => Some(crate::context::CpuType::new(68030, cpu::C030)),
-        68040 => Some(crate::context::CpuType::new(68040, cpu::C040)),
-        68060 => Some(crate::context::CpuType::new(68060, cpu::C060)),
-        5200 => Some(crate::context::CpuType::new(5200, cpu::C520)),
-        5300 => Some(crate::context::CpuType::new(5300, cpu::C530)),
-        5400 => Some(crate::context::CpuType::new(5400, cpu::C540)),
-        _ => None,
-    }
-}
-
-/// バージョン情報
-pub const VERSION: &str = "1.2.5";
-pub const VERSION_BASE: &str = "3.09+91";
-pub const COPYRIGHT: &str = "(C) 1990-1994/1996-2023 Y.Nakamura/M.Kamada";
-pub const COPYRIGHT_X: &str = "(C) 2026 TcbnErik / Rust port by rhas contributors";
-
-/// タイトルメッセージ
-pub fn title_message() -> String {
-    format!(
-        "HAS060X.X {} {}\n  based on X68k High-speed Assembler v{} {}\n",
-        VERSION, COPYRIGHT_X, VERSION_BASE, COPYRIGHT
-    )
-}
-
-/// 使用法メッセージ
-pub fn usage_message() -> String {
-    format!(
-        "{}使用法: rhas [スイッチ] ファイル名\n\
-        \t-1\t\t絶対ロング→PC間接(-b1と-eを伴う)\n\
-        \t-8\t\tシンボルの識別長を8バイトにする\n\
-        \t-b[n]\t\tPC間接→絶対ロング(0=[禁止],[1]=68000,2=MEM,3=1+2,4=ALL,5=1+4)\n\
-        \t-c[n]\t\t最適化(0=禁止(-k1を伴う),1=(d,An)を禁止,[2]=v2互換,3=[v3互換],4=許可)\n\
-        \t-c<mnemonic>\tsoftware emulationの命令を展開する(FScc/MOVEP)\n\
-        \t-d\t\tすべてのシンボルを外部定義にする\n\
-        \t-e\t\t外部参照オフセットのデフォルトをロングワードにする\n\
-        \t-f[f,m,w,p,c]\tリストファイルのフォーマット\n\
-        \t-g\t\tSCD用デバッグ情報の出力\n\
-        \t-i <path>\tインクルードパス指定\n\
-        \t-j[n]\t\tシンボルの上書き禁止条件の強化(bit0:[1]=SET,bit1:[1]=OFFSYM)\n\
-        \t-k[n]\t\t68060のエラッタ対策(0=[する](-nは無効),[1]=しない)\n\
-        \t-l\t\t起動時にタイトルを表示する\n\
-        \t-m <680x0|5x00>\tアセンブル対象CPUの指定([68000]〜68060/5200〜5400)\n\
-        \t-n\t\tパス1で確定できないサイズの最適化を省略する(-k1を伴う)\n\
-        \t-o <name>\tオブジェクトファイル名\n\
-        \t-p [file]\tリストファイル作成\n\
-        \t-s <n>\t\t数字ローカルラベルの最大桁数の指定(1〜[4])\n\
-        \t-s <symbol>[=n]\tシンボルの定義\n\
-        \t-t <path>\tテンポラリパス指定\n\
-        \t-u\t\t未定義シンボルを外部参照にする\n\
-        \t-w[n]\t\tワーニングレベルの指定(0=全抑制,1,[2],3,4=[全通知])\n\
-        \t-x [file]\tシンボルの出力\n\
-        \t-y[n]\t\tプレデファインシンボル(0=[禁止],[1]=許可)\n\
-        \t環境変数 HAS の内容がコマンドラインの手前(-iは後ろ)に挿入されます\n",
-        title_message()
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_defaults() {
-        let opts = Options::default();
-        assert_eq!(opts.cpu.number, 68000);
-        assert_eq!(opts.cpu.features, cpu::C000);
-        assert_eq!(opts.local_len_max, 4);
-        assert_eq!(opts.local_num_max, 10000);
-    }
-
-    #[test]
-    fn test_basic_parse() {
-        let result = parse_args(["source.s"], false);
-        let opts = result.unwrap();
-        assert_eq!(opts.source_file, Some(b"source.s".to_vec()));
-        assert!(!opts.all_xref);
-    }
-
-    #[test]
-    fn test_parse_cu() {
-        // -c4 -u
-        let result = parse_args(["-c4", "-u", "source.s"], false);
-        let opts = result.unwrap();
-        assert!(opts.opt_clr);
-        assert!(opts.all_xref);
-    }
-
-    #[test]
-    fn test_no_source() {
-        let result = parse_args::<[&str; 0], &str>([], false);
-        assert!(matches!(result, Err(ParseError::Usage(_))));
-    }
-
-    #[test]
-    fn test_c_option() {
-        let result = parse_args(["-c4", "foo.s"], false);
-        let opts = result.unwrap();
-        assert!(opts.opt_clr);
-        assert!(!opts.compat_mode);
-        assert!(!opts.no_abs_short);
-    }
-
-    #[test]
-    fn test_m_option() {
-        let result = parse_args(["-m68020", "foo.s"], false);
-        let opts = result.unwrap();
-        assert_eq!(opts.cpu.number, 68020);
-        assert_eq!(opts.cpu.features, cpu::C020);
-    }
-
-    #[test]
-    fn test_w_option() {
-        let result = parse_args(["-w0", "foo.s"], false);
-        let opts = result.unwrap();
-        assert_eq!(opts.effective_warn_level(), 0);
-    }
 }
