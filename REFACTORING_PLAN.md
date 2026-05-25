@@ -395,6 +395,30 @@ cargo test
 
 ---
 
+## 🔄 Step 10: `source.rs` のモジュール分割・整理
+
+### 目的
+`src/source.rs`（現在約360行）を `src/source/` ディレクトリ配下に分割・整理し、ソースバッファ表現 (`SourceBuf`)、インクルードスタック管理 (`SourceStack`)、パス解決ユーティリティの責務を分離することで可読性と保守性を向上させる。
+
+### 対象ファイル
+- `src/source.rs` (削除)
+- `src/source/mod.rs` (新規: エントリポイント)
+- `src/source/buf.rs` (新規: ソースバッファ構造)
+- `src/source/stack.rs` (新規: インクルードスタック処理)
+- `src/source/path.rs` (新規: インクルードパス変換)
+
+### テスト方法
+```bash
+cargo test
+# 確認: すべてのテストがパスすること
+```
+
+### 完了基準
+- ✅ `cargo test` ですべてのテストがパスすること
+- ✅ `src/source.rs` が削除され、`src/source/mod.rs` が 100 行以下に削減されること
+
+---
+
 ## 📊 進捗チェックリスト
 
 | Step | 説明 | 状態 | テスト結果 | 実施日 |
@@ -409,6 +433,7 @@ cargo test
 | 7 | pass1 再分割（命令・オペランドパース） | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-24 |
 | 8 | symbol built-in テーブル分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-25 |
 | 9 | options 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-25 |
+| 10 | source 分割 | ⏳ | - | - |
 
 ---
 
