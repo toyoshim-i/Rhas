@@ -435,6 +435,7 @@ cargo test
 | 9 | options 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-25 |
 | 10 | source 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-26 |
 | 11 | error 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-26 |
+| 12 | context 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-26 |
 
 ---
 
