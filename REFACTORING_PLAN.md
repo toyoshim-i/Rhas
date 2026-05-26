@@ -433,7 +433,7 @@ cargo test
 | 7 | pass1 再分割（命令・オペランドパース） | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-24 |
 | 8 | symbol built-in テーブル分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-25 |
 | 9 | options 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-25 |
-| 10 | source 分割 | ⏳ | - | - |
+| 10 | source 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-26 |
 
 ---
 
