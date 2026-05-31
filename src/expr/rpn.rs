@@ -14,36 +14,36 @@
 #[repr(u8)]
 pub enum Operator {
     // ---- 単項演算子 (OP_NEG=1 〜 OP_NUL=8) ----
-    Neg   = 0x01,  // -（単項マイナス）
-    Pos   = 0x02,  // +（単項プラス）
-    Not   = 0x03,  // .not.（ビット反転）
-    High  = 0x04,  // .high.（上位バイト）
-    Low   = 0x05,  // .low. （下位バイト）
-    HighW = 0x06,  // .highw.（上位ワード）
-    LowW  = 0x07,  // .loww. （下位ワード）
-    Nul   = 0x08,  // .nul.  （0にする）
+    Neg = 0x01,   // -（単項マイナス）
+    Pos = 0x02,   // +（単項プラス）
+    Not = 0x03,   // .not.（ビット反転）
+    High = 0x04,  // .high.（上位バイト）
+    Low = 0x05,   // .low. （下位バイト）
+    HighW = 0x06, // .highw.（上位ワード）
+    LowW = 0x07,  // .loww. （下位ワード）
+    Nul = 0x08,   // .nul.  （0にする）
     // ---- 二項演算子 (OP_MUL=9 〜 OP_OR=29) ----
-    Mul   = 0x09,  // *
-    Div   = 0x0A,  // /
-    Mod   = 0x0B,  // .mod.
-    Shr   = 0x0C,  // >> / .shr.
-    Shl   = 0x0D,  // << / .shl.
-    Asr   = 0x0E,  // .asr.（算術右シフト）
-    Sub   = 0x0F,  // -
-    Add   = 0x10,  // +
-    Eq    = 0x11,  // = / == / .eq.
-    Ne    = 0x12,  // <> / != / .ne.
-    Lt    = 0x13,  // < / .lt.（符号なし）
-    Le    = 0x14,  // <= / .le.（符号なし）
-    Gt    = 0x15,  // > / .gt.（符号なし）
-    Ge    = 0x16,  // >= / .ge.（符号なし）
-    Slt   = 0x17,  // .slt.（符号付き <）
-    Sle   = 0x18,  // .sle.（符号付き <=）
-    Sgt   = 0x19,  // .sgt.（符号付き >）
-    Sge   = 0x1A,  // .sge.（符号付き >=）
-    And   = 0x1B,  // & / .and.
-    Xor   = 0x1C,  // ^ / .xor.
-    Or    = 0x1D,  // | / .or.
+    Mul = 0x09, // *
+    Div = 0x0A, // /
+    Mod = 0x0B, // .mod.
+    Shr = 0x0C, // >> / .shr.
+    Shl = 0x0D, // << / .shl.
+    Asr = 0x0E, // .asr.（算術右シフト）
+    Sub = 0x0F, // -
+    Add = 0x10, // +
+    Eq = 0x11,  // = / == / .eq.
+    Ne = 0x12,  // <> / != / .ne.
+    Lt = 0x13,  // < / .lt.（符号なし）
+    Le = 0x14,  // <= / .le.（符号なし）
+    Gt = 0x15,  // > / .gt.（符号なし）
+    Ge = 0x16,  // >= / .ge.（符号なし）
+    Slt = 0x17, // .slt.（符号付き <）
+    Sle = 0x18, // .sle.（符号付き <=）
+    Sgt = 0x19, // .sgt.（符号付き >）
+    Sge = 0x1A, // .sge.（符号付き >=）
+    And = 0x1B, // & / .and.
+    Xor = 0x1C, // ^ / .xor.
+    Or = 0x1D,  // | / .or.
 }
 
 impl Operator {
@@ -54,18 +54,34 @@ impl Operator {
     pub fn priority(self) -> u8 {
         match self {
             // 1: 単項演算子
-            Operator::Neg | Operator::Pos | Operator::Not
-            | Operator::High | Operator::Low | Operator::HighW
-            | Operator::LowW | Operator::Nul => 1,
+            Operator::Neg
+            | Operator::Pos
+            | Operator::Not
+            | Operator::High
+            | Operator::Low
+            | Operator::HighW
+            | Operator::LowW
+            | Operator::Nul => 1,
             // 2: 乗除算・シフト
-            Operator::Mul | Operator::Div | Operator::Mod
-            | Operator::Shr | Operator::Shl | Operator::Asr => 2,
+            Operator::Mul
+            | Operator::Div
+            | Operator::Mod
+            | Operator::Shr
+            | Operator::Shl
+            | Operator::Asr => 2,
             // 3: 加減算
             Operator::Sub | Operator::Add => 3,
             // 4: 比較演算子
-            Operator::Eq | Operator::Ne | Operator::Lt | Operator::Le
-            | Operator::Gt | Operator::Ge | Operator::Slt | Operator::Sle
-            | Operator::Sgt | Operator::Sge => 4,
+            Operator::Eq
+            | Operator::Ne
+            | Operator::Lt
+            | Operator::Le
+            | Operator::Gt
+            | Operator::Ge
+            | Operator::Slt
+            | Operator::Sle
+            | Operator::Sgt
+            | Operator::Sge => 4,
             // 5: 論理 AND
             Operator::And => 5,
             // 6: 論理 XOR / OR
@@ -81,20 +97,34 @@ impl Operator {
     /// u8 コードから Operator に変換する
     pub fn from_u8(v: u8) -> Option<Self> {
         match v {
-            0x01 => Some(Operator::Neg),  0x02 => Some(Operator::Pos),
-            0x03 => Some(Operator::Not),  0x04 => Some(Operator::High),
-            0x05 => Some(Operator::Low),  0x06 => Some(Operator::HighW),
-            0x07 => Some(Operator::LowW), 0x08 => Some(Operator::Nul),
-            0x09 => Some(Operator::Mul),  0x0A => Some(Operator::Div),
-            0x0B => Some(Operator::Mod),  0x0C => Some(Operator::Shr),
-            0x0D => Some(Operator::Shl),  0x0E => Some(Operator::Asr),
-            0x0F => Some(Operator::Sub),  0x10 => Some(Operator::Add),
-            0x11 => Some(Operator::Eq),   0x12 => Some(Operator::Ne),
-            0x13 => Some(Operator::Lt),   0x14 => Some(Operator::Le),
-            0x15 => Some(Operator::Gt),   0x16 => Some(Operator::Ge),
-            0x17 => Some(Operator::Slt),  0x18 => Some(Operator::Sle),
-            0x19 => Some(Operator::Sgt),  0x1A => Some(Operator::Sge),
-            0x1B => Some(Operator::And),  0x1C => Some(Operator::Xor),
+            0x01 => Some(Operator::Neg),
+            0x02 => Some(Operator::Pos),
+            0x03 => Some(Operator::Not),
+            0x04 => Some(Operator::High),
+            0x05 => Some(Operator::Low),
+            0x06 => Some(Operator::HighW),
+            0x07 => Some(Operator::LowW),
+            0x08 => Some(Operator::Nul),
+            0x09 => Some(Operator::Mul),
+            0x0A => Some(Operator::Div),
+            0x0B => Some(Operator::Mod),
+            0x0C => Some(Operator::Shr),
+            0x0D => Some(Operator::Shl),
+            0x0E => Some(Operator::Asr),
+            0x0F => Some(Operator::Sub),
+            0x10 => Some(Operator::Add),
+            0x11 => Some(Operator::Eq),
+            0x12 => Some(Operator::Ne),
+            0x13 => Some(Operator::Lt),
+            0x14 => Some(Operator::Le),
+            0x15 => Some(Operator::Gt),
+            0x16 => Some(Operator::Ge),
+            0x17 => Some(Operator::Slt),
+            0x18 => Some(Operator::Sle),
+            0x19 => Some(Operator::Sgt),
+            0x1A => Some(Operator::Sge),
+            0x1B => Some(Operator::And),
+            0x1C => Some(Operator::Xor),
             0x1D => Some(Operator::Or),
             _ => None,
         }

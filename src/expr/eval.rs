@@ -75,19 +75,23 @@ pub fn eval_rpn(
             // ---- 即値 ----
             RPNToken::ValueByte(v) => stack.push(EvalValue::constant(*v as i32)),
             RPNToken::ValueWord(v) => stack.push(EvalValue::constant(*v as i32)),
-            RPNToken::Value(v)     => stack.push(EvalValue::constant(*v as i32)),
+            RPNToken::Value(v) => stack.push(EvalValue::constant(*v as i32)),
 
             // ---- シンボル参照 ----
-            RPNToken::SymbolRef(name) => {
-                match lookup(name) {
-                    Some(val) => stack.push(val),
-                    None      => return Err(EvalError::UndefinedSymbol(name.clone())),
-                }
-            }
+            RPNToken::SymbolRef(name) => match lookup(name) {
+                Some(val) => stack.push(val),
+                None => return Err(EvalError::UndefinedSymbol(name.clone())),
+            },
 
             // ---- ロケーションカウンタ ----
-            RPNToken::Location    => stack.push(EvalValue { value: loc as i32, section }),
-            RPNToken::CurrentLoc  => stack.push(EvalValue { value: cur_loc as i32, section }),
+            RPNToken::Location => stack.push(EvalValue {
+                value: loc as i32,
+                section,
+            }),
+            RPNToken::CurrentLoc => stack.push(EvalValue {
+                value: cur_loc as i32,
+                section,
+            }),
 
             // ---- 演算子 ----
             RPNToken::Op(op) => {
@@ -126,14 +130,14 @@ fn apply_unary(op: Operator, a: EvalValue) -> Result<EvalValue, EvalError> {
     }
     let v = a.value;
     let result = match op {
-        Operator::Neg  => v.wrapping_neg(),
-        Operator::Pos  => v,
-        Operator::Not  => !v,
+        Operator::Neg => v.wrapping_neg(),
+        Operator::Pos => v,
+        Operator::Not => !v,
         Operator::High => ((v as u32 >> 8) & 0xFF) as i32,
-        Operator::Low  => (v as u32 & 0xFF) as i32,
+        Operator::Low => (v as u32 & 0xFF) as i32,
         Operator::HighW => ((v as u32 >> 16) & 0xFFFF) as i32,
-        Operator::LowW  => (v as u32 & 0xFFFF) as i32,
-        Operator::Nul  => 0,
+        Operator::LowW => (v as u32 & 0xFFFF) as i32,
+        Operator::Nul => 0,
         _ => unreachable!(),
     };
     Ok(EvalValue::constant(result))
@@ -156,29 +160,33 @@ fn apply_binary(op: Operator, b: EvalValue, a: EvalValue) -> Result<EvalValue, E
             let result = match op {
                 Operator::Mul => mul32(bv, av),
                 Operator::Div => {
-                    if av == 0 { return Err(EvalError::DivisionByZero); }
+                    if av == 0 {
+                        return Err(EvalError::DivisionByZero);
+                    }
                     div32(bv, av)
                 }
                 Operator::Mod => {
-                    if av == 0 { return Err(EvalError::DivisionByZero); }
+                    if av == 0 {
+                        return Err(EvalError::DivisionByZero);
+                    }
                     mod32(bv, av)
                 }
                 Operator::Shr => ((bv as u32).wrapping_shr(av as u32)) as i32,
                 Operator::Shl => ((bv as u32).wrapping_shl(av as u32)) as i32,
                 Operator::Asr => bv.wrapping_shr(av as u32),
-                Operator::Eq  => bool_to_i32(bv == av),
-                Operator::Ne  => bool_to_i32(bv != av),
-                Operator::Lt  => bool_to_i32((bv as u32) < (av as u32)),
-                Operator::Le  => bool_to_i32((bv as u32) <= (av as u32)),
-                Operator::Gt  => bool_to_i32((bv as u32) > (av as u32)),
-                Operator::Ge  => bool_to_i32((bv as u32) >= (av as u32)),
+                Operator::Eq => bool_to_i32(bv == av),
+                Operator::Ne => bool_to_i32(bv != av),
+                Operator::Lt => bool_to_i32((bv as u32) < (av as u32)),
+                Operator::Le => bool_to_i32((bv as u32) <= (av as u32)),
+                Operator::Gt => bool_to_i32((bv as u32) > (av as u32)),
+                Operator::Ge => bool_to_i32((bv as u32) >= (av as u32)),
                 Operator::Slt => bool_to_i32(bv < av),
                 Operator::Sle => bool_to_i32(bv <= av),
                 Operator::Sgt => bool_to_i32(bv > av),
                 Operator::Sge => bool_to_i32(bv >= av),
                 Operator::And => bv & av,
                 Operator::Xor => bv ^ av,
-                Operator::Or  => bv | av,
+                Operator::Or => bv | av,
                 Operator::Add | Operator::Sub => unreachable!(),
                 _ => unreachable!(),
             };
@@ -202,9 +210,9 @@ fn apply_add(b: EvalValue, a: EvalValue) -> Result<EvalValue, EvalError> {
     }
     // <アドレス>+<定数> または <定数>+<アドレス>
     let addr = if b.section != 0 { b } else { a };
-    let cst  = if b.section == 0 { b } else { a };
+    let cst = if b.section == 0 { b } else { a };
     Ok(EvalValue {
-        value:   addr.value.wrapping_add(cst.value),
+        value: addr.value.wrapping_add(cst.value),
         section: addr.section,
     })
 }
@@ -228,7 +236,7 @@ fn apply_sub(b: EvalValue, a: EvalValue) -> Result<EvalValue, EvalError> {
     if b.section != 0 && a.section == 0 {
         // <アドレス>-<定数>
         return Ok(EvalValue {
-            value:   b.value.wrapping_sub(a.value),
+            value: b.value.wrapping_sub(a.value),
             section: b.section,
         });
     }
@@ -250,20 +258,28 @@ fn mul32(a: i32, b: i32) -> i32 {
 fn div32(a: i32, b: i32) -> i32 {
     // オリジナルは符号を手動処理してから符号なし除算
     // Rust の `wrapping_div` は同等の結果
-    if b == 0 { return 0; }
+    if b == 0 {
+        return 0;
+    }
     a.wrapping_div(b)
 }
 
 /// 32bit 剰余（符号付き、オリジナルの _mod に対応）
 fn mod32(a: i32, b: i32) -> i32 {
-    if b == 0 { return 0; }
+    if b == 0 {
+        return 0;
+    }
     a.wrapping_rem(b)
 }
 
 /// bool → i32（true=-1, false=0、オリジナルの seq/sne 等に合わせる）
 #[inline]
 fn bool_to_i32(v: bool) -> i32 {
-    if v { -1 } else { 0 }
+    if v {
+        -1
+    } else {
+        0
+    }
 }
 
 // ----------------------------------------------------------------
@@ -272,16 +288,29 @@ fn bool_to_i32(v: bool) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::rpn::RPNToken as T;
+    use super::*;
 
-    fn no_lookup(_: &[u8]) -> Option<EvalValue> { None }
+    fn no_lookup(_: &[u8]) -> Option<EvalValue> {
+        None
+    }
 
     fn sym_lookup(name: &[u8]) -> Option<EvalValue> {
-        if name == b"X" { Some(EvalValue { value: 0x1000, section: 1 }) }
-        else if name == b"Y" { Some(EvalValue { value: 0x2000, section: 1 }) }
-        else if name == b"C" { Some(EvalValue::constant(42)) }
-        else { None }
+        if name == b"X" {
+            Some(EvalValue {
+                value: 0x1000,
+                section: 1,
+            })
+        } else if name == b"Y" {
+            Some(EvalValue {
+                value: 0x2000,
+                section: 1,
+            })
+        } else if name == b"C" {
+            Some(EvalValue::constant(42))
+        } else {
+            None
+        }
     }
 
     fn eval(rpn: Rpn) -> Result<EvalValue, EvalError> {
@@ -297,14 +326,24 @@ mod tests {
     #[test]
     fn test_add_constants() {
         // 1 + 2 → 3
-        let rpn = vec![T::ValueByte(1), T::ValueByte(2), T::Op(Operator::Add), T::End];
+        let rpn = vec![
+            T::ValueByte(1),
+            T::ValueByte(2),
+            T::Op(Operator::Add),
+            T::End,
+        ];
         assert_eq!(eval(rpn), Ok(EvalValue::constant(3)));
     }
 
     #[test]
     fn test_mul_constants() {
         // 3 * 4 = 12
-        let rpn = vec![T::ValueByte(3), T::ValueByte(4), T::Op(Operator::Mul), T::End];
+        let rpn = vec![
+            T::ValueByte(3),
+            T::ValueByte(4),
+            T::Op(Operator::Mul),
+            T::End,
+        ];
         assert_eq!(eval(rpn), Ok(EvalValue::constant(12)));
     }
 
@@ -344,17 +383,32 @@ mod tests {
 
     #[test]
     fn test_div_zero() {
-        let rpn = vec![T::ValueByte(1), T::ValueByte(0), T::Op(Operator::Div), T::End];
+        let rpn = vec![
+            T::ValueByte(1),
+            T::ValueByte(0),
+            T::Op(Operator::Div),
+            T::End,
+        ];
         assert_eq!(eval(rpn), Err(EvalError::DivisionByZero));
     }
 
     #[test]
     fn test_comparison() {
         // 3 < 5 = -1 (true)
-        let rpn = vec![T::ValueByte(3), T::ValueByte(5), T::Op(Operator::Slt), T::End];
+        let rpn = vec![
+            T::ValueByte(3),
+            T::ValueByte(5),
+            T::Op(Operator::Slt),
+            T::End,
+        ];
         assert_eq!(eval(rpn), Ok(EvalValue::constant(-1)));
         // 5 < 3 = 0 (false)
-        let rpn = vec![T::ValueByte(5), T::ValueByte(3), T::Op(Operator::Slt), T::End];
+        let rpn = vec![
+            T::ValueByte(5),
+            T::ValueByte(3),
+            T::Op(Operator::Slt),
+            T::End,
+        ];
         assert_eq!(eval(rpn), Ok(EvalValue::constant(0)));
     }
 
@@ -363,16 +417,33 @@ mod tests {
         // '*' = 0x100（loc）
         let rpn = vec![T::Location, T::End];
         let res = eval_rpn(&rpn, 0x100, 0x200, 1, &no_lookup);
-        assert_eq!(res, Ok(EvalValue { value: 0x100, section: 1 }));
+        assert_eq!(
+            res,
+            Ok(EvalValue {
+                value: 0x100,
+                section: 1
+            })
+        );
         // '$' = 0x200（cur_loc）
         let rpn = vec![T::CurrentLoc, T::End];
         let res = eval_rpn(&rpn, 0x100, 0x200, 1, &no_lookup);
-        assert_eq!(res, Ok(EvalValue { value: 0x200, section: 1 }));
+        assert_eq!(
+            res,
+            Ok(EvalValue {
+                value: 0x200,
+                section: 1
+            })
+        );
     }
 
     #[test]
     fn test_symbol_lookup() {
-        let rpn = vec![T::SymbolRef(b"C".to_vec()), T::ValueByte(10), T::Op(Operator::Add), T::End];
+        let rpn = vec![
+            T::SymbolRef(b"C".to_vec()),
+            T::ValueByte(10),
+            T::Op(Operator::Add),
+            T::End,
+        ];
         let res = eval_rpn(&rpn, 0, 0, 0, &sym_lookup);
         assert_eq!(res, Ok(EvalValue::constant(52)));
     }
@@ -380,17 +451,39 @@ mod tests {
     #[test]
     fn test_addr_plus_const() {
         // X + 4 → section=1, value=0x1004
-        let rpn = vec![T::SymbolRef(b"X".to_vec()), T::ValueByte(4), T::Op(Operator::Add), T::End];
+        let rpn = vec![
+            T::SymbolRef(b"X".to_vec()),
+            T::ValueByte(4),
+            T::Op(Operator::Add),
+            T::End,
+        ];
         let res = eval_rpn(&rpn, 0, 0, 0, &sym_lookup);
-        assert_eq!(res, Ok(EvalValue { value: 0x1004, section: 1 }));
+        assert_eq!(
+            res,
+            Ok(EvalValue {
+                value: 0x1004,
+                section: 1
+            })
+        );
     }
 
     #[test]
     fn test_addr_minus_addr_same_section() {
         // X - Y → 0x1000 - 0x2000 = -0x1000 (constant, section=0)
-        let rpn = vec![T::SymbolRef(b"X".to_vec()), T::SymbolRef(b"Y".to_vec()), T::Op(Operator::Sub), T::End];
+        let rpn = vec![
+            T::SymbolRef(b"X".to_vec()),
+            T::SymbolRef(b"Y".to_vec()),
+            T::Op(Operator::Sub),
+            T::End,
+        ];
         let res = eval_rpn(&rpn, 0, 0, 0, &sym_lookup);
-        assert_eq!(res, Ok(EvalValue { value: -0x1000, section: 0 }));
+        assert_eq!(
+            res,
+            Ok(EvalValue {
+                value: -0x1000,
+                section: 0
+            })
+        );
     }
 
     #[test]
@@ -405,8 +498,11 @@ mod tests {
         // (3 + 4) * 2 = 14
         // RPN: 3 4 + 2 *
         let rpn = vec![
-            T::ValueByte(3), T::ValueByte(4), T::Op(Operator::Add),
-            T::ValueByte(2), T::Op(Operator::Mul),
+            T::ValueByte(3),
+            T::ValueByte(4),
+            T::Op(Operator::Add),
+            T::ValueByte(2),
+            T::Op(Operator::Mul),
             T::End,
         ];
         assert_eq!(eval(rpn), Ok(EvalValue::constant(14)));
