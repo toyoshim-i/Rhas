@@ -2,7 +2,7 @@
 //!
 //! `EffectiveAddress` → 6ビット EA フィールド + 拡張ワードバイト列
 
-use super::{EffectiveAddress, Displacement, IndexSpec, IdxSize, eac};
+use super::{eac, Displacement, EffectiveAddress, IdxSize, IndexSpec};
 use crate::expr::eval_rpn;
 
 // ----------------------------------------------------------------
@@ -20,7 +20,10 @@ pub struct EaEncoded {
 
 impl EaEncoded {
     fn new(ea_field: u8) -> Self {
-        EaEncoded { ea_field, ext_bytes: Vec::new() }
+        EaEncoded {
+            ea_field,
+            ext_bytes: Vec::new(),
+        }
     }
 
     fn push_word(&mut self, w: u16) {
@@ -88,10 +91,14 @@ fn eval_rpn_const(rpn: &crate::expr::Rpn) -> Result<i32, EncodeError> {
 /// bits 7-0:  displacement (signed 8-bit)
 /// ```
 fn make_brief_ext(idx: &IndexSpec, disp8: i8) -> u16 {
-    let da_bit  = if idx.reg >= 8 { 1u16 } else { 0u16 };
+    let da_bit = if idx.reg >= 8 { 1u16 } else { 0u16 };
     let reg_num = (idx.reg & 7) as u16;
-    let sz_bit  = if idx.size == IdxSize::Long { 1u16 } else { 0u16 };
-    let scale   = idx.scale as u16;
+    let sz_bit = if idx.size == IdxSize::Long {
+        1u16
+    } else {
+        0u16
+    };
+    let scale = idx.scale as u16;
     (da_bit << 15) | (reg_num << 12) | (sz_bit << 11) | (scale << 9) | ((disp8 as u8) as u16)
 }
 
@@ -131,7 +138,11 @@ fn check_byte(v: i32) -> Result<i8, EncodeError> {
 fn make_full_ext(idx: &IndexSpec, bs: bool, bd_size: u8, iis: u8) -> u16 {
     let da_bit = if idx.reg >= 8 { 1u16 } else { 0u16 };
     let reg_num = (idx.reg & 7) as u16;
-    let sz_bit = if idx.size == IdxSize::Long { 1u16 } else { 0u16 };
+    let sz_bit = if idx.size == IdxSize::Long {
+        1u16
+    } else {
+        0u16
+    };
     let scale = idx.scale as u16;
     let is_bit = if idx.suppress { 1u16 } else { 0u16 };
     let bs_bit = if bs { 1u16 } else { 0u16 };
@@ -144,9 +155,17 @@ fn make_full_ext(idx: &IndexSpec, bs: bool, bd_size: u8, iis: u8) -> u16 {
 
 /// ディスプレースメントの BD/OD サイズを決定する（01=null, 10=word, 11=long）
 fn disp_bd_size(v: i32) -> u8 {
-    if v == 0 { 1 }  // null
-    else if v >= i16::MIN as i32 && v <= i16::MAX as i32 { 2 }  // word
-    else { 3 }  // long
+    if v == 0 {
+        1
+    }
+    // null
+    else if v >= i16::MIN as i32 && v <= i16::MAX as i32 {
+        2
+    }
+    // word
+    else {
+        3
+    } // long
 }
 
 /// メモリ間接アドレッシングのエンコード共通処理
@@ -166,9 +185,9 @@ fn encode_mem_indirect(
     // Postindexed:  101=null_od, 110=word_od, 111=long_od
     // Preindexed:   001=null_od, 010=word_od, 011=long_od
     let iis = if is_post {
-        0b100 | od_sz  // 101/110/111
+        0b100 | od_sz // 101/110/111
     } else {
-        od_sz  // 001/010/011
+        od_sz // 001/010/011
     };
 
     let ext = make_full_ext(idx, false, bd_sz, iis);
@@ -202,20 +221,15 @@ fn encode_mem_indirect(
 pub fn encode_ea(ea: &EffectiveAddress, op_size: u8) -> Result<EaEncoded, EncodeError> {
     match ea {
         // ---- 拡張ワードなし ----
-        EffectiveAddress::DataReg(n) =>
-            Ok(EaEncoded::new(eac::DN | n)),
+        EffectiveAddress::DataReg(n) => Ok(EaEncoded::new(eac::DN | n)),
 
-        EffectiveAddress::AddrReg(n) =>
-            Ok(EaEncoded::new(eac::AN | n)),
+        EffectiveAddress::AddrReg(n) => Ok(EaEncoded::new(eac::AN | n)),
 
-        EffectiveAddress::AddrRegInd(n) =>
-            Ok(EaEncoded::new(eac::ADR | n)),
+        EffectiveAddress::AddrRegInd(n) => Ok(EaEncoded::new(eac::ADR | n)),
 
-        EffectiveAddress::AddrRegPostInc(n) =>
-            Ok(EaEncoded::new(eac::INCADR | n)),
+        EffectiveAddress::AddrRegPostInc(n) => Ok(EaEncoded::new(eac::INCADR | n)),
 
-        EffectiveAddress::AddrRegPreDec(n) =>
-            Ok(EaEncoded::new(eac::DECADR | n)),
+        EffectiveAddress::AddrRegPreDec(n) => Ok(EaEncoded::new(eac::DECADR | n)),
 
         // ---- 16ビットディスプレースメント（32ビットはフルフォーマットへフォールバック）----
         EffectiveAddress::AddrRegDisp { an, disp } => {
@@ -314,19 +328,19 @@ pub fn encode_ea(ea: &EffectiveAddress, op_size: u8) -> Result<EaEncoded, Encode
             let v = eval_rpn_const(rpn)?;
             let mut enc = EaEncoded::new(eac::IMM);
             match op_size {
-                0 => enc.push_word(v as u16),  // byte: 下位16bitをそのまま使用（HAS互換: -2→0xFFFE）
-                1 => enc.push_word(v as u16),  // word
-                2 => enc.push_long(v as u32),  // long
+                0 => enc.push_word(v as u16), // byte: 下位16bitをそのまま使用（HAS互換: -2→0xFFFE）
+                1 => enc.push_word(v as u16), // word
+                2 => enc.push_long(v as u32), // long
                 _ => return Err(EncodeError::InvalidMode),
             }
             Ok(enc)
         }
 
         // CCR/SR は命令固有のエンコードが必要（encode_move/encode_orandeorimm で処理）
-        EffectiveAddress::CcrReg | EffectiveAddress::SrReg
-        | EffectiveAddress::FpReg(_) | EffectiveAddress::FpCtrlReg(_) => {
-            Err(EncodeError::InvalidMode)
-        }
+        EffectiveAddress::CcrReg
+        | EffectiveAddress::SrReg
+        | EffectiveAddress::FpReg(_)
+        | EffectiveAddress::FpCtrlReg(_) => Err(EncodeError::InvalidMode),
     }
 }
 
@@ -337,9 +351,9 @@ pub fn encode_ea(ea: &EffectiveAddress, op_size: u8) -> Result<EaEncoded, Encode
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::addressing::{parse_ea, IndexSpec, IdxSize, Scale, Displacement, EffectiveAddress};
-    use crate::symbol::SymbolTable;
+    use crate::addressing::{parse_ea, Displacement, EffectiveAddress, IdxSize, IndexSpec, Scale};
     use crate::options::cpu;
+    use crate::symbol::SymbolTable;
 
     fn make_sym() -> SymbolTable {
         SymbolTable::new(false)
@@ -389,14 +403,14 @@ mod tests {
     fn test_encode_dspadr() {
         let enc = parse_and_encode("(4,a3)", 1);
         assert_eq!(enc.ea_field, eac::DSPADR | 3);
-        assert_eq!(enc.ext_bytes, vec![0x00, 0x04]);  // +4
+        assert_eq!(enc.ext_bytes, vec![0x00, 0x04]); // +4
     }
 
     #[test]
     fn test_encode_dspadr_negative() {
         let enc = parse_and_encode("(-8,a0)", 1);
         assert_eq!(enc.ea_field, eac::DSPADR);
-        assert_eq!(enc.ext_bytes, vec![0xFF, 0xF8]);  // -8 as i16 = 0xFFF8
+        assert_eq!(enc.ext_bytes, vec![0xFF, 0xF8]); // -8 as i16 = 0xFFF8
     }
 
     #[test]
@@ -460,7 +474,7 @@ mod tests {
     fn test_encode_imm_byte() {
         let enc = parse_and_encode("#$42", 0);
         assert_eq!(enc.ea_field, eac::IMM);
-        assert_eq!(enc.ext_bytes, vec![0x00, 0x42]);  // byte padded to word
+        assert_eq!(enc.ext_bytes, vec![0x00, 0x42]); // byte padded to word
     }
 
     #[test]
@@ -484,8 +498,17 @@ mod tests {
         // (4,a5,d2.l*4) のエンコードを直接検証
         let ea = EffectiveAddress::AddrRegIdx {
             an: 5,
-            disp: Displacement { rpn: vec![], size: None, const_val: Some(4) },
-            idx: IndexSpec { reg: 2, size: IdxSize::Long, scale: Scale::S4, suppress: false },
+            disp: Displacement {
+                rpn: vec![],
+                size: None,
+                const_val: Some(4),
+            },
+            idx: IndexSpec {
+                reg: 2,
+                size: IdxSize::Long,
+                scale: Scale::S4,
+                suppress: false,
+            },
         };
         let enc = encode_ea(&ea, 1).unwrap();
         assert_eq!(enc.ea_field, eac::IDXADR | 5);
@@ -500,11 +523,15 @@ mod tests {
         // 68020+: 16ビット超のディスプレースメントはフルフォーマット拡張ワードで処理
         let ea = EffectiveAddress::AddrRegDisp {
             an: 0,
-            disp: Displacement { rpn: vec![], size: None, const_val: Some(0x10000) },
+            disp: Displacement {
+                rpn: vec![],
+                size: None,
+                const_val: Some(0x10000),
+            },
         };
         let enc = encode_ea(&ea, 1).unwrap();
         assert_eq!(enc.ea_field, eac::IDXADR); // mode 110, reg A0
-        // ext word (0x0170) + long BD (4 bytes) = 6 bytes
+                                               // ext word (0x0170) + long BD (4 bytes) = 6 bytes
         assert_eq!(enc.ext_bytes.len(), 6);
         assert_eq!(enc.ext_bytes[0], 0x01); // full format: IS=1, BD=long
         assert_eq!(enc.ext_bytes[1], 0x70);
@@ -514,8 +541,17 @@ mod tests {
     fn test_encode_brief_disp_overflow() {
         let ea = EffectiveAddress::AddrRegIdx {
             an: 0,
-            disp: Displacement { rpn: vec![], size: None, const_val: Some(200) }, // > 127
-            idx: IndexSpec { reg: 0, size: IdxSize::Word, scale: Scale::S1, suppress: false },
+            disp: Displacement {
+                rpn: vec![],
+                size: None,
+                const_val: Some(200),
+            }, // > 127
+            idx: IndexSpec {
+                reg: 0,
+                size: IdxSize::Word,
+                scale: Scale::S1,
+                suppress: false,
+            },
         };
         assert!(matches!(
             encode_ea(&ea, 1),
