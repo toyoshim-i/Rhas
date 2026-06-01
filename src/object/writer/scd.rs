@@ -1,38 +1,19 @@
-//! HLK オブジェクトファイル書き出し
-//!
-//! docs/hlk_object_format.md で定義された形式に従って書き出す。
-//! HAS060.X の実際の出力形式に合わせた実装:
-//! - ファイルサイズフィールド = ファイル全体のバイト数
-//! - ファイル名・セクション名は偶数バイトにパディング（null 込みで奇数なら追加 null）
-//! - 常に text/data/bss/stack の4セクションヘッダを出力
-//! - コードボディは 20xx セクション切り替え + 10xx コードブロック形式
-
-use super::{ObjectCode, ScdEvent};
-
-/// null 終端文字列を偶数バイトになるようパディングして追加
-fn push_str_even(out: &mut Vec<u8>, s: &[u8]) {
-    out.extend_from_slice(s);
-    out.push(0x00);
-    // name + null の長さが奇数なら追加 null でパディング
-    if !(s.len() + 1).is_multiple_of(2) {
-        out.push(0x00);
-    }
-}
+use crate::object::{ObjectCode, ScdEvent};
 
 #[derive(Default, Clone)]
-struct ScdEntry {
-    name: [u8; 8],
-    value: u32,
-    section: i16,
-    type_code: u16,
-    scl: u8,
-    len: u8,
-    tag: u32,
-    size: u32,
-    dim0: u16,
-    dim1: u16,
-    next: u32,
-    tail: u16,
+pub(super) struct ScdEntry {
+    pub(super) name: [u8; 8],
+    pub(super) value: u32,
+    pub(super) section: i16,
+    pub(super) type_code: u16,
+    pub(super) scl: u8,
+    pub(super) len: u8,
+    pub(super) tag: u32,
+    pub(super) size: u32,
+    pub(super) dim0: u16,
+    pub(super) dim1: u16,
+    pub(super) next: u32,
+    pub(super) tail: u16,
 }
 
 fn fill_scd_name(dst: &mut [u8; 8], s: &[u8]) {
@@ -105,7 +86,7 @@ fn push_scd_entry_var(out: &mut Vec<u8>, e: &ScdEntry) {
     out.extend_from_slice(&full[..bytes.min(full.len())]);
 }
 
-fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
+pub(super) fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     let debug_mode = obj.has_debug_info;
     let scd_mode = obj.scd_enabled;
     if !debug_mode && !scd_mode {
@@ -196,12 +177,17 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     let mut open_bb: Vec<usize> = Vec::new();
     let mut open_bf: Vec<usize> = Vec::new();
     let mut open_tag_defs: Vec<usize> = Vec::new();
-    let mut tag_def_by_name: std::collections::HashMap<Vec<u8>, u32> = std::collections::HashMap::new();
+    let mut tag_def_by_name: std::collections::HashMap<Vec<u8>, u32> =
+        std::collections::HashMap::new();
     let mut pending_tag_name: Option<Vec<u8>> = None;
     let mut pending_val: Option<(u32, i16)> = None;
     for ev in &obj.scd_events {
         match ev {
-            ScdEvent::Ln { line, location, section } => {
+            ScdEvent::Ln {
+                line,
+                location,
+                section,
+            } => {
                 // HAS 本体は .ln を .text のみに限定している。
                 if *section == 1 {
                     lines.push((*location, *line));
@@ -213,7 +199,18 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
             ScdEvent::Tag { name } => {
                 pending_tag_name = Some(name.clone());
             }
-            ScdEvent::Endef { name, attrib, value, section, scl, type_code, size, dim, is_long, .. } => {
+            ScdEvent::Endef {
+                name,
+                attrib,
+                value,
+                section,
+                scl,
+                type_code,
+                size,
+                dim,
+                is_long,
+                ..
+            } => {
                 let (out_value, out_section_raw) = pending_val.unwrap_or((*value, *section));
                 // HAS互換: enumメンバ（scl=16）は存在しないセクション(-2)へ補正する。
                 let out_section = if *scl == 16 { -2 } else { out_section_raw };
@@ -246,8 +243,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 entries.push(ent);
                 let cur = entries.len() - 1;
                 // HAS互換: レコード(18バイト単位)インデックス
-                let cur_record: u32 = entries[..cur].iter()
-                    .map(|e| u32::from(e.len) + 1).sum();
+                let cur_record: u32 = entries[..cur].iter().map(|e| u32::from(e.len) + 1).sum();
                 let cur_next_record: u32 = cur_record + u32::from(entries[cur].len) + 1;
                 pending_tag_name = None;
                 pending_val = None;
@@ -291,8 +287,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
                 if *section == 1 {
                     if let Some(idx) = open_func_defs.pop() {
                         // HAS互換: next はレコード(18バイト単位)インデックスで指す。
-                        let next_num: u32 = entries.iter()
-                            .map(|e| u32::from(e.len) + 1).sum();
+                        let next_num: u32 = entries.iter().map(|e| u32::from(e.len) + 1).sum();
                         let ent = &mut entries[idx];
                         ent.size = location.saturating_sub(ent.value);
                         ent.next = next_num;
@@ -303,7 +298,11 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     }
     // HAS互換: .text/.data/.bss セクションエントリはユーザーイベントの後に追加する。
     let mut offset = 0u32;
-    for (name, sect, idx) in [(b".text".as_slice(), 1i16, 0usize), (b".data".as_slice(), 2, 1), (b".bss".as_slice(), 3, 2)] {
+    for (name, sect, idx) in [
+        (b".text".as_slice(), 1i16, 0usize),
+        (b".data".as_slice(), 2, 1),
+        (b".bss".as_slice(), 3, 2),
+    ] {
         let size = obj.sections.get(idx).map(|s| s.size).unwrap_or(0);
         let mut ent = ScdEntry {
             value: offset,
@@ -343,10 +342,7 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     entries[0].value = 8 + user_units;
 
     let line_len = (lines.len() as u32) * 6;
-    let scd_len: u32 = entries
-        .iter()
-        .map(|e| (u32::from(e.len) + 1) * 18)
-        .sum();
+    let scd_len: u32 = entries.iter().map(|e| (u32::from(e.len) + 1) * 18).sum();
     let exname_len = exname_data.len() as u32;
     out.extend_from_slice(&line_len.to_be_bytes());
     out.extend_from_slice(&scd_len.to_be_bytes());
@@ -360,129 +356,4 @@ fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
         push_scd_entry_var(out, ent);
     }
     out.extend_from_slice(&exname_data);
-}
-
-/// ObjectCode → HLK バイナリを生成する
-pub fn write_hlk(obj: &ObjectCode) -> Vec<u8> {
-    let mut out = Vec::with_capacity(256);
-
-    // ---- $D000: ファイルヘッダ ----
-    out.push(0xD0);
-    out.push(0x00);
-    // total_size プレースホルダ（後で書き戻す）
-    let total_size_pos = out.len();
-    out.extend_from_slice(&[0u8; 4]);
-    // ソースファイル名（拡張子なし、偶数パディング付き null 終端）
-    push_str_even(&mut out, &obj.source_name);
-
-    // ---- $C0xx: セクションヘッダ ----
-    for sect in &obj.sections {
-        out.push(0xC0);
-        out.push(sect.id);
-        out.extend_from_slice(&sect.size.to_be_bytes());
-        push_str_even(&mut out, sect.name().as_bytes());
-    }
-
-    // ---- $E001: requestファイル ----
-    for req in &obj.request_files {
-        out.push(0xE0);
-        out.push(0x01);
-        push_str_even(&mut out, req);
-    }
-
-    // ---- $B204: アラインメント情報（.align 使用時 / -g 指定時）----
-    if obj.has_align || obj.has_debug_info {
-        out.push(0xB2);
-        out.push(0x04);
-        let n = if obj.has_debug_info {
-            obj.max_align.max(1) as u32
-        } else {
-            obj.max_align as u32
-        };
-        out.extend_from_slice(&n.to_be_bytes());
-        // '*' + ソースファイル名（拡張子あり）+ '*'（偶数バイトパディング付き null 終端）
-        let mut b204_str = Vec::new();
-        b204_str.push(b'*');
-        b204_str.extend_from_slice(&obj.source_file);
-        b204_str.push(b'*');
-        push_str_even(&mut out, &b204_str);
-    }
-
-    // ---- $B2xx: 外部シンボル ----
-    for sym in &obj.ext_syms {
-        out.push(0xB2);
-        out.push(sym.kind);
-        out.extend_from_slice(&sym.value.to_be_bytes());
-        push_str_even(&mut out, &sym.name);
-    }
-
-    // ---- オブジェクトコード本体（20xx + 10xx 形式）----
-    out.extend_from_slice(&obj.code_body);
-
-    // ---- $0000: 終端 ----
-    out.push(0x00);
-    out.push(0x00);
-
-    // ---- SCD デバッグ拡張部（HAS 互換: 0000 の後に続く）----
-    write_scd_footer(&mut out, obj);
-
-    // total_size を書き戻す（HAS060.X 互換: ファイル全体のサイズ）
-    let total_size = out.len() as u32;
-    let ts = total_size.to_be_bytes();
-    out[total_size_pos]     = ts[0];
-    out[total_size_pos + 1] = ts[1];
-    out[total_size_pos + 2] = ts[2];
-    out[total_size_pos + 3] = ts[3];
-
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::object::{ExternalSymbol, ObjectCode, SectionInfo, sym_kind};
-
-    #[test]
-    fn test_minimal_hlk() {
-        // move.b d0,d1 だけのオブジェクトファイル（HAS060.X 互換形式）
-        let mut obj = ObjectCode::new(b"test".to_vec());
-        // text section
-        obj.sections.push(SectionInfo { id: 0x01, bytes: vec![0x12, 0x00], size: 2 });
-        // data/bss/stack (empty)
-        obj.sections.push(SectionInfo { id: 0x02, bytes: vec![], size: 0 });
-        obj.sections.push(SectionInfo { id: 0x03, bytes: vec![], size: 0 });
-        obj.sections.push(SectionInfo { id: 0x04, bytes: vec![], size: 0 });
-        // code_body: 10 01 12 00
-        obj.code_body = vec![0x10, 0x01, 0x12, 0x00];
-        let hlk = write_hlk(&obj);
-
-        // ファイル先頭: D0 00
-        assert_eq!(&hlk[0..2], &[0xD0, 0x00]);
-        // 最後2バイトが 00 00
-        let len = hlk.len();
-        assert_eq!(&hlk[len-2..], &[0x00, 0x00]);
-        // サイズフィールドが total size に一致
-        let stored_size = u32::from_be_bytes([hlk[2], hlk[3], hlk[4], hlk[5]]);
-        assert_eq!(stored_size, len as u32);
-        // "test\0\0" (偶数パディング: "test"=4バイト → 4+1=5(奇数) → +1 → 6バイト)
-        assert_eq!(&hlk[6..12], b"test\0\0");
-    }
-
-    #[test]
-    fn test_xref_symbol() {
-        let mut obj = ObjectCode::new(b"src".to_vec());
-        obj.ext_syms.push(ExternalSymbol {
-            kind: sym_kind::XREF,
-            value: 1,
-            name: b"printf".to_vec(),
-        });
-        // 4 sections
-        for id in 1u8..=4 {
-            obj.sections.push(SectionInfo { id, bytes: vec![], size: 0 });
-        }
-        let hlk = write_hlk(&obj);
-        // B2 FF が含まれるはず
-        let found = hlk.windows(2).any(|w| w == [0xB2, 0xFF]);
-        assert!(found);
-    }
 }

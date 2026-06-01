@@ -440,6 +440,7 @@ cargo test
 | 14 | addressing 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-31 |
 | 15 | expr 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-31 |
 | 16 | pass2 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-31 |
+| 17 | writer 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-01 |
 
 ---
 
