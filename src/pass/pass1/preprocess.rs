@@ -68,7 +68,10 @@ fn is_anon_ident_cont(b: u8) -> bool {
 /// - `1:`  -> `__n1__0:`
 /// - `1f`  -> `__n1__0` （次の `1:`）
 /// - `1b`  -> `__n1__0` （直前の `1:`）
-pub(super) fn preprocess_numeric_local_labels(line: &[u8], counts: &mut HashMap<u32, u32>) -> Vec<u8> {
+pub(super) fn preprocess_numeric_local_labels(
+    line: &[u8],
+    counts: &mut HashMap<u32, u32>,
+) -> Vec<u8> {
     let mut result = Vec::with_capacity(line.len() + 16);
     let mut i = 0usize;
     let mut def_num: Option<u32> = None;
@@ -121,7 +124,8 @@ pub(super) fn preprocess_numeric_local_labels(line: &[u8], counts: &mut HashMap<
             // $2b / %1010 / 0x2f のような数値リテラルは置換しない。
             let numeric_prefix = matches!(prev, Some(b'$' | b'%'))
                 || (i >= 2 && (line[i - 2] == b'0') && matches!(line[i - 1], b'x' | b'X'));
-            let left_boundary = (i == 0 || !is_num_local_ident_cont(line[i - 1])) && !numeric_prefix;
+            let left_boundary =
+                (i == 0 || !is_num_local_ident_cont(line[i - 1])) && !numeric_prefix;
             if left_boundary {
                 let mut k = i;
                 while k < line.len() && line[k].is_ascii_digit() {
@@ -130,7 +134,8 @@ pub(super) fn preprocess_numeric_local_labels(line: &[u8], counts: &mut HashMap<
                 let suffix = line.get(k).copied();
                 if let Some(suffix_char @ (b'f' | b'b')) = suffix {
                     let after = k + 1;
-                    let right_boundary = after >= line.len() || !is_num_local_ident_cont(line[after]);
+                    let right_boundary =
+                        after >= line.len() || !is_num_local_ident_cont(line[after]);
                     if right_boundary {
                         if let Ok(num_str) = std::str::from_utf8(&line[i..k]) {
                             if let Ok(num) = num_str.parse::<u32>() {

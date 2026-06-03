@@ -1,13 +1,13 @@
+use super::skip_spaces;
 use crate::addressing::{parse_ea, EffectiveAddress};
 use crate::expr::rpn::RPNToken;
-use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol::types::reg;
-use super::skip_spaces;
+use crate::symbol::{Symbol, SymbolTable};
 
 pub(super) fn parse_operands(
-    line:     &[u8],
-    mut pos:  usize,
-    sym:      &SymbolTable,
+    line: &[u8],
+    mut pos: usize,
+    sym: &SymbolTable,
     cpu_type: u16,
 ) -> Vec<EffectiveAddress> {
     fn fp_mask_bit(fp_idx: u8) -> u16 {
@@ -100,7 +100,10 @@ pub(super) fn parse_operands(
             last_fp = fp2;
         }
 
-        Some(EffectiveAddress::Immediate(vec![RPNToken::ValueWord(mask), RPNToken::End]))
+        Some(EffectiveAddress::Immediate(vec![
+            RPNToken::ValueWord(mask),
+            RPNToken::End,
+        ]))
     }
 
     fn parse_fp_ctrl_list_token(
@@ -156,7 +159,10 @@ pub(super) fn parse_operands(
             return None;
         }
         *pos = p;
-        Some(EffectiveAddress::Immediate(vec![RPNToken::ValueWord(mask), RPNToken::End]))
+        Some(EffectiveAddress::Immediate(vec![
+            RPNToken::ValueWord(mask),
+            RPNToken::End,
+        ]))
     }
 
     fn parse_fp_pair_token(
@@ -218,7 +224,10 @@ pub(super) fn parse_operands(
         *pos = end_s;
         // 0x8000 を FPc:FPs の識別マーカーとして使用。
         let encoded = 0x8000u16 | ((fp_c as u16) << 4) | (fp_s as u16);
-        Some(EffectiveAddress::Immediate(vec![RPNToken::ValueWord(encoded), RPNToken::End]))
+        Some(EffectiveAddress::Immediate(vec![
+            RPNToken::ValueWord(encoded),
+            RPNToken::End,
+        ]))
     }
 
     fn parse_fp_register_token(
@@ -264,17 +273,24 @@ pub(super) fn parse_operands(
     skip_spaces(line, &mut pos);
 
     loop {
-        if pos >= line.len() || line[pos] == b';' { break; }
+        if pos >= line.len() || line[pos] == b';' {
+            break;
+        }
         match parse_fp_ctrl_list_token(line, &mut pos, sym, cpu_type)
             .map(Ok)
-            .unwrap_or_else(|| parse_fp_reg_list_token(line, &mut pos, sym, cpu_type)
-            .map(Ok)
-            .unwrap_or_else(|| parse_fp_pair_token(line, &mut pos, sym, cpu_type)
-            .map(Ok)
-            .unwrap_or_else(|| parse_fp_register_token(line, &mut pos, sym, cpu_type)
-            .map(Ok)
-            .unwrap_or_else(|| parse_ea(line, &mut pos, sym, cpu_type)))))
-        {
+            .unwrap_or_else(|| {
+                parse_fp_reg_list_token(line, &mut pos, sym, cpu_type)
+                    .map(Ok)
+                    .unwrap_or_else(|| {
+                        parse_fp_pair_token(line, &mut pos, sym, cpu_type)
+                            .map(Ok)
+                            .unwrap_or_else(|| {
+                                parse_fp_register_token(line, &mut pos, sym, cpu_type)
+                                    .map(Ok)
+                                    .unwrap_or_else(|| parse_ea(line, &mut pos, sym, cpu_type))
+                            })
+                    })
+            }) {
             Ok(ea) => {
                 ops.push(ea);
                 // Bitfield suffix {offset:width}
@@ -295,7 +311,9 @@ pub(super) fn parse_operands(
                         }
                     }
                     skip_spaces(line, &mut pos);
-                    if pos < line.len() && line[pos] == b'}' { pos += 1; }
+                    if pos < line.len() && line[pos] == b'}' {
+                        pos += 1;
+                    }
                 }
                 // Register pair Dn:Dm or EA pair (An):(Am) for CAS2/MULS.L etc.
                 if pos < line.len() && line[pos] == b':' {
@@ -304,7 +322,9 @@ pub(super) fn parse_operands(
                     skip_spaces(line, &mut pos);
                     match parse_ea(line, &mut pos, sym, cpu_type) {
                         Ok(pair) => ops.push(pair),
-                        Err(_) => { pos = save; }
+                        Err(_) => {
+                            pos = save;
+                        }
                     }
                 }
             }
