@@ -444,6 +444,7 @@ cargo test
 | 18 | pass1_macro 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-03 |
 | 19 | pass1_pseudo 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-04 |
 | 20 | instructions ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-08 |
+| 21 | pass1_optimize 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-10 |
 
 ---
 

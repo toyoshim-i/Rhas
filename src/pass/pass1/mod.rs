@@ -20,6 +20,7 @@ use std::collections::HashMap;
 mod insn;
 mod macro_exp;
 mod operand;
+mod optimize;
 mod preprocess;
 mod pseudo_dispatch;
 
