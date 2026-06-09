@@ -5,10 +5,13 @@
 //! 入力はすでに解析済みの EffectiveAddress。
 //! シンボル参照を含む EA は `InsnError::DeferToLinker` を返す。
 
+pub mod arith;
+pub mod cmp;
 pub mod data;
 pub mod flow;
 pub mod fpu;
-pub mod ops;
+pub mod logic;
+pub mod shift;
 
 use crate::addressing::{
     encode::{encode_ea, EaEncoded, EncodeError},
@@ -198,36 +201,36 @@ pub fn encode_insn(
         InsnHandler::PeaJsrJmp => data::encode_peajsrjmp(base_opcode, operands),
         InsnHandler::JmpJsr => data::encode_jmpjsr(base_opcode, operands),
         // ---- 算術 ----
-        InsnHandler::SubAdd => ops::encode_subadd(base_opcode, size, operands),
-        InsnHandler::SubAddQ => ops::encode_subaddq(base_opcode, size, operands),
-        InsnHandler::SubAddI => ops::encode_subaddi(base_opcode, size, operands),
-        InsnHandler::SbAdCpA => ops::encode_sbadcpa(base_opcode, size, operands),
-        InsnHandler::SubAddX => ops::encode_subaddx(base_opcode, size, operands),
-        InsnHandler::DivMul => ops::encode_divmul(base_opcode, size, operands),
-        InsnHandler::NegNot => ops::encode_negnot(base_opcode, size, operands),
-        InsnHandler::Clr => ops::encode_clr(base_opcode, size, operands),
-        InsnHandler::Tst => ops::encode_tst(base_opcode, size, operands),
-        InsnHandler::Ext => ops::encode_ext(size, operands),
-        InsnHandler::Swap => ops::encode_swap(operands),
-        InsnHandler::Exg => ops::encode_exg(operands),
-        InsnHandler::Chk => ops::encode_chk(size, operands),
-        InsnHandler::SAbcd => ops::encode_sabcd(base_opcode, operands),
-        InsnHandler::DecInc => ops::encode_decinc(base_opcode, size, operands),
+        InsnHandler::SubAdd => arith::encode_subadd(base_opcode, size, operands),
+        InsnHandler::SubAddQ => arith::encode_subaddq(base_opcode, size, operands),
+        InsnHandler::SubAddI => arith::encode_subaddi(base_opcode, size, operands),
+        InsnHandler::SbAdCpA => arith::encode_sbadcpa(base_opcode, size, operands),
+        InsnHandler::SubAddX => arith::encode_subaddx(base_opcode, size, operands),
+        InsnHandler::DivMul => arith::encode_divmul(base_opcode, size, operands),
+        InsnHandler::NegNot => arith::encode_negnot(base_opcode, size, operands),
+        InsnHandler::Clr => arith::encode_clr(base_opcode, size, operands),
+        InsnHandler::Tst => arith::encode_tst(base_opcode, size, operands),
+        InsnHandler::Ext => arith::encode_ext(size, operands),
+        InsnHandler::Swap => arith::encode_swap(operands),
+        InsnHandler::Exg => logic::encode_exg(operands),
+        InsnHandler::Chk => logic::encode_chk(size, operands),
+        InsnHandler::SAbcd => arith::encode_sabcd(base_opcode, operands),
+        InsnHandler::DecInc => arith::encode_decinc(base_opcode, size, operands),
         // ---- 比較 ----
-        InsnHandler::Cmp => ops::encode_cmp(base_opcode, size, operands),
-        InsnHandler::CmpI => ops::encode_cmpi(base_opcode, size, operands),
-        InsnHandler::CmpA => ops::encode_cmpa(base_opcode, size, operands),
-        InsnHandler::CmpM => ops::encode_cmpm(base_opcode, size, operands),
+        InsnHandler::Cmp => cmp::encode_cmp(base_opcode, size, operands),
+        InsnHandler::CmpI => cmp::encode_cmpi(base_opcode, size, operands),
+        InsnHandler::CmpA => cmp::encode_cmpa(base_opcode, size, operands),
+        InsnHandler::CmpM => cmp::encode_cmpm(base_opcode, size, operands),
         // ---- 論理 ----
-        InsnHandler::OrAnd => ops::encode_orand(base_opcode, size, operands),
-        InsnHandler::OrAndEorI => ops::encode_orandeorimm(base_opcode, size, operands),
-        InsnHandler::Eor => ops::encode_eor(base_opcode, size, operands),
+        InsnHandler::OrAnd => logic::encode_orand(base_opcode, size, operands),
+        InsnHandler::OrAndEorI => logic::encode_orandeorimm(base_opcode, size, operands),
+        InsnHandler::Eor => logic::encode_eor(base_opcode, size, operands),
         // ---- ビット操作 ----
-        InsnHandler::BchClSt => ops::encode_bchclst(base_opcode, operands),
-        InsnHandler::Btst => ops::encode_btst(operands),
+        InsnHandler::BchClSt => logic::encode_bchclst(base_opcode, operands),
+        InsnHandler::Btst => logic::encode_btst(operands),
         // ---- シフト/ローテート ----
-        InsnHandler::SftRot => ops::encode_sftrot(base_opcode, size, operands),
-        InsnHandler::Asl => ops::encode_asl(base_opcode, size, operands),
+        InsnHandler::SftRot => shift::encode_sftrot(base_opcode, size, operands),
+        InsnHandler::Asl => shift::encode_asl(base_opcode, size, operands),
         // ---- 分岐 ----
         InsnHandler::Bcc => flow::encode_bcc(base_opcode, operands),
         InsnHandler::JBcc => Err(InsnError::DeferToLinker),
