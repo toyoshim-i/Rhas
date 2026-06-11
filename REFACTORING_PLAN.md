@@ -446,6 +446,7 @@ cargo test
 | 20 | instructions ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-08 |
 | 21 | pass1_optimize 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-10 |
 | 22 | instructions/ops.rs カテゴリ分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-11 |
+| 23 | addressing ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-12 |
 
 ---
 
