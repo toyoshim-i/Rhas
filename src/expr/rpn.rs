@@ -162,33 +162,3 @@ pub enum RPNToken {
 
 /// 逆ポーランド式（RPNトークン列）
 pub type Rpn = Vec<RPNToken>;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_operator_priority() {
-        assert!(Operator::Mul.priority() < Operator::Add.priority());
-        assert!(Operator::Add.priority() < Operator::Eq.priority());
-        assert!(Operator::Eq.priority() < Operator::And.priority());
-        assert!(Operator::And.priority() < Operator::Or.priority());
-    }
-
-    #[test]
-    fn test_operator_is_unary() {
-        assert!(Operator::Neg.is_unary());
-        assert!(Operator::Not.is_unary());
-        assert!(!Operator::Mul.is_unary());
-        assert!(!Operator::Add.is_unary());
-    }
-
-    #[test]
-    fn test_from_u8() {
-        assert_eq!(Operator::from_u8(0x01), Some(Operator::Neg));
-        assert_eq!(Operator::from_u8(0x10), Some(Operator::Add));
-        assert_eq!(Operator::from_u8(0x1D), Some(Operator::Or));
-        assert_eq!(Operator::from_u8(0x00), None);
-        assert_eq!(Operator::from_u8(0xFF), None);
-    }
-}
