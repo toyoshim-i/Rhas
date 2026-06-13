@@ -13,15 +13,15 @@ use crate::options::cpu;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i8)]
 pub enum SizeCode {
-    None   = -1,
-    Byte   = 0,
-    Word   = 1,
-    Long   = 2,
-    Short  = 3,  // .s / Single(FPP)
-    Double = 4,  // .d (FPP)
-    Extend = 5,  // .x (FPP)
-    Packed = 6,  // .p (FPP)
-    Quad   = 7,  // .q (MMU)
+    None = -1,
+    Byte = 0,
+    Word = 1,
+    Long = 2,
+    Short = 3,  // .s / Single(FPP)
+    Double = 4, // .d (FPP)
+    Extend = 5, // .x (FPP)
+    Packed = 6, // .p (FPP)
+    Quad = 7,   // .q (MMU)
 }
 
 /// 命令に使用できるサイズのビットセット（register.equ: SZB/SZW/SZL等）
@@ -31,17 +31,17 @@ pub struct SizeFlags(pub u8);
 pub mod sz {
     use super::SizeFlags;
     pub const NONE: SizeFlags = SizeFlags(0x00);
-    pub const B: SizeFlags    = SizeFlags(1 << 0);
-    pub const W: SizeFlags    = SizeFlags(1 << 1);
-    pub const L: SizeFlags    = SizeFlags(1 << 2);
-    pub const S: SizeFlags    = SizeFlags(1 << 3);  // Short / Single
-    pub const D: SizeFlags    = SizeFlags(1 << 4);  // Double
-    pub const X: SizeFlags    = SizeFlags(1 << 5);  // Extend
-    pub const P: SizeFlags    = SizeFlags(1 << 6);  // Packed
-    pub const Q: SizeFlags    = SizeFlags(1 << 7);  // Quad
-    pub const BW: SizeFlags   = SizeFlags(B.0 | W.0);
-    pub const BWL: SizeFlags  = SizeFlags(B.0 | W.0 | L.0);
-    pub const WL: SizeFlags   = SizeFlags(W.0 | L.0);
+    pub const B: SizeFlags = SizeFlags(1 << 0);
+    pub const W: SizeFlags = SizeFlags(1 << 1);
+    pub const L: SizeFlags = SizeFlags(1 << 2);
+    pub const S: SizeFlags = SizeFlags(1 << 3); // Short / Single
+    pub const D: SizeFlags = SizeFlags(1 << 4); // Double
+    pub const X: SizeFlags = SizeFlags(1 << 5); // Extend
+    pub const P: SizeFlags = SizeFlags(1 << 6); // Packed
+    pub const Q: SizeFlags = SizeFlags(1 << 7); // Quad
+    pub const BW: SizeFlags = SizeFlags(B.0 | W.0);
+    pub const BWL: SizeFlags = SizeFlags(B.0 | W.0 | L.0);
+    pub const WL: SizeFlags = SizeFlags(W.0 | L.0);
     pub const BWLS: SizeFlags = SizeFlags(B.0 | W.0 | L.0 | S.0);
 }
 
@@ -68,19 +68,28 @@ pub mod cmask {
     // 全 68k
     pub const M68K: CpuMask = CpuMask(c::C000 | c::C010 | c::C020 | c::C030 | c::C040 | c::C060);
     // 全 ColdFire
-    pub const CF: CpuMask   = CpuMask(c::C520 | c::C530 | c::C540);
+    pub const CF: CpuMask = CpuMask(c::C520 | c::C530 | c::C540);
     // 全 CPU（疑似命令含む）
-    pub const ALL: CpuMask  = CpuMask(
-        c::C000|c::C010|c::C020|c::C030|c::C040|c::C060|c::CMMU|c::CFPP|c::C520|c::C530|c::C540
+    pub const ALL: CpuMask = CpuMask(
+        c::C000
+            | c::C010
+            | c::C020
+            | c::C030
+            | c::C040
+            | c::C060
+            | c::CMMU
+            | c::CFPP
+            | c::C520
+            | c::C530
+            | c::C540,
     );
     // 68000〜68060 + 全 CF
     pub const ALL_INSN: CpuMask = CpuMask(
-        c::C000|c::C010|c::C020|c::C030|c::C040|c::C060|c::C520|c::C530|c::C540
+        c::C000 | c::C010 | c::C020 | c::C030 | c::C040 | c::C060 | c::C520 | c::C530 | c::C540,
     );
     // 68020以降 + CF
-    pub const C020UP: CpuMask = CpuMask(
-        c::C020|c::C030|c::C040|c::C060|c::C520|c::C530|c::C540
-    );
+    pub const C020UP: CpuMask =
+        CpuMask(c::C020 | c::C030 | c::C040 | c::C060 | c::C520 | c::C530 | c::C540);
 }
 
 impl CpuMask {
@@ -126,9 +135,9 @@ pub mod reg {
     pub const ZA7: u8 = 0x1F;
     pub const ZPC: u8 = 0x2E;
     // 特殊レジスタ
-    pub const PC:  u8 = 0x20;
+    pub const PC: u8 = 0x20;
     pub const CCR: u8 = 0x21;
-    pub const SR:  u8 = 0x22;
+    pub const SR: u8 = 0x22;
     pub const USP: u8 = 0x23;
     pub const SFC: u8 = 0x24;
     pub const DFC: u8 = 0x25;
@@ -138,43 +147,43 @@ pub mod reg {
     pub const CACR: u8 = 0x29;
     pub const CAAR: u8 = 0x2A;
     pub const BUSCR: u8 = 0x2B;
-    pub const PCR: u8  = 0x2C;
-    pub const OPC: u8  = 0x2F;
+    pub const PCR: u8 = 0x2C;
+    pub const OPC: u8 = 0x2F;
     // MMUレジスタ
-    pub const CRP: u8   = 0x40;
-    pub const SRP: u8   = 0x41;
-    pub const TC: u8    = 0x42;
-    pub const TT0: u8   = 0x43;
-    pub const TT1: u8   = 0x44;
+    pub const CRP: u8 = 0x40;
+    pub const SRP: u8 = 0x41;
+    pub const TC: u8 = 0x42;
+    pub const TT0: u8 = 0x43;
+    pub const TT1: u8 = 0x44;
     pub const MMUSR: u8 = 0x45;
-    pub const URP: u8   = 0x46;
-    pub const ITT0: u8  = 0x47;
-    pub const ITT1: u8  = 0x48;
-    pub const DTT0: u8  = 0x49;
-    pub const DTT1: u8  = 0x4A;
-    pub const NC: u8    = 0x5C;
-    pub const DC: u8    = 0x5D;
-    pub const IC: u8    = 0x5E;
-    pub const BC: u8    = 0x5F;
+    pub const URP: u8 = 0x46;
+    pub const ITT0: u8 = 0x47;
+    pub const ITT1: u8 = 0x48;
+    pub const DTT0: u8 = 0x49;
+    pub const DTT1: u8 = 0x4A;
+    pub const NC: u8 = 0x5C;
+    pub const DC: u8 = 0x5D;
+    pub const IC: u8 = 0x5E;
+    pub const BC: u8 = 0x5F;
     // ColdFireレジスタ
-    pub const ROMBAR: u8  = 0x30;
+    pub const ROMBAR: u8 = 0x30;
     pub const RAMBAR0: u8 = 0x34;
     pub const RAMBAR1: u8 = 0x35;
-    pub const MBAR: u8    = 0x3F;
-    pub const ACC: u8     = 0x70;
-    pub const MACSR: u8   = 0x74;
-    pub const MASK: u8    = 0x76;
+    pub const MBAR: u8 = 0x3F;
+    pub const ACC: u8 = 0x70;
+    pub const MACSR: u8 = 0x74;
+    pub const MASK: u8 = 0x76;
     // FPPレジスタ
-    pub const FP0: u8   = 0x80;
-    pub const FP1: u8   = 0x81;
-    pub const FP2: u8   = 0x82;
-    pub const FP3: u8   = 0x83;
-    pub const FP4: u8   = 0x84;
-    pub const FP5: u8   = 0x85;
-    pub const FP6: u8   = 0x86;
-    pub const FP7: u8   = 0x87;
-    pub const FPCR: u8  = 0x88;
-    pub const FPSR: u8  = 0x89;
+    pub const FP0: u8 = 0x80;
+    pub const FP1: u8 = 0x81;
+    pub const FP2: u8 = 0x82;
+    pub const FP3: u8 = 0x83;
+    pub const FP4: u8 = 0x84;
+    pub const FP5: u8 = 0x85;
+    pub const FP6: u8 = 0x86;
+    pub const FP7: u8 = 0x87;
+    pub const FPCR: u8 = 0x88;
+    pub const FPSR: u8 = 0x89;
     pub const FPIAR: u8 = 0x8A;
 }
 
@@ -195,16 +204,16 @@ pub enum InsnHandler {
     MoveM,
     MoveP,
     Lea,
-    PeaJsrJmp,   // pea / jsr / jmp（ソース共通）
+    PeaJsrJmp, // pea / jsr / jmp（ソース共通）
     JmpJsr,
     // ---- 算術 ----
-    SubAdd,      // add / sub
-    SubAddQ,     // addq / subq
-    SubAddI,     // addi / subi
-    SbAdCpA,     // adda / suba / cmpa（ソース共通）
-    SubAddX,     // addx / subx
-    DivMul,      // mulu/muls/divu/divs
-    NegNot,      // neg/negx/not/nbcd
+    SubAdd,  // add / sub
+    SubAddQ, // addq / subq
+    SubAddI, // addi / subi
+    SbAdCpA, // adda / suba / cmpa（ソース共通）
+    SubAddX, // addx / subx
+    DivMul,  // mulu/muls/divu/divs
+    NegNot,  // neg/negx/not/nbcd
     Clr,
     Tst,
     Ext,
@@ -217,27 +226,27 @@ pub enum InsnHandler {
     CmpA,
     CmpM,
     // ---- 論理 ----
-    OrAnd,       // or/and
-    OrAndEorI,   // ori/andi/eori
+    OrAnd,     // or/and
+    OrAndEorI, // ori/andi/eori
     Eor,
     // ---- ビット操作 ----
-    BchClSt,     // bchg/bclr/bset
+    BchClSt, // bchg/bclr/bset
     Btst,
     // ---- シフト / ローテート ----
-    SftRot,      // asr/lsr/ror/rol/roxr/roxl
-    Asl,         // asl（-b1による最適化あり）
+    SftRot, // asr/lsr/ror/rol/roxr/roxl
+    Asl,    // asl（-b1による最適化あり）
     // ---- BCD / パック10進 ----
-    SAbcd,       // sbcd/abcd
+    SAbcd, // sbcd/abcd
     // ---- 分岐 ----
     Bcc,
-    JBcc,        // jbra/jbsr/jbhi等（長距離分岐）
+    JBcc, // jbra/jbsr/jbhi等（長距離分岐）
     DBcc,
     Scc,
-    DecInc,      // dec/inc（HAS独自）
+    DecInc, // dec/inc（HAS独自）
     Link,
     Unlk,
     Trap,
-    StopRtd,     // stop/rtd
+    StopRtd, // stop/rtd
     // ---- 疑似命令 ----
     Even,
     Quad,
@@ -338,18 +347,18 @@ pub enum InsnHandler {
     CInvPushLP,  // CINVL/CINVP/CPUSHL/CPUSHP cache_set,(An)
     CInvPushA,   // CINVA/CPUSHA cache_set
     // FPU (68881/68882)
-    FMove,       // FMOVE
-    FMoveM,      // FMOVEM (control-register subset)
-    FMoveCr,     // FMOVECR
-    FSinCos,     // FSINCOS
-    FArith,      // FADD/FSUB/FMUL/FDIV
-    FCmp,        // FCMP
-    FTst,        // FTST
-    FNop,        // FNOP
-    FSave,       // FSAVE
-    FRestore,    // FRESTORE
-    FBcc,        // FBcc
-    FDBcc,       // FDBcc
+    FMove,    // FMOVE
+    FMoveM,   // FMOVEM (control-register subset)
+    FMoveCr,  // FMOVECR
+    FSinCos,  // FSINCOS
+    FArith,   // FADD/FSUB/FMUL/FDIV
+    FCmp,     // FCMP
+    FTst,     // FTST
+    FNop,     // FNOP
+    FSave,    // FSAVE
+    FRestore, // FRESTORE
+    FBcc,     // FBcc
+    FDBcc,    // FDBcc
 }
 
 // ----------------------------------------------------------------
@@ -360,10 +369,10 @@ pub enum InsnHandler {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum DefAttrib {
-    Undef     = 0,  // SA_UNDEF: 使用されたが未定義
-    NoDet     = 1,  // SA_NODET: 定義されたが値未確定
-    Define    = 2,  // SA_DEFINE: 定義・値確定
-    Predefine = 3,  // SA_PREDEFINE: 定義・値確定・再定義不可
+    Undef = 0,     // SA_UNDEF: 使用されたが未定義
+    NoDet = 1,     // SA_NODET: 定義されたが値未確定
+    Define = 2,    // SA_DEFINE: 定義・値確定
+    Predefine = 3, // SA_PREDEFINE: 定義・値確定・再定義不可
 }
 
 /// 外部参照属性（has.equ: SECT_XREF〜SECT_GLOBL）
@@ -381,9 +390,9 @@ pub enum ExtAttrib {
 /// シンボルの最初の定義方法（ST_VALUE のみ）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FirstDef {
-    Other  = 0,
-    Set    = -1,   // .set(=) で定義
-    Offsym = 1,    // .offsym で定義
+    Other = 0,
+    Set = -1,   // .set(=) で定義
+    Offsym = 1, // .offsym で定義
 }
 
 /// シンボルテーブルエントリ（symbol.equ の各 ST_* に対応）
@@ -401,10 +410,7 @@ pub enum Symbol {
     },
 
     /// 浮動小数点実数シンボル（ST_REAL）
-    Real {
-        size: SizeCode,
-        data: Vec<u8>,
-    },
+    Real { size: SizeCode, data: Vec<u8> },
 
     /// .reg シンボル（ST_REGSYM）
     /// define: コンマ区切りの各要素のRPN式リスト
@@ -471,35 +477,5 @@ impl Symbol {
     /// ローカルラベルかどうか（Phase 2 では使用しない）
     pub fn is_local(&self) -> bool {
         false // ST_LOCAL は後で区別する
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_size_flags() {
-        assert!(sz::BWL.contains(sz::B));
-        assert!(sz::BWL.contains(sz::W));
-        assert!(sz::BWL.contains(sz::L));
-        assert!(!sz::BWL.contains(sz::S));
-    }
-
-    #[test]
-    fn test_cpu_mask_pseudo() {
-        assert!(CpuMask(0).is_pseudo());
-        assert!(!CpuMask(cpu::C000).is_pseudo());
-    }
-
-    #[test]
-    fn test_cpu_mask_matches() {
-        let m = CpuMask(cpu::C000 | cpu::C010);
-        assert!(m.matches(cpu::C000));
-        assert!(m.matches(cpu::C010));
-        assert!(!m.matches(cpu::C020));
-        // 疑似命令は全CPUで使用可能
-        assert!(CpuMask(0).matches(cpu::C000));
-        assert!(CpuMask(0).matches(cpu::C060));
     }
 }

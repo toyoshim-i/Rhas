@@ -8,14 +8,14 @@
 //! - `reg_table`: レジスタ名（大文字小文字区別なし、起動時登録）
 //! - `cmd_table`: 命令名・マクロ名（大文字小文字区別なし）
 
-pub mod types;
 mod table;
+pub mod types;
 
-use std::collections::HashMap;
 use crate::utils;
-use types::{CpuMask, DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeFlags};
-use types::{cmask, sz, reg};
+use std::collections::HashMap;
 pub use types::Symbol;
+use types::{cmask, reg, sz};
+use types::{CpuMask, DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeFlags};
 
 // ----------------------------------------------------------------
 // SymbolTable
@@ -60,21 +60,32 @@ impl SymbolTable {
             let key = utils::to_lowercase_vec(name.as_bytes());
             self.reg_table.insert(
                 key,
-                Symbol::Register { arch: CpuMask(*arch), regno: *regno },
+                Symbol::Register {
+                    arch: CpuMask(*arch),
+                    regno: *regno,
+                },
             );
         }
         // MOVEC control register names (68010+)
         for (name, val) in [
-            ("sfc",  0x000i32), ("dfc",  0x001),
-            ("cacr", 0x002), ("tc",   0x003),
-            ("itt0", 0x004), ("itt1", 0x005),
-            ("dtt0", 0x006), ("dtt1", 0x007),
+            ("sfc", 0x000i32),
+            ("dfc", 0x001),
+            ("cacr", 0x002),
+            ("tc", 0x003),
+            ("itt0", 0x004),
+            ("itt1", 0x005),
+            ("dtt0", 0x006),
+            ("dtt1", 0x007),
             ("buscr", 0x008),
-            ("usp",  0x800), ("vbr",  0x801),
-            ("caar", 0x802), ("msp",  0x803),
-            ("isp",  0x804), ("mmusr", 0x805),
-            ("urp",  0x806), ("srp",  0x807),
-            ("pcr",  0x808),
+            ("usp", 0x800),
+            ("vbr", 0x801),
+            ("caar", 0x802),
+            ("msp", 0x803),
+            ("isp", 0x804),
+            ("mmusr", 0x805),
+            ("urp", 0x806),
+            ("srp", 0x807),
+            ("pcr", 0x808),
         ] {
             self.user_syms.insert(
                 name.as_bytes().to_vec(),
@@ -110,11 +121,11 @@ impl SymbolTable {
             self.cmd_table.insert(
                 key,
                 Symbol::Opcode {
-                    noopr:   entry.noopr,
-                    arch:    entry.arch,
-                    size:    entry.size,
-                    size2:   entry.size2,
-                    opcode:  entry.opcode,
+                    noopr: entry.noopr,
+                    arch: entry.arch,
+                    size: entry.size,
+                    size2: entry.size2,
+                    opcode: entry.opcode,
                     handler: entry.handler,
                 },
             );
@@ -180,7 +191,11 @@ impl SymbolTable {
 
     /// シンボルを名前で検索して可変参照を返す（ext_attrib 更新等に使用）
     pub fn lookup_sym_mut(&mut self, name: &[u8]) -> Option<&mut Symbol> {
-        let key = if self.sym_len8 && name.len() > 8 { &name[..8] } else { name };
+        let key = if self.sym_len8 && name.len() > 8 {
+            &name[..8]
+        } else {
+            name
+        };
         self.user_syms.get_mut(key)
     }
 
@@ -229,119 +244,5 @@ impl SymbolTable {
     }
 }
 
-
-
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::options::cpu;
-
-    fn make_tbl() -> SymbolTable {
-        SymbolTable::new(false)
-    }
-
-    #[test]
-    fn test_lookup_register_d0() {
-        let tbl = make_tbl();
-        let sym = tbl.lookup_reg(b"d0", cpu::C000);
-        assert!(sym.is_some());
-        if let Some(Symbol::Register { arch, regno }) = sym {
-            assert!(arch.matches(cpu::C000));
-            assert_eq!(*regno, reg::D0);
-        } else {
-            panic!("expected Register");
-        }
-    }
-
-    #[test]
-    fn test_lookup_register_case_insensitive() {
-        let tbl = make_tbl();
-        assert!(tbl.lookup_reg(b"D0", cpu::C000).is_some());
-        assert!(tbl.lookup_reg(b"A7", cpu::C000).is_some());
-        assert!(tbl.lookup_reg(b"SP", cpu::C000).is_some());
-    }
-
-    #[test]
-    fn test_lookup_register_cpu_filter() {
-        let tbl = make_tbl();
-        // fp0 は 68040 以降のみ
-        assert!(tbl.lookup_reg(b"fp0", cpu::C000).is_none());
-        assert!(tbl.lookup_reg(b"fp0", cpu::C040).is_some());
-    }
-
-    #[test]
-    fn test_lookup_opcode_move() {
-        let tbl = make_tbl();
-        let sym = tbl.lookup_cmd(b"move", cpu::C000);
-        assert!(sym.is_some());
-        if let Some(Symbol::Opcode { handler, opcode, .. }) = sym {
-            assert_eq!(*handler, InsnHandler::Move);
-            assert_eq!(*opcode, 0x0000);
-        } else {
-            panic!("expected Opcode");
-        }
-    }
-
-    #[test]
-    fn test_lookup_opcode_case_insensitive() {
-        let tbl = make_tbl();
-        assert!(tbl.lookup_cmd(b"MOVE", cpu::C000).is_some());
-        assert!(tbl.lookup_cmd(b"BRA",  cpu::C000).is_some());
-        assert!(tbl.lookup_cmd(b"NOP",  cpu::C000).is_some());
-    }
-
-    #[test]
-    fn test_lookup_pseudo() {
-        let tbl = make_tbl();
-        // 疑似命令は全CPUで使用可能
-        let sym = tbl.lookup_cmd(b"dc", cpu::C000);
-        assert!(sym.is_some());
-        assert!(sym.unwrap().is_pseudo());
-        // 68060 でも使用可能
-        assert!(tbl.lookup_cmd(b"dc", cpu::C060).is_some());
-    }
-
-    #[test]
-    fn test_lookup_dbcc_cpu_filter() {
-        let tbl = make_tbl();
-        // dbcc は 68k のみ、ColdFire 不可
-        assert!(tbl.lookup_cmd(b"dbra", cpu::C000).is_some());
-        assert!(tbl.lookup_cmd(b"dbra", cpu::C060).is_some());
-        assert!(tbl.lookup_cmd(b"dbra", cpu::C520).is_none());
-    }
-
-    #[test]
-    fn test_define_and_lookup_user_sym() {
-        let mut tbl = make_tbl();
-        tbl.define(
-            b"MY_LABEL".to_vec(),
-            Symbol::Value {
-                attrib: DefAttrib::Define,
-                ext_attrib: ExtAttrib::None,
-                section: 1,
-                org_num: 0,
-                first: FirstDef::Other,
-                opt_count: 0,
-                value: 0x1000,
-            },
-        );
-        assert!(tbl.is_defined(b"MY_LABEL"));
-        assert!(!tbl.is_defined(b"my_label")); // 大文字小文字区別
-    }
-
-    #[test]
-    fn test_builtin_counts() {
-        let tbl = make_tbl();
-        // レジスタ・命令のカウントが非ゼロであることを確認
-        assert!(tbl.reg_count() > 50);   // 最低 50 レジスタ
-        assert!(tbl.cmd_count() > 100);  // 最低 100 命令
-    }
-
-    #[test]
-    fn test_sym_len8() {
-        let tbl = SymbolTable::new(true);  // -8 オプション有効
-        // 8文字で切り詰め
-        tbl.lookup_sym(b"ABCDEFGHIJKLMN"); // クラッシュしないこと
-    }
-}
+mod tests;
