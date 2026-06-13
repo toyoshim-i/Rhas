@@ -449,6 +449,7 @@ cargo test
 | 23 | addressing ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-12 |
 | 24 | expr ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-14 |
 | 25 | symbol ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-14 |
+| 26 | pass/pseudo ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-14 |
 
 ---
 

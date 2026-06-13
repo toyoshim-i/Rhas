@@ -17,3 +17,6 @@ pub mod conditional;
 pub mod macro_;
 pub mod debug;
 pub mod misc;
+
+#[cfg(test)]
+mod tests;

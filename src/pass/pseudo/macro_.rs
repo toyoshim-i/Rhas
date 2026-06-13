@@ -89,35 +89,4 @@ pub fn handle_macro(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn test_parse_repeat_count_zero() {
-        assert_eq!(parse_repeat_count(0), 0);
-    }
-
-    #[test]
-    fn test_parse_repeat_count_nonzero() {
-        assert_eq!(parse_repeat_count(10), 10);
-        assert_eq!(parse_repeat_count(1), 1);
-    }
-
-    #[test]
-    fn test_check_macro_nesting_within() {
-        assert!(check_macro_nesting(2, 10));
-        assert!(check_macro_nesting(9, 10));
-    }
-
-    #[test]
-    fn test_check_macro_nesting_full() {
-        assert!(!check_macro_nesting(10, 10));
-        assert!(!check_macro_nesting(11, 10));
-    }
-
-    #[test]
-    fn test_check_macro_nesting_zero() {
-        assert!(check_macro_nesting(0, 1));
-    }
-}

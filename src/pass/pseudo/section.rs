@@ -33,33 +33,4 @@ pub fn handle_section(
     records.push(TempRecord::SectChange { id: sect_id });
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn test_handle_section_text() {
-        let mut ctx = AssemblyContext::new(crate::options::Options::default());
-        let mut records = Vec::new();
-
-        handle_section(InsnHandler::TextSect, &mut ctx, &mut records);
-
-        assert_eq!(ctx.section, Section::Text);
-        assert_eq!(records.len(), 1);
-        if let TempRecord::SectChange { id } = &records[0] {
-            assert_eq!(*id, 0x01u8);
-        } else {
-            panic!("Expected SectChange record");
-        }
-    }
-
-    #[test]
-    fn test_handle_section_data() {
-        let mut ctx = AssemblyContext::new(crate::options::Options::default());
-        let mut records = Vec::new();
-
-        handle_section(InsnHandler::DataSect, &mut ctx, &mut records);
-
-        assert_eq!(ctx.section, Section::Data);
-    }
-}
