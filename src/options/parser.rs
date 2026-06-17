@@ -1,7 +1,7 @@
-use std::ffi::OsStr;
-use crate::utils;
-use super::types::{Options, ParseError, PcToAbslMode};
 use super::cpu::{self, cpu_number_to_type};
+use super::types::{Options, ParseError, PcToAbslMode};
+use crate::utils;
+use std::ffi::OsStr;
 
 /// コマンドライン全体の引数リスト（環境変数+コマンドライン）を解析する
 ///
@@ -12,7 +12,10 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let mut opts = Options { g2as_mode, ..Default::default() };
+    let mut opts = Options {
+        g2as_mode,
+        ..Default::default()
+    };
 
     // 環境変数 HAS または G2AS を取得
     let env_name = if g2as_mode { "G2AS" } else { "HAS" };
@@ -40,7 +43,9 @@ where
     let mut inc_path_env: Vec<Vec<u8>> = Vec::new();
     let mut inc_path_cmd: Vec<Vec<u8>> = Vec::new();
     let mut in_env_section = !env_args.is_empty();
-    let env_arg_count = if env_args.is_empty() { 0 } else {
+    let env_arg_count = if env_args.is_empty() {
+        0
+    } else {
         split_args(env_args.as_bytes()).len()
     };
 
@@ -63,12 +68,7 @@ where
                 &mut inc_path_cmd
             };
             let remaining = &all_args[i..];
-            let consumed = process_switch(
-                &arg[1..],
-                remaining,
-                &mut opts,
-                inc_list,
-            )?;
+            let consumed = process_switch(&arg[1..], remaining, &mut opts, inc_list)?;
             i += consumed;
         } else {
             // ファイル名
@@ -202,7 +202,10 @@ fn process_switch(
                 } else if num > 1000 && num < 32768 {
                     // 最大シンボル数指定（無視）
                 } else {
-                    return Err(ParseError::Usage(format!("-m: 不正なCPU指定 '{}'", num_str)));
+                    return Err(ParseError::Usage(format!(
+                        "-m: 不正なCPU指定 '{}'",
+                        num_str
+                    )));
                 }
                 break;
             }
@@ -288,7 +291,10 @@ fn process_switch(
             b'q' => opts.compat_sw_q = true,
             b'z' | b'r' => {}
             _ => {
-                return Err(ParseError::Usage(format!("不明なオプション: -{}", ch as char)));
+                return Err(ParseError::Usage(format!(
+                    "不明なオプション: -{}",
+                    ch as char
+                )));
             }
         }
     }
@@ -304,16 +310,32 @@ fn parse_c_option(chars: &[u8], opts: &mut Options) -> Result<usize, ParseError>
         return Ok(0);
     }
     match chars[0] {
-        b'0' => { apply_c0(opts); Ok(1) }
-        b'1' => { apply_c1(opts); Ok(1) }
-        b'2' => { apply_c2(opts); Ok(1) }
-        b'3' => { apply_c3(opts); Ok(1) }
-        b'4' => { apply_c4(opts); Ok(1) }
+        b'0' => {
+            apply_c0(opts);
+            Ok(1)
+        }
+        b'1' => {
+            apply_c1(opts);
+            Ok(1)
+        }
+        b'2' => {
+            apply_c2(opts);
+            Ok(1)
+        }
+        b'3' => {
+            apply_c3(opts);
+            Ok(1)
+        }
+        b'4' => {
+            apply_c4(opts);
+            Ok(1)
+        }
         _ => {
             // -c<mnemonic> を解析（fscc / movep / all）
-            let end = chars.iter().position(|&c| {
-                !c.is_ascii_alphanumeric() && c != b'_'
-            }).unwrap_or(chars.len());
+            let end = chars
+                .iter()
+                .position(|&c| !c.is_ascii_alphanumeric() && c != b'_')
+                .unwrap_or(chars.len());
             let mnem: Vec<u8> = chars[..end].iter().map(|&c| c | 0x20).collect();
             let mut skip = end;
             // =6 サフィックス
@@ -330,10 +352,12 @@ fn parse_c_option(chars: &[u8], opts: &mut Options) -> Result<usize, ParseError>
                     opts.expand_fscc = cpu_mask;
                     opts.expand_movep = cpu_mask;
                 }
-                _ => return Err(ParseError::Usage(format!(
-                    "-c: 不明なニーモニック '{}'",
-                    utils::bytes_to_string(&mnem)
-                ))),
+                _ => {
+                    return Err(ParseError::Usage(format!(
+                        "-c: 不明なニーモニック '{}'",
+                        utils::bytes_to_string(&mnem)
+                    )))
+                }
             }
             Ok(skip)
         }
@@ -432,12 +456,20 @@ fn parse_prn_format(chars: &[u8], opts: &mut Options) -> usize {
     let (v, n) = get_optional_num(&chars[pos..]);
     pos += n;
     match v {
-        None => { opts.prn_no_page_ff = true; return pos; }
+        None => {
+            opts.prn_no_page_ff = true;
+            return pos;
+        }
         Some(0) => opts.prn_no_page_ff = true,
         Some(1) => opts.prn_no_page_ff = false,
-        _ => { opts.prn_no_page_ff = true; return pos; }
+        _ => {
+            opts.prn_no_page_ff = true;
+            return pos;
+        }
     }
-    if chars.get(pos) != Some(&b',') { return pos; }
+    if chars.get(pos) != Some(&b',') {
+        return pos;
+    }
     pos += 1;
     // m（マクロ展開）
     let (v, n) = get_optional_num(&chars[pos..]);
@@ -445,7 +477,9 @@ fn parse_prn_format(chars: &[u8], opts: &mut Options) -> usize {
     if let Some(v) = v {
         opts.prn_is_lall = v != 0;
     }
-    if chars.get(pos) != Some(&b',') { return pos; }
+    if chars.get(pos) != Some(&b',') {
+        return pos;
+    }
     pos += 1;
     // w（幅）
     let (v, n) = get_optional_num(&chars[pos..]);
@@ -455,7 +489,9 @@ fn parse_prn_format(chars: &[u8], opts: &mut Options) -> usize {
             opts.prn_width = (v & !7) as u16;
         }
     }
-    if chars.get(pos) != Some(&b',') { return pos; }
+    if chars.get(pos) != Some(&b',') {
+        return pos;
+    }
     pos += 1;
     // p（ページ行数）
     let (v, n) = get_optional_num(&chars[pos..]);
@@ -465,7 +501,9 @@ fn parse_prn_format(chars: &[u8], opts: &mut Options) -> usize {
             opts.prn_page_lines = v as u16;
         }
     }
-    if chars.get(pos) != Some(&b',') { return pos; }
+    if chars.get(pos) != Some(&b',') {
+        return pos;
+    }
     pos += 1;
     // c（コード幅）
     let (v, n) = get_optional_num(&chars[pos..]);

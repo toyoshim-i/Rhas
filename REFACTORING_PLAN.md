@@ -452,6 +452,8 @@ cargo test
 | 26 | pass/pseudo ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-14 |
 | 27 | pass/prn ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-14 |
 | 28 | object/writer ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-17 |
+| 29 | options ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-17 |
+
 
 
 

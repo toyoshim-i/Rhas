@@ -9,12 +9,12 @@ pub const DEFAULT_CPU_NUMBER: u32 = 68000;
 /// -b オプション：PC間接→絶対ロング変換モード
 #[derive(Debug, Clone, PartialEq)]
 pub enum PcToAbslMode {
-    Disabled,  // 0: 禁止
-    M68k,      // 1: 68000コード生成（BRATOJBRA, LONGABS）
-    Mem,       // 2: i-cache回避（lea/pea以外）
-    M68kMem,   // 3: 1+2
-    All,       // 4: デバッグ用（全て）
-    M68kAll,   // 5: 1+4
+    Disabled, // 0: 禁止
+    M68k,     // 1: 68000コード生成（BRATOJBRA, LONGABS）
+    Mem,      // 2: i-cache回避（lea/pea以外）
+    M68kMem,  // 3: 1+2
+    All,      // 4: デバッグ用（全て）
+    M68kAll,  // 5: 1+4
 }
 
 /// コマンドラインオプション全体
@@ -32,8 +32,8 @@ pub struct Options {
     /// テンポラリパス（-t）
     pub temp_path: Option<Vec<u8>>,
     /// インクルードパスリスト（-i、複数可）
-    pub include_paths_env: Option<Vec<u8>>,   // 環境変数で指定
-    pub include_paths_cmd: Option<Vec<u8>>,   // コマンドラインで指定
+    pub include_paths_env: Option<Vec<u8>>, // 環境変数で指定
+    pub include_paths_cmd: Option<Vec<u8>>, // コマンドラインで指定
 
     // ---- 出力制御 ----
     /// PRNファイル作成（-p）
@@ -45,7 +45,7 @@ pub struct Options {
     /// 起動時タイトル表示（-l）
     pub disp_title: bool,
     /// ワーニングレベル（0-4、デフォルト0xFF→2相当）（-w）
-    pub warn_level: i8,   // -1 = デフォルト(2)
+    pub warn_level: i8, // -1 = デフォルト(2)
 
     // ---- 最適化 ----
     /// 前方参照最適化禁止（-n）
@@ -54,8 +54,8 @@ pub struct Options {
     pub optimize_disabled: bool,
     /// v2互換モード（-c2）
     pub compat_mode: bool,
-    pub compat_sw_a: bool,   // -a スイッチが指定された（v2互換時）
-    pub compat_sw_q: bool,   // -q スイッチが指定された（v2互換時）
+    pub compat_sw_a: bool, // -a スイッチが指定された（v2互換時）
+    pub compat_sw_q: bool, // -q スイッチが指定された（v2互換時）
     /// 絶対ショート変換禁止
     pub no_abs_short: bool,
     /// クイックイミディエイト変換禁止
@@ -222,7 +222,11 @@ impl Default for Options {
 impl Options {
     /// 実効ワーニングレベル（-1 = デフォルト2）
     pub fn effective_warn_level(&self) -> u8 {
-        if self.warn_level < 0 { 2 } else { self.warn_level as u8 }
+        if self.warn_level < 0 {
+            2
+        } else {
+            self.warn_level as u8
+        }
     }
 }
 
