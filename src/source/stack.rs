@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
+use super::buf::SourceBuf;
 use crate::error::{FileError, FileErrorKind, SourcePos};
 use crate::utils;
-use super::buf::SourceBuf;
+use std::path::{Path, PathBuf};
 
 /// インクルードネスト上限（has.equ: INCLDMAXNEST）
 pub const INCLD_MAX_NEST: usize = 8;

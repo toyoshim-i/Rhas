@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use crate::error::{FileError, FileErrorKind, SourcePos};
+use std::path::PathBuf;
 
 /// 行の最大長（has.equ: MAXLINELEN）
 pub const MAX_LINE_LEN: usize = 8 * 1024;
@@ -29,7 +29,10 @@ impl SourceBuf {
             } else {
                 FileErrorKind::ReadError(e)
             };
-            FileError { path: path_bytes, kind }
+            FileError {
+                path: path_bytes,
+                kind,
+            }
         })?;
         Ok(SourceBuf {
             path,
@@ -41,12 +44,18 @@ impl SourceBuf {
 
     /// インメモリのバイト列からバッファを作成する（テスト・マクロ展開用）
     pub fn from_bytes(data: Vec<u8>, path: PathBuf) -> Self {
-        SourceBuf { path, data, pos: 0, line: 0 }
+        SourceBuf {
+            path,
+            data,
+            pos: 0,
+            line: 0,
+        }
     }
 
     /// ファイル名（パスの最終要素）をバイト列として返す（最大16文字）
     pub fn filename_bytes(&self) -> Vec<u8> {
-        let name = self.path
+        let name = self
+            .path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();

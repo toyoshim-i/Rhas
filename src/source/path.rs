@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use crate::utils;
+use std::path::PathBuf;
 
 /// `Options::include_paths_cmd` (NUL区切りバイト列) を PathBuf のリストに変換する
 pub fn parse_include_paths(raw: Option<&Vec<u8>>) -> Vec<PathBuf> {
