@@ -454,6 +454,8 @@ cargo test
 | 28 | object/writer ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-17 |
 | 29 | options ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-17 |
 | 30 | source ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-18 |
+| 31 | utils ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-20 |
+
 
 
 
