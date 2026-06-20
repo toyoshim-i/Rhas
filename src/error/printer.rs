@@ -1,17 +1,12 @@
-use std::io::Write;
+use super::codes::{warn_default_level, warn_message, ErrorCode, WarnCode};
+use super::context::{ErrorContext, SourcePos, WarnContext};
 use crate::utils;
-use super::codes::{ErrorCode, WarnCode, warn_default_level, warn_message};
-use super::context::{SourcePos, ErrorContext, WarnContext};
+use std::io::Write;
 
 /// アセンブラのエラー出力（error.s の printerr に相当）
 ///
 /// フォーマット: `<filename>  <linenum>: Error: <message>\n`
-pub fn print_error(
-    out: &mut dyn Write,
-    pos: &SourcePos,
-    code: ErrorCode,
-    sym: Option<&[u8]>,
-) {
+pub fn print_error(out: &mut dyn Write, pos: &SourcePos, code: ErrorCode, sym: Option<&[u8]>) {
     let msg = format_message(code.message(), sym);
     let _ = writeln!(
         out,

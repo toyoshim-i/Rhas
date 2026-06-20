@@ -149,8 +149,12 @@ impl ErrorCode {
             ErrorCode::IlSizePseudo => "疑似命令 %s には指定できないサイズです",
             ErrorCode::IlSizeMoveUsp => "MOVE USP はロングワードサイズのみ指定可能です",
             ErrorCode::IlSizeCfAcc => "MOVE ACC はロングワードサイズのみ指定可能です",
-            ErrorCode::IlSizeFpn => "浮動小数点レジスタ直接アドレッシングは拡張サイズのみ指定可能です",
-            ErrorCode::IlSizeFprn => "汎用レジスタ直接アドレッシングはロングワードサイズのみ指定可能です",
+            ErrorCode::IlSizeFpn => {
+                "浮動小数点レジスタ直接アドレッシングは拡張サイズのみ指定可能です"
+            }
+            ErrorCode::IlSizeFprn => {
+                "汎用レジスタ直接アドレッシングはロングワードサイズのみ指定可能です"
+            }
             ErrorCode::IlSizeFpcr => "FPCR/FPIAR/FPSR はロングワードサイズのみ指定可能です",
             ErrorCode::IlSizeFmovemFpn => "FMOVEM FPn は拡張サイズのみ指定可能です",
             ErrorCode::IlSizeFmovemFpcr => "FMOVEM FPcr はロングワードサイズのみ指定可能です",
@@ -165,9 +169,13 @@ impl ErrorCode {
             ErrorCode::IlSizeMoveToSr => "MOVE to CCR/SR はワードサイズのみ指定可能です",
             ErrorCode::IlSizeMoveFrSr => "MOVE from CCR/SR はワードサイズのみ指定可能です",
             ErrorCode::IlSize000Long => "68000/68010 ではロングワードサイズは指定できません",
-            ErrorCode::IlSizeSftRotMem => "メモリに対するシフト・ローテートはワードサイズのみ指定可能です",
+            ErrorCode::IlSizeSftRotMem => {
+                "メモリに対するシフト・ローテートはワードサイズのみ指定可能です"
+            }
             ErrorCode::IlSizeBitMem => "メモリに対するビット操作はバイトサイズのみ指定可能です",
-            ErrorCode::IlSizeBitReg => "データレジスタに対するビット操作はロングワードサイズのみ指定可能です",
+            ErrorCode::IlSizeBitReg => {
+                "データレジスタに対するビット操作はロングワードサイズのみ指定可能です"
+            }
             ErrorCode::IlSize000BccL => "68000/68010 ではロングワードサイズの相対分岐はできません",
             ErrorCode::IlSizeTrapcc => "オペランドのない TRAPcc にはサイズを指定できません",
             ErrorCode::IlOpr => "不正なオペランドです",
@@ -225,23 +233,23 @@ pub struct WarnCode(pub u8);
 
 pub mod warn {
     use super::WarnCode;
-    pub const ABS: WarnCode = WarnCode(0);          // 絶対アドレッシング
-    pub const ABS_SHORT: WarnCode = WarnCode(1);    // 絶対ショートアドレッシング
-    pub const SHORT: WarnCode = WarnCode(2);        // アドレスレジスタを .w で更新
-    pub const SHORT_CMPA: WarnCode = WarnCode(3);   // アドレスレジスタを .w で比較
-    pub const SH_VAL_ABSW: WarnCode = WarnCode(4);  // 絶対ショートアドレスが範囲外
-    pub const SH_VAL_D16: WarnCode = WarnCode(5);   // オフセットが -32768～32767 の範囲外
-    pub const SH_VAL_D8: WarnCode = WarnCode(6);    // オフセットが -128～127 の範囲外
-    pub const REGL: WarnCode = WarnCode(7);         // レジスタリストの表記が不正
-    pub const ALIGN: WarnCode = WarnCode(8);        // データのアラインメントが不正
-    pub const ALIGN_OP: WarnCode = WarnCode(9);     // 命令が奇数アドレスに配置
-    pub const SOFT: WarnCode = WarnCode(10);        // ソフトウェアエミュレーションで実行
-    pub const F43G: WarnCode = WarnCode(11);        // 浮動小数点命令の直後に NOP を挿入（エラッタ対策）
-    pub const MOVETOUSP: WarnCode = WarnCode(12);   // MOVE to USP の直前に MOVEA 挿入（エラッタ対策）
-    pub const INSIG_BIT: WarnCode = WarnCode(13);   // CCR/SR の未定義ビットを操作
-    pub const INDEX_SZ: WarnCode = WarnCode(14);    // インデックスのサイズが指定されていない
-    pub const REDEF_SET: WarnCode = WarnCode(15);   // .set で上書き
-    pub const REDEF_OFFSYM: WarnCode = WarnCode(16);// .offsym で上書き
+    pub const ABS: WarnCode = WarnCode(0); // 絶対アドレッシング
+    pub const ABS_SHORT: WarnCode = WarnCode(1); // 絶対ショートアドレッシング
+    pub const SHORT: WarnCode = WarnCode(2); // アドレスレジスタを .w で更新
+    pub const SHORT_CMPA: WarnCode = WarnCode(3); // アドレスレジスタを .w で比較
+    pub const SH_VAL_ABSW: WarnCode = WarnCode(4); // 絶対ショートアドレスが範囲外
+    pub const SH_VAL_D16: WarnCode = WarnCode(5); // オフセットが -32768～32767 の範囲外
+    pub const SH_VAL_D8: WarnCode = WarnCode(6); // オフセットが -128～127 の範囲外
+    pub const REGL: WarnCode = WarnCode(7); // レジスタリストの表記が不正
+    pub const ALIGN: WarnCode = WarnCode(8); // データのアラインメントが不正
+    pub const ALIGN_OP: WarnCode = WarnCode(9); // 命令が奇数アドレスに配置
+    pub const SOFT: WarnCode = WarnCode(10); // ソフトウェアエミュレーションで実行
+    pub const F43G: WarnCode = WarnCode(11); // 浮動小数点命令の直後に NOP を挿入（エラッタ対策）
+    pub const MOVETOUSP: WarnCode = WarnCode(12); // MOVE to USP の直前に MOVEA 挿入（エラッタ対策）
+    pub const INSIG_BIT: WarnCode = WarnCode(13); // CCR/SR の未定義ビットを操作
+    pub const INDEX_SZ: WarnCode = WarnCode(14); // インデックスのサイズが指定されていない
+    pub const REDEF_SET: WarnCode = WarnCode(15); // .set で上書き
+    pub const REDEF_OFFSYM: WarnCode = WarnCode(16); // .offsym で上書き
     pub const DS_NEGATIVE: WarnCode = WarnCode(17); // ds の引数が負数
     pub const INTERNAL_FP: WarnCode = WarnCode(18); // 整数を単精度FPの内部表現と見なす
 }

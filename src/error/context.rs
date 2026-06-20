@@ -1,5 +1,5 @@
-use crate::utils;
 use super::codes::{ErrorCode, WarnCode};
+use crate::utils;
 
 /// ソースコード上の位置（ファイル名+行番号）
 #[derive(Debug, Clone)]
