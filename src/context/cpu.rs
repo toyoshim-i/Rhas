@@ -15,17 +15,26 @@ impl CpuType {
 
     /// デフォルト値（68000, no features）
     pub const fn default_68000() -> Self {
-        CpuType { number: 68000, features: 0x0100 }
+        CpuType {
+            number: 68000,
+            features: 0x0100,
+        }
     }
 
     /// 68010 CPU
     pub const fn cpu_68010() -> Self {
-        CpuType { number: 68010, features: 0x0200 }
+        CpuType {
+            number: 68010,
+            features: 0x0200,
+        }
     }
 
     /// 68020 CPU
     pub const fn cpu_68020() -> Self {
-        CpuType { number: 68020, features: 0x0400 }
+        CpuType {
+            number: 68020,
+            features: 0x0400,
+        }
     }
 
     /// CPU番号が古い世代か判定

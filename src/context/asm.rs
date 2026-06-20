@@ -1,7 +1,7 @@
-use crate::options::Options;
-use super::section::{Section, N_SECTIONS};
 use super::cpu::CpuType;
 use super::scd::ScdTemp;
+use super::section::{Section, N_SECTIONS};
+use crate::options::Options;
 
 /// アセンブルパス（has.equ / work.s: ASMPASS）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
