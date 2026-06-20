@@ -1,11 +1,11 @@
+use super::P3Ctx;
 use crate::expr::Rpn;
 use crate::symbol::types::SizeCode;
-use super::P3Ctx;
 
 pub(super) fn process_branch(
-    ctx:      &mut P3Ctx<'_>,
-    opcode:   u16,
-    target:   &Rpn,
+    ctx: &mut P3Ctx<'_>,
+    opcode: u16,
+    target: &Rpn,
     req_size: Option<SizeCode>,
     suppressed: bool,
 ) {
@@ -109,10 +109,13 @@ pub(super) fn process_branch(
 pub(super) fn val_to_bytes(v: i32, size: u8) -> Vec<u8> {
     match size {
         1 => vec![v as u8],
-        2 => { let w = v as u16; vec![(w >> 8) as u8, w as u8] }
+        2 => {
+            let w = v as u16;
+            vec![(w >> 8) as u8, w as u8]
+        }
         4 => {
             let l = v as u32;
-            vec![(l>>24) as u8, (l>>16) as u8, (l>>8) as u8, l as u8]
+            vec![(l >> 24) as u8, (l >> 16) as u8, (l >> 8) as u8, l as u8]
         }
         _ => vec![],
     }

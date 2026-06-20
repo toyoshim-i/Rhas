@@ -457,6 +457,8 @@ cargo test
 | 31 | utils ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-20 |
 | 32 | error ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-20 |
 | 33 | context ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-20 |
+| 34 | pass/pass3/ea ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-20 |
+
 
 
 

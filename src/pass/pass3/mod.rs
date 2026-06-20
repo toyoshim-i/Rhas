@@ -3,25 +3,28 @@
 //! TempRecord 列とシンボルテーブルから最終的なバイト列と
 //! 外部シンボル情報を生成し、ObjectCode を返す。
 
-use crate::addressing::EffectiveAddress;
-use crate::expr::{eval_rpn, Rpn};
-use crate::expr::eval::EvalValue;
-use crate::expr::rpn::RPNToken;
-use crate::object::{ExternalSymbol, ObjectCode, ScdEvent, SectionInfo, sym_kind};
-use crate::symbol::{Symbol, SymbolTable};
-use crate::symbol::types::{DefAttrib, ExtAttrib, InsnHandler, SizeCode};
 use super::prn::PrnLine;
 use super::temp::TempRecord;
+use crate::addressing::EffectiveAddress;
+use crate::expr::eval::EvalValue;
+use crate::expr::rpn::RPNToken;
+use crate::expr::{eval_rpn, Rpn};
+use crate::object::{sym_kind, ExternalSymbol, ObjectCode, ScdEvent, SectionInfo};
+use crate::symbol::types::{DefAttrib, ExtAttrib, InsnHandler, SizeCode};
+use crate::symbol::{Symbol, SymbolTable};
 
-mod ea;
 mod branch;
+mod ea;
 mod insn;
 
-use ea::{
-    register_xdefs_in_ea, register_xdefs_in_rpn, resolve_ea_with_ext,
-    is_simple_external, is_external_with_offset, resolve_regsym_chain, sym_to_eval
-};
+#[cfg(test)]
+mod tests;
+
 use branch::{process_branch, val_to_bytes};
+use ea::{
+    is_external_with_offset, is_simple_external, register_xdefs_in_ea, register_xdefs_in_rpn,
+    resolve_ea_with_ext, resolve_regsym_chain, sym_to_eval,
+};
 use insn::process_deferred;
 
 /// PRN pending info: (line_num, start_loc, start_sect, text, is_macro, accumulated_bytes)
@@ -90,7 +93,9 @@ impl<'a> P3Ctx<'a> {
 
     /// code_buf を 10xx ブロックとして code_body にフラッシュする
     pub(super) fn flush_code_buf(&mut self) {
-        if self.code_buf.is_empty() { return; }
+        if self.code_buf.is_empty() {
+            return;
+        }
         let buf = std::mem::take(&mut self.code_buf);
         let mut i = 0;
         while i < buf.len() {
@@ -101,7 +106,8 @@ impl<'a> P3Ctx<'a> {
             let mut j = i;
             while j < i + chunk {
                 self.code_body.push(buf[j]);
-                self.code_body.push(if j + 1 < i + chunk { buf[j + 1] } else { 0 });
+                self.code_body
+                    .push(if j + 1 < i + chunk { buf[j + 1] } else { 0 });
                 j += 2;
             }
             i += chunk;
@@ -140,7 +146,9 @@ impl<'a> P3Ctx<'a> {
             self.dsb_pending += bytes.len() as u32;
         } else {
             // pending の $3000 があればフラッシュしてから code_buf に追記
-            if self.dsb_pending > 0 { self.flush_dsb(); }
+            if self.dsb_pending > 0 {
+                self.flush_dsb();
+            }
             self.sect_bytes[idx].extend_from_slice(bytes);
             self.code_buf.extend_from_slice(bytes);
             // PRNバイト追跡
@@ -160,7 +168,9 @@ impl<'a> P3Ctx<'a> {
             self.dsb_pending += count;
         } else {
             // pending の $3000 があればフラッシュしてから code_buf に追記
-            if self.dsb_pending > 0 { self.flush_dsb(); }
+            if self.dsb_pending > 0 {
+                self.flush_dsb();
+            }
             let zeros: Vec<u8> = vec![0u8; count as usize];
             self.sect_bytes[idx].extend_from_slice(&zeros);
             self.code_buf.extend_from_slice(&zeros);
@@ -181,7 +191,12 @@ impl<'a> P3Ctx<'a> {
     pub(super) fn prn_flush(&mut self) {
         if let Some((line_num, loc, sect, text, is_macro, bytes)) = self.prn_pending.take() {
             self.prn_lines.push(PrnLine {
-                line_num, location: loc, section: sect, bytes, text, is_macro
+                line_num,
+                location: loc,
+                section: sect,
+                bytes,
+                text,
+                is_macro,
             });
         }
     }
@@ -203,18 +218,41 @@ impl<'a> P3Ctx<'a> {
         if self.ext_syms.iter().any(|s| &s.name == name) {
             return;
         }
-        if let Some(Symbol::Value { value, section, attrib, ext_attrib, .. }) = self.sym.lookup_sym(name) {
+        if let Some(Symbol::Value {
+            value,
+            section,
+            attrib,
+            ext_attrib,
+            ..
+        }) = self.sym.lookup_sym(name)
+        {
             let kind = match ext_attrib {
                 ExtAttrib::XDef => {
-                    if *attrib >= DefAttrib::Define { *section } else { sym_kind::XDEF }
+                    if *attrib >= DefAttrib::Define {
+                        *section
+                    } else {
+                        sym_kind::XDEF
+                    }
                 }
                 ExtAttrib::Globl => {
-                    if *attrib >= DefAttrib::Define { *section } else { sym_kind::GLOBL }
+                    if *attrib >= DefAttrib::Define {
+                        *section
+                    } else {
+                        sym_kind::GLOBL
+                    }
                 }
                 _ => return,
             };
-            let val = if *attrib >= DefAttrib::Define { *value as u32 } else { 0 };
-            self.ext_syms.push(ExternalSymbol { kind, value: val, name: name.clone() });
+            let val = if *attrib >= DefAttrib::Define {
+                *value as u32
+            } else {
+                0
+            };
+            self.ext_syms.push(ExternalSymbol {
+                kind,
+                value: val,
+                name: name.clone(),
+            });
         }
     }
 
@@ -228,10 +266,17 @@ impl<'a> P3Ctx<'a> {
                 return sym.value as u16;
             }
         }
-        let num = self.ext_syms.iter()
+        let num = self
+            .ext_syms
+            .iter()
             .filter(|s| s.kind == sym_kind::XREF)
-            .count() as u32 + 1;
-        self.ext_syms.push(ExternalSymbol { kind: sym_kind::XREF, value: num, name: resolved });
+            .count() as u32
+            + 1;
+        self.ext_syms.push(ExternalSymbol {
+            kind: sym_kind::XREF,
+            value: num,
+            name: resolved,
+        });
         num as u16
     }
 
@@ -243,11 +288,10 @@ impl<'a> P3Ctx<'a> {
         let sym = self.sym;
         eval_rpn(rpn, loc, cur, sec, &|name| {
             sym.lookup_sym(name).and_then(sym_to_eval)
-        }).map_err(|e| {
-            match e {
-                crate::expr::eval::EvalError::UndefinedSymbol(n) => n,
-                _ => b"<eval error>".to_vec(),
-            }
+        })
+        .map_err(|e| match e {
+            crate::expr::eval::EvalError::UndefinedSymbol(n) => n,
+            _ => b"<eval error>".to_vec(),
         })
     }
 }
@@ -308,27 +352,27 @@ pub(super) fn emit_pc_rel_rpn(ctx: &mut P3Ctx<'_>, xref_num: u16, base_addr: u32
 pub(super) fn emit_rpn_expression(ctx: &mut P3Ctx<'_>, rpn: &Rpn, size: u8) {
     for tok in rpn {
         match tok {
-            RPNToken::SymbolRef(name) => {
-                match ctx.sym.lookup_sym(name).and_then(sym_to_eval) {
-                    Some(v) if v.is_constant() => {
-                        ctx.code_body.push(0x80);
-                        ctx.code_body.push(0x00);
-                        ctx.code_body.extend_from_slice(&(v.value as u32).to_be_bytes());
-                    }
-                    Some(v) => {
-                        ctx.code_body.push(0x80);
-                        ctx.code_body.push(v.section);
-                        ctx.code_body.extend_from_slice(&(v.value as u32).to_be_bytes());
-                    }
-                    None => {
-                        let xref_num = ctx.get_or_add_xref(name.clone());
-                        ctx.code_body.push(0x80);
-                        ctx.code_body.push(0xFF);
-                        ctx.code_body.push((xref_num >> 8) as u8);
-                        ctx.code_body.push(xref_num as u8);
-                    }
+            RPNToken::SymbolRef(name) => match ctx.sym.lookup_sym(name).and_then(sym_to_eval) {
+                Some(v) if v.is_constant() => {
+                    ctx.code_body.push(0x80);
+                    ctx.code_body.push(0x00);
+                    ctx.code_body
+                        .extend_from_slice(&(v.value as u32).to_be_bytes());
                 }
-            }
+                Some(v) => {
+                    ctx.code_body.push(0x80);
+                    ctx.code_body.push(v.section);
+                    ctx.code_body
+                        .extend_from_slice(&(v.value as u32).to_be_bytes());
+                }
+                None => {
+                    let xref_num = ctx.get_or_add_xref(name.clone());
+                    ctx.code_body.push(0x80);
+                    ctx.code_body.push(0xFF);
+                    ctx.code_body.push((xref_num >> 8) as u8);
+                    ctx.code_body.push(xref_num as u8);
+                }
+            },
             RPNToken::Location => {
                 ctx.code_body.push(0x80);
                 ctx.code_body.push(ctx.cur_sect);
@@ -337,7 +381,8 @@ pub(super) fn emit_rpn_expression(ctx: &mut P3Ctx<'_>, rpn: &Rpn, size: u8) {
             RPNToken::CurrentLoc => {
                 ctx.code_body.push(0x80);
                 ctx.code_body.push(ctx.cur_sect);
-                ctx.code_body.extend_from_slice(&ctx.location().to_be_bytes());
+                ctx.code_body
+                    .extend_from_slice(&ctx.location().to_be_bytes());
             }
             RPNToken::ValueByte(v) => {
                 ctx.code_body.push(0x80);
@@ -375,12 +420,12 @@ pub(super) fn emit_rpn_expression(ctx: &mut P3Ctx<'_>, rpn: &Rpn, size: u8) {
 
 /// Pass3: TempRecord → ObjectCode + PRN行リスト
 pub fn pass3(
-    records:     &[TempRecord],
-    sym:         &SymbolTable,
+    records: &[TempRecord],
+    sym: &SymbolTable,
     source_name: Vec<u8>,
     source_file: Vec<u8>,
-    prn_enable:  bool,
-    max_align:   u8,
+    prn_enable: bool,
+    max_align: u8,
 ) -> (ObjectCode, Vec<PrnLine>, u32, u32) {
     let mut ctx = P3Ctx::new(sym, prn_enable, source_file.clone());
     let mut obj = ObjectCode::new(source_name);
@@ -402,13 +447,27 @@ pub fn pass3(
                 ctx.emit(bytes);
             }
 
-            TempRecord::DeferredInsn { base, handler, size, ops, .. } => {
+            TempRecord::DeferredInsn {
+                base,
+                handler,
+                size,
+                ops,
+                ..
+            } => {
                 // B2xx 順序: XDEF シンボルを参照時点で先行登録
-                for ea in ops.iter() { register_xdefs_in_ea(&mut ctx, ea); }
+                for ea in ops.iter() {
+                    register_xdefs_in_ea(&mut ctx, ea);
+                }
                 process_deferred(&mut ctx, *base, *handler, *size, ops);
             }
 
-            TempRecord::Branch { opcode, target, cur_size, suppressed, .. } => {
+            TempRecord::Branch {
+                opcode,
+                target,
+                cur_size,
+                suppressed,
+                ..
+            } => {
                 register_xdefs_in_rpn(&mut ctx, target);
                 process_branch(&mut ctx, *opcode, target, *cur_size, *suppressed);
             }
@@ -465,7 +524,9 @@ pub fn pass3(
                         fill.push(p as u8);
                         remaining -= 2;
                     }
-                    if remaining == 1 { fill.push(0x00); } // 1バイト端数は常に0x00（NOP半分は無効）
+                    if remaining == 1 {
+                        fill.push(0x00);
+                    } // 1バイト端数は常に0x00（NOP半分は無効）
                     ctx.emit(&fill);
                 }
             }
@@ -499,13 +560,25 @@ pub fn pass3(
                     // already registered via try_register_xdef
                 } else {
                     // コード中で参照されなかった XDEF: ここで初めて登録
-                    let (val, kind) = if let Some(Symbol::Value { value, section, attrib, .. }) = sym.lookup_sym(name) {
+                    let (val, kind) = if let Some(Symbol::Value {
+                        value,
+                        section,
+                        attrib,
+                        ..
+                    }) = sym.lookup_sym(name)
+                    {
                         if *attrib >= DefAttrib::Define {
                             (*value as u32, *section)
-                        } else { (0, sym_kind::XDEF) }
-                    } else { (0, sym_kind::XDEF) };
+                        } else {
+                            (0, sym_kind::XDEF)
+                        }
+                    } else {
+                        (0, sym_kind::XDEF)
+                    };
                     ctx.ext_syms.push(ExternalSymbol {
-                        kind, value: val, name: name.clone()
+                        kind,
+                        value: val,
+                        name: name.clone(),
                     });
                 }
             }
@@ -513,14 +586,23 @@ pub fn pass3(
             TempRecord::XRef { name } => {
                 // 外部参照シンボル番号を割り当て（XREF のみカウント、1から連番）
                 // 既に同名の XREF が登録済みならスキップ（.reg 経由の先行登録との重複防止）
-                if ctx.ext_syms.iter().any(|s| s.kind == sym_kind::XREF && &s.name == name) {
+                if ctx
+                    .ext_syms
+                    .iter()
+                    .any(|s| s.kind == sym_kind::XREF && &s.name == name)
+                {
                     // already registered
                 } else {
-                    let num = ctx.ext_syms.iter()
+                    let num = ctx
+                        .ext_syms
+                        .iter()
                         .filter(|s| s.kind == sym_kind::XREF)
-                        .count() as u32 + 1;
+                        .count() as u32
+                        + 1;
                     ctx.ext_syms.push(ExternalSymbol {
-                        kind: sym_kind::XREF, value: num, name: name.clone()
+                        kind: sym_kind::XREF,
+                        value: num,
+                        name: name.clone(),
                     });
                 }
             }
@@ -532,25 +614,41 @@ pub fn pass3(
                 } else {
                     // .globl / `::` ラベル — 定義済みなら実セクション番号、未定義なら XRef
                     let (val, kind) = if let Some(s) = sym.lookup_sym(name) {
-                        if let Symbol::Value { value, section, attrib, .. } = s {
+                        if let Symbol::Value {
+                            value,
+                            section,
+                            attrib,
+                            ..
+                        } = s
+                        {
                             if *attrib >= DefAttrib::Define {
-                                (*value as u32, *section)  // 実セクション番号で出力
+                                (*value as u32, *section) // 実セクション番号で出力
                             } else {
                                 // 未定義 → XRef
-                                let num = ctx.ext_syms.iter()
+                                let num = ctx
+                                    .ext_syms
+                                    .iter()
                                     .filter(|s| s.kind == sym_kind::XREF)
-                                    .count() as u32 + 1;
+                                    .count() as u32
+                                    + 1;
                                 (num, sym_kind::XREF)
                             }
-                        } else { (0, sym_kind::GLOBL) }
+                        } else {
+                            (0, sym_kind::GLOBL)
+                        }
                     } else {
-                        let num = ctx.ext_syms.iter()
+                        let num = ctx
+                            .ext_syms
+                            .iter()
                             .filter(|s| s.kind == sym_kind::XREF)
-                            .count() as u32 + 1;
+                            .count() as u32
+                            + 1;
                         (num, sym_kind::XREF)
                     };
                     ctx.ext_syms.push(ExternalSymbol {
-                        kind, value: val, name: name.clone()
+                        kind,
+                        value: val,
+                        name: name.clone(),
                     });
                 }
             }
@@ -568,7 +666,9 @@ pub fn pass3(
                         _ => sym_kind::COMM,
                     };
                     ctx.ext_syms.push(ExternalSymbol {
-                        kind, value, name: name.clone()
+                        kind,
+                        value,
+                        name: name.clone(),
                     });
                 }
             }
@@ -581,22 +681,48 @@ pub fn pass3(
                 // CPU 変更は Pass1/Pass2 で処理済み
             }
 
-            TempRecord::LineInfo { line_num, text, is_macro } => {
+            TempRecord::LineInfo {
+                line_num,
+                text,
+                is_macro,
+            } => {
                 ctx.prn_start(*line_num, text.clone(), *is_macro);
             }
             TempRecord::ScdLn { line, loc } => {
                 let (location, section) = match ctx.eval(loc) {
-                    Ok(v) => (v.value as u32, if v.section == 0 { ctx.cur_sect } else { v.section }),
+                    Ok(v) => (
+                        v.value as u32,
+                        if v.section == 0 {
+                            ctx.cur_sect
+                        } else {
+                            v.section
+                        },
+                    ),
                     Err(_) => (ctx.location(), ctx.cur_sect),
                 };
-                obj.scd_events.push(ScdEvent::Ln { line: *line, location, section });
+                obj.scd_events.push(ScdEvent::Ln {
+                    line: *line,
+                    location,
+                    section,
+                });
             }
             TempRecord::ScdAutoLn { line, loc } => {
                 let (location, section) = match ctx.eval(loc) {
-                    Ok(v) => (v.value as u32, if v.section == 0 { ctx.cur_sect } else { v.section }),
+                    Ok(v) => (
+                        v.value as u32,
+                        if v.section == 0 {
+                            ctx.cur_sect
+                        } else {
+                            v.section
+                        },
+                    ),
                     Err(_) => (ctx.location(), ctx.cur_sect),
                 };
-                obj.scd_events.push(ScdEvent::Ln { line: *line, location, section });
+                obj.scd_events.push(ScdEvent::Ln {
+                    line: *line,
+                    location,
+                    section,
+                });
             }
             TempRecord::ScdVal { rpn } => {
                 // HAS互換: .val はオブジェクト生成段階で式評価した値を保持する。
@@ -612,7 +738,17 @@ pub fn pass3(
             TempRecord::ScdTag { name } => {
                 obj.scd_events.push(ScdEvent::Tag { name: name.clone() });
             }
-            TempRecord::ScdEndef { name, attrib, value, section, scl, type_code, size, dim, is_long } => {
+            TempRecord::ScdEndef {
+                name,
+                attrib,
+                value,
+                section,
+                scl,
+                type_code,
+                size,
+                dim,
+                is_long,
+            } => {
                 obj.scd_events.push(ScdEvent::Endef {
                     name: name.clone(),
                     attrib: *attrib,
@@ -654,8 +790,12 @@ pub fn pass3(
         // 全セクションでロケーションカウンタを正規サイズとして使う
         let size = ctx.loc_ctr[idx];
         obj.sections.push(SectionInfo {
-            id:    sect_id,
-            bytes: if sect_id >= 3 { Vec::new() } else { bytes.clone() },
+            id: sect_id,
+            bytes: if sect_id >= 3 {
+                Vec::new()
+            } else {
+                bytes.clone()
+            },
             size,
         });
     }
@@ -670,7 +810,7 @@ pub fn pass3(
             rsect_used[i] = true;
             let is_bss = matches!(sect_id, 6 | 7);
             obj.sections.push(SectionInfo {
-                id:    *sect_id,
+                id: *sect_id,
                 bytes: if is_bss { Vec::new() } else { bytes.clone() },
                 size,
             });
@@ -684,7 +824,7 @@ pub fn pass3(
         if rsect_used[i] || size > 0 || !bytes.is_empty() {
             let is_bss = matches!(sect_id, 9 | 10);
             obj.sections.push(SectionInfo {
-                id:    *sect_id,
+                id: *sect_id,
                 bytes: if is_bss { Vec::new() } else { bytes.clone() },
                 size,
             });
