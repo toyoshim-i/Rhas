@@ -1,549 +1,148 @@
-# Rhas リファクタリング計画（段階的・テスト駆動）
+# Rhas リファクタリング計画（第2期）
 
-## 🎯 全体方針
-- **各ステップは最小限の変更** に留める
-- **各ステップ後に必ず `cargo test --lib` を実行** してリグレッション確認
-- **既存機能に一切影響しない範囲** での改善を優先
-- テスト数 184 個が全てパスしている状態を維持
-
-**ベースライン**: `cargo test --lib` → 184 test passed ✅
+本計画は、ユニットテストの分離作業（Step 1〜34）の完了に伴い、残るコード負債の解消とアーキテクチャの強化を目的とした新たな3つのリファクタリングフェーズを定義します。
 
 ---
 
-## 📋 実装済みテスト環境
-```bash
-# ユニットテスト実行（約0.07秒）
-cargo test --lib
+## 📅 ロードマップ概要
 
-# 統合テスト実行
-cargo test --test integration_test
-cargo test --test golden_test
-cargo test --test error_message_test
-
-# 全テスト実行
-cargo test
-```
+- **フェーズ1**: 巨大な統合テスト (`tests/integration_test.rs`) の機能別ファイル分割
+- **フェーズ2**: 未使用コード（Clippy警告）の精密調査とクリーンアップ（移植漏れの検証を含む）
+- **フェーズ3**: エラー・警告報告処理の統一と抽象化 (`ErrorReporter` の導入)
 
 ---
 
-## 🔄 Step 1: ユーティリティ関数統一 (`utils/mod.rs` 作成)
+## 🧪 フェーズ1: 巨大な統合テストの機能別分割
 
 ### 目的
-重複している以下の関数を一箇所に統一：
-- `String::from_utf8_lossy()` 呼び出し（20+ 箇所）
-- `Vec::with_capacity()` 初期化パターン（バイト列用、式用など）
-- `to_lowercase()` / `to_lowercase_vec()` → 統一インターフェース
+約2300行、98件のテストが1つのファイル `tests/integration_test.rs` に混在しており、メンテナンス性が低下しています。これを機能カテゴリごとにファイルを分割し、テストの実行と保守を容易にします。
 
-### 対象ファイル
-- `src/utils/mod.rs` (新規作成)
-- `src/lib.rs` (モジュール追加)
+### 分割方針とターゲットファイル
+既存の `tests/integration_test.rs` を以下のカテゴリ別ファイルに分割します：
 
-### 変更内容
+1. **`tests/core_test.rs`**
+   - 対象: 最小アセンブル、複数命令の連続、基本的なパス遷移や全体の流れに関係するコア動作テスト。
+2. **`tests/macro_test.rs`**
+   - 対象: `.macro`, `.rept`, `.irp`, `.irpc` などのマクロ展開機能や引数処理のテスト。
+3. **`tests/pseudo_test.rs`**
+   - 対象: `.dc`, `.ds`, `.comm`, `.offsym`, `.org` などの疑似命令、データ配置、セクション定義のテスト。
+4. **`tests/fpu_test.rs`**
+   - 対象: `fnop`, `fmove`, `fmovem`, `fsincos`, `fbcc`, `fdbcc`, `.fpid` などのFPU命令エンコードテスト。
+5. **`tests/options_test.rs`**
+   - 対象: 各種コマンドラインオプション（警告レベル、出力指定等）の挙動検証テスト。
+6. **`tests/scd_test.rs`**
+   - 対象: `-g` 指定時のSCDデバッグ拡張レコード出力や、`.file`, `.dim`, `.def` などのSCD用疑似命令の出力テスト。
+
+### 実行手順
+1. `tests/` ディレクトリ配下にターゲットファイルを新規作成する。
+2. `tests/integration_test.rs` から対象のテスト関数群を順次切り出し、対応するファイルに移植する。
+3. 移植ごとに `cargo test` を実行し、既存テストのパス（トータル98件の成功）を確認する。
+4. すべてのテストが分割された後、空になった `tests/integration_test.rs` を削除する。
+
+---
+
+## 🔍 フェーズ2: 未使用コード（Clippy警告）の精密調査・クリーンアップ
+
+### 目的
+`cargo clippy` が指摘する未使用コード（デッドコード警告）を整理し、コードベースをクリーンにします。ただし、単なる削除ではなく、オリジナルとの比較とコミット履歴の追跡を行い、**移植時の実装漏れ（バグ）**がないかを厳密に調査します。
+
+### 調査・分析のプロセス
+すべての候補に対し、以下の手順で分析と意思決定を行います：
+
+1. **存在理由の特定**: コードの用途やコメントから、将来的な機能のために用意されたものか、一時的な実装残りかを把握。
+2. **オリジナルアセンブラ（HAS060）の調査**:
+   - `external/has060xx/src/` 配下のソースコード（`symbol.equ`, `cputype.equ`, `work.s` 等）を調査。
+   - 「オリジナルでも未使用定義だったのか」「オリジナルでは使用されていたのか」を特定。
+3. **コミット履歴の追跡と移植漏れ検証**:
+   - `git log -S <symbol>` や `git blame` を実行し、過去にそのコードが使われていた時期があったか、あるいはどの時点で追加されて放置されたかを追跡。
+   - 「本来実装すべきロジックが未実装なために、結果的に未使用になっている（移植漏れバグ）」ケースを発見した場合、削除ではなく**本来の実装を記述・修正**する。
+4. **アクションの決定**:
+   - **削除**: オリジナルでも不要、またはRust移植版で不要と確認されたコード。
+   - **バグ修正**: 移植漏れ・実装ミスの修正。
+   - **サプレッション**: 仕様上の整合性や将来の拡張性のために残す必要がある場合、`#[allow(dead_code)]` を付与し、その理由をコメントで明記。
+
+### 対象候補リストと調査メモ
+Clippyで警告された以下の159個の警告（重複を除く約25種類の項目）について調査を行います：
+
+| 分類 | 警告対象コード | 所在ファイル | 調査観点・オリジナル対応ファイル候補 |
+| :--- | :--- | :--- | :--- |
+| **関数/メソッド** | `is_visibility_directive` | `src/pass/pseudo/misc.rs` | オリジナル pseudo.s での visibility ディレクティブ処理漏れ確認 |
+| | `SourceBuf::from_bytes` | `src/source/buf.rs` | 単体テスト用やバッファ生成用のユーティリティが未使用か確認 |
+| | `SymbolTable::is_defined` | `src/symbol/mod.rs` | シンボル定義確認ロジックが他のパスで使われるべきだったか |
+| | `SymbolTable::user_sym_count` | `src/symbol/mod.rs` | 統計情報出力機能 (`-l`等) やデバッグ表示での参照漏れ確認 |
+| | `SymbolTable::cmd_count` | `src/symbol/mod.rs` | 同上 |
+| | `SymbolTable::reg_count` | `src/symbol/mod.rs` | 同上 |
+| | `Symbol::is_builtin` | `src/symbol/types.rs` | 予約語や命令名の判定ロジックが未使用か確認 |
+| | `Symbol::is_pseudo` | `src/symbol/types.rs` | 疑似命令判定ロジックが未使用か確認 |
+| | `Symbol::is_local` | `src/symbol/types.rs` | ローカルシンボルの判定が特定のパスで必要だったか確認 |
+| | `SizeFlags::contains` | `src/symbol/types.rs` | サイズフラグの包含判定が命令サイズ選択で使われるべきか |
+| **enumバリアント** | `SizeCode::Quad` | `src/symbol/types.rs` | `.q` (MMU命令) 対応。オリジナルでのMMU機能有無と移植状況確認 |
+| | `DefAttrib::Predefine` | `src/symbol/types.rs` | 予約シンボル定義属性。`symbol.equ` の SA_PREDEFINE 対応 |
+| | `ExtAttrib::Globl` | `src/symbol/types.rs` | グローバルシンボル属性。`symbol.equ` の $FA (Globl) 対応 |
+| | `FirstDef::Set` | `src/symbol/types.rs` | `.set`(=) 定義状態。オリジナルでの挙動と移植状況 |
+| | `Symbol::Real` | `src/symbol/types.rs` | 実数データ（FPU関連）のシンボル型。fexpr.s 等での扱い確認 |
+| **構造体フィールド** | `Symbol::Value::org_num` | `src/symbol/types.rs` | オリジンの `org` 番号保持用。`.org` 処理での値確認 |
+| | `Symbol::Value::opt_count` | `src/symbol/types.rs` | 分岐最適化の回数管理用。pass2.s での参照確認 |
+| | `Symbol::Opcode::noopr` | `src/symbol/types.rs` | オペランドなし命令判定用。`opname.s` のフラグ移植状況 |
+| | `Symbol::Opcode::size` | `src/symbol/types.rs` | 使用可能サイズ。命令デコード・エンコードでのチェック |
+| | `Symbol::Opcode::size2` | `src/symbol/types.rs` | ColdFireで使用可能なサイズ。命令チェック漏れ確認 |
+| | `Symbol::Macro::local_count`| `src/symbol/types.rs` | マクロ内ローカルラベルカウンタ。macro.s 参照 |
+| **定数/マスク** | `SizeFlags::Q`, `SizeFlags::BW` | `src/symbol/types.rs` | サイズ指定マスク定数の未使用理由確認 |
+| | `CpuMask::NONE`, `CpuMask::CF`, `CpuMask::ALL` | `src/symbol/types.rs` | CPU種別判定マスク。cputype.equ / main.s 参照 |
+| | MMUレジスタ定数群 (`CRP`〜`BC`) | `src/symbol/types.rs` | MMU制御レジスタコード。MMU命令パーサでの実装有無の確認 |
+
+---
+
+## 🛠️ フェーズ3: エラー・警告処理の統一・抽象化
+
+### 目的
+現在、エラー出力や警告メッセージが `std::io::stderr()` への直接書き込みと各コンテキストでのカウント管理で混在しています。これらを抽象的な `ErrorReporter` トレイトに統合し、出力先を差し替え可能にすることで、テスト容易性の向上とアーキテクチャのクリーン化を実現します。
+
+### 具体的な設計と実装計画
+
+#### 1. `ErrorReporter` トレイトの定義 (`src/error/reporter.rs`)
+`src/error/reporter.rs` を新規作成し、以下のインターフェースを定義します。
 ```rust
-// src/utils/mod.rs (新規)
-pub fn bytes_to_string(b: &[u8]) -> String
-pub fn path_from_bytes(b: &[u8]) -> PathBuf
-pub fn to_lowercase_vec(s: &[u8]) -> Vec<u8>
-pub fn vec_with_capacity_for_bytes(estimate: usize) -> Vec<u8>
-pub fn vec_with_capacity_for_rpn() -> Vec<RPNToken>
-```
+use crate::error::{ErrorCode, WarnCode, SourcePos};
 
-### テスト方法
-```bash
-# Step 1a: utils/mod.rs → 新規関数群を追加
-cargo test --lib
-# 確認: 184 passed
-
-# Step 1b: 各モジュールで新関数を利用（置き換え）
-# options.rs, error.rs, main.rs などで置き換え実施
-cargo test --lib
-# 確認: 184 passed
-
-# Step 1c: symbol/mod.rs の to_lowercase_vec を削除
-cargo test --lib
-# 確認: 184 passed
-```
-
-### 完了基準
-- ✅ `cargo test --lib` で 184 passed のまま
-- ✅ `String::from_utf8_lossy()` の呼び出し回数が減少
-- ✅ 既存機能に影響なし
-
----
-
-## 🔄 Step 2: デッドコード・サプレッション見直し
-
-### 目的
-実装完了の見通しがつかないコードの `#![allow(dead_code)]` を削除し、
-アクティブに使われているのか、本当に不要なのかを整理。
-
-### 対象ファイル（優先順）
-1. `src/error.rs` - いくつかのエラーコードは実装予定か確認
-2. `src/options.rs` - 複数オプションが未使用か確認
-3. `src/expr/mod.rs` - `ParseError::Internal` 等の不要属性
-4. `src/instructions/mod.rs` - テスト用ヘルパ `encode_ok`
-
-### 変更内容
-```bash
-# Step 2a: error.rs の #![allow(dead_code)] を削除し、実際の未使用を確認
-cargo check
-# → コンパイル警告が出れば、本当に未使用か手動確認
-
-# Step 2b: 他モジュールの `#[allow(dead_code)]` も逐次削除
-# (expr/mod.rs, instructions/mod.rs など)
-cargo test --lib
-# 確認: 184 passed
-```
-
-### 完了基準
-- ✅ `cargo test --lib` で 184 passed のまま
-- ✅ デッドコードの状況が明確に文書化
-- ✅ 未使用コードに対する警告が出力されるようになった
-- ✅ STEP 2 完了（2026-03-08）
-
-### 実施結果
-Step 2 では当初想定の14ファイルからさらに `expr/mod.rs` と `instructions/mod.rs` に
-存在していた `#[allow(dead_code)]` を除去。テスト 229 すべて通過、警告は残るが
-`dead_code` 属性がリポジトリから消えた。
-```
----
-
-## 🔄 Step 3: `pass/pass1.rs` の疑似命令処理分割
-
-### 目的
-`handle_pseudo()` 関数（現在 ~1000 行）を以下に分割：
-- `src/pass/pseudo_handler.rs` - セクション、.dc, .ds 等
-- `src/pass/pseudo_conditional.rs` - .if/.ifdef/.endif
-- `src/pass/pseudo_macro.rs` - .macro/.rept/.irp 等
-
-### 対象ファイル
-- `src/pass/pass1.rs` (2500 行 → 1500 行に削減目標)
-- `src/pass/mod.rs` (モジュール公開)
-
-### 変更内容
-```rust
-// src/pass/pseudo_handler.rs (新規)
-pub mod section;          // .text, .data など
-pub mod pseudo_data;      // .dc, .ds, .dcb
-pub mod pseudo_conditional;  // .if, .ifdef, .else, .endif
-pub mod pseudo_macro;     // .macro, .rept, .irp
-pub mod pseudo_debug;     // SCD デバッグ疑似命令
-
-// pass1.rs の handle_pseudo() 内部：
-pub fn dispatch_pseudo_handler(
-    handler: InsnHandler,
-    mnem: &[u8],
-    size: Option<SizeCode>,
-    line: &[u8],
-    pos: &mut usize,
-    label: &Option<Vec<u8>>,
-    records: &mut Vec<TempRecord>,
-    p1: &mut P1Ctx<'_>,
-    source: &mut SourceStack,
-) {
-    match handler {
-        InsnHandler::TextSect | InsnHandler::DataSect => 
-            section::handle_section(handler, p1, records),
-        InsnHandler::Dc | InsnHandler::Ds | InsnHandler::Dcb =>
-            pseudo_data::handle_data(handler, size, line, pos, p1, records),
-        InsnHandler::If | InsnHandler::Ifdef =>
-            pseudo_conditional::handle_if(handler, line, pos, p1),
-        InsnHandler::MacroDef =>
-            pseudo_macro::handle_macro_def(label, line, pos, source, p1),
-        ...
-    }
+pub trait ErrorReporter {
+    /// エラーを報告する
+    fn report_error(&mut self, pos: &SourcePos, code: ErrorCode, symbol: Option<&[u8]>);
+    
+    /// 警告を報告する
+    fn report_warning(&mut self, pos: &SourcePos, code: WarnCode, symbol: Option<&[u8]>);
+    
+    /// 発生したエラーの総数
+    fn error_count(&self) -> u32;
+    
+    /// 発生した警告の総数
+    fn warning_count(&self) -> u32;
+    
+    /// 状態をクリアする（複数ファイル処理用）
+    fn reset(&mut self);
 }
 ```
 
-### テスト方法
-```bash
-# Step 3a: 新ファイル群を作成（stub 実装）
-cargo check
-# エラーがないか確認
-
-# Step 3b: section 処理を分割
-# pass1.rs の InsnHandler::TextSect 以降を削除、pseudo_handler::section へ委譲
-cargo test --lib
-# 確認: 184 passed
-
-# Step 3c: data 処理を分割 (.dc, .ds, .dcb)
-cargo test --lib
-# 確認: 184 passed
-
-# Step 3d: 条件分岐処理を分割 (.if, .ifdef, .else, .endif)
-cargo test --lib
-# 確認: 184 passed
-
-# Step 3e: マクロ処理を分割 (.macro, .rept, .irp)
-cargo test --lib
-# 確認: 184 passed
-
-# Step 3f: SCD デバッグ処理を分割
-cargo test --lib
-# 確認: 184 passed
-```
-
-### 完了基準
-- ✅ `cargo test --lib` で 184 passed のまま
-- ✅ `src/pass/pass1.rs` が 3500 行以下に削減
-- ✅ 各疑似命令カテゴリが独立したモジュール
-- ✅ 保守性向上（新規疑似命令追加が容易）
-
----
-
-## 🔄 Step 4: エラー/警告処理の型安全化
-
-### 目的
-`ErrorCode` enum と `WarnCode` enum を より型安全に活用：
-- エラーメッセージの文字列化時に型チェック
-- エラーコンテキスト（ソース位置）の構造化
-
-### 対象ファイル
-- `src/error.rs` (拡張)
-
-### 変更内容
-```rust
-// Currently:
-print_error(&mut stderr, &self.current_pos, code, sym);
-
-// After:
-#[derive(Debug, Clone)]
-pub struct ErrorContext {
-    pub pos: SourcePos,
-    pub symbol: Option<Vec<u8>>,
-}
-
-pub fn report_error(ctx: &mut ErrorContext, code: ErrorCode) {
-    ctx.print_to_stderr();
-}
-```
-
-### テスト方法
-```bash
-# Step 4a: ErrorContext 型導入
-cargo test --lib
-# 確認: 184 passed
-
-# Step 4b: 既存呼び出しを ErrorContext に変更
-cargo test --lib
-# 確認: 184 passed
-```
-
-### 完了基準
-- ✅ `cargo test --lib` で 184 passed のまま  
-- ✅ エラーレポートの型チェック向上
-- ✅ ログ出力がより構造化
-
----
-
-## 🔄 Step 5: CPU タイプ定義の統一
-
-### 目的
-CPU タイプが `u32` (number) と `u16` (bitflag) に分散しているのを統一：
-
-```rust
-// Before: 混在
-ctx.cpu_number: u32 = 68000
-ctx.cpu_type: u16 = 0x0100
-
-// After: 統一された型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CpuType {
-    pub number: u32,      // 68000, 68010, ...
-    pub features: u16,    // bitflag: C000, C010, ...
-}
-```
-
-### 対象ファイル
-- `src/context.rs`
-- `src/options.rs`
-- `src/pass/pass1.rs` (CPU setters の更新)
-
-### テスト方法
-```bash
-# Step 5a: CpuType struct 定義
-cargo check
-
-# Step 5b: AssemblyContext で使用開始
-cargo test --lib
-# 確認: 184 passed
-
-# Step 5c: 既存コード内の cpu_number/cpu_type をリファクタ
-cargo test --lib
-# 確認: 184 passed
-```
-
-### 完了基準
-- ✅ `cargo test --lib` で 184 passed のまま
-- ✅ CPU 情報が單一の構造体で管理
-- ✅ 型安全性向上
-
----
-
-## 🔄 Step 6: `pass/pass3.rs` のモジュール分割・整理
-
-### 目的
-`pass3.rs`（現在約1500行）をサブモジュールに分割して見通しを改善する。主に実効アドレス（EA）解決ロジックや分岐・命令エンコード処理を分割する。
-
-### 対象ファイル
-- `src/pass/pass3.rs` (本体を軽量化)
-- `src/pass/pass3/mod.rs` (新規)
-- `src/pass/pass3/ea.rs` (新規: EA解決・リロケーション関連)
-- `src/pass/pass3/branch.rs` (新規: 分岐命令・DBcc/FBcc/FDBcc の解決)
-- `src/pass/pass3/insn.rs` (新規: 未解決命令のエンコード委譲処理)
-
-### 変更内容
-`pass3.rs` を `pass3` ディレクトリ下の `mod.rs` にし、以下のようにモジュールを分割する。
-
-- `src/pass/pass3/ea.rs`: `resolve_ea_with_ext`, `ea_ext_size_for_insn` などの EA / 外部参照解析関連ヘルパ関数群を配置する。
-- `src/pass/pass3/branch.rs`: `process_branch` などの分岐命令ハンドリングロジックを配置する。
-- `src/pass/pass3/insn.rs`: `encode_insn` の呼び出しとフォールバックハンドリングなど命令エンコードに関連するロジックを配置する。
-- `src/pass/pass3/mod.rs` (旧 `pass3.rs`): `pass3()` エントリポイントと `P3Ctx` 定義、主要な中間コードレコードディスパッチャ（レコードループ）のみに集中させる。
-
-### テスト方法
-```bash
-# 各モジュールをスタブで追加した後に徐々に移行する
-cargo test
-# 確認: 98 passed (integration), 63 passed (golden)
-```
-
-### 完了基準
-- ✅ `cargo test` ですべてのテストがパスすること
-- ✅ `src/pass/pass3.rs` のファイルサイズが 500 行以下に削減されること
-- ✅ 各モジュールの責務が明確になり、循環参照が発生しないこと
-
----
-
-## 🔄 Step 7: `pass/pass1.rs` の命令・オペランドパースの分割
-
-### 目的
-`pass1.rs`（約2300行）をサブモジュール化して見通しを改善する。特に複雑なオペランドパース（FPUレジスタリストやペアのパースなど）と、命令サイズ・アドレッシングモード検証ロジックを分割する。
-
-### 対象ファイル
-- `src/pass/pass1.rs` (本体を軽量化)
-- `src/pass/pass1/mod.rs` (新規: `pass1` エントリポイント)
-- `src/pass/pass1/operand.rs` (新規: `parse_operands` および各種 FPU/レジスタパースヘルパー)
-- `src/pass/pass1/insn.rs` (新規: `handle_real_insn`, `estimate_insn_size` などの実命令解析処理)
-- `src/pass/pass1/preprocess.rs` (新規: `preprocess_anon_labels`, `preprocess_numeric_local_labels`)
-
-### 変更内容
-`pass1.rs` を `pass1` ディレクトリ下の `mod.rs` にし、以下のようにモジュールを分割する。
-
-- `src/pass/pass1/operand.rs`: `parse_operands`, `parse_fp_reg_list_token`, `parse_fp_ctrl_list_token`, `parse_fp_pair_token`, `parse_fp_register_token` などのオペランドパーサー群を配置。
-- `src/pass/pass1/insn.rs`: `handle_real_insn`, `estimate_insn_size`, `resolve_ea_const_for_size` などの命令デコード・サイズ見積もり処理を配置。
-- `src/pass/pass1/preprocess.rs`: `preprocess_anon_labels`, `preprocess_numeric_local_labels` などのアセンブル前ラベル正規化ヘルパー群を配置。
-- `src/pass/pass1/mod.rs` (旧 `pass1.rs`): `pass1` エントリポイントおよびメインループ、行パース `parse_line` とディレクティブ分岐処理 `handle_pseudo` のディスパッチ処理のみに集中させる。
-
-### テスト方法
-```bash
-cargo test
-# 確認: すべてのテストがパスすること
-```
-
-### 完了基準
-- ✅ `cargo test` ですべてのテストがパスすること
-- ✅ `src/pass/pass1.rs` (現在の `mod.rs`) のファイルサイズが 800 行以下に削減されること
-- ✅ 各モジュールの責務が明確になり、循環参照が発生しないこと
-
----
-
-## 🔄 Step 8: `symbol/mod.rs` のテーブル分割・整理 (built-in データの分離)
-
-### 目的
-`src/symbol/mod.rs` (約1100行) から、静的な命令定義テーブル (`OPCODE_TABLE`) やレジスタ定義テーブル (`REGISTER_TABLE`) などの built-in データを別ファイル (`table.rs`) に分割し、シンボルテーブル管理のコアロジックを読みやすく簡潔にする。
-
-### 対象ファイル
-- `src/symbol/mod.rs` (本体を軽量化)
-- `src/symbol/table.rs` (新規: built-in テーブルデータ定義)
-
-### 変更内容
-`REGISTER_TABLE`, `OPCODE_TABLE`, `OpcodeEntry`, `RegEntry` および関連する定数群を `src/symbol/table.rs` へ移行する。
-
-### テスト方法
-```bash
-cargo test
-# 確認: すべてのテストがパスすること
-```
-
-### 完了基準
-- ✅ `cargo test` ですべてのテストがパスすること
-- ✅ `src/symbol/mod.rs` のファイルサイズが 400 行以下に削減されること
-
----
-
-## 🔄 Step 9: `options.rs` のモジュール分割・整理
-
-### 目的
-`src/options.rs`（現在約980行）を `src/options/` ディレクトリ配下に分割・整理し、コマンドライン引数の定義、CPU種別、パース処理の責務を分離することで可読性と保守性を向上させる。
-
-### 対象ファイル
-- `src/options.rs` (削除)
-- `src/options/mod.rs` (新規: エントリポイント)
-- `src/options/cpu.rs` (新規: CPU種別定義)
-- `src/options/types.rs` (新規: Options構造体定義)
-- `src/options/parser.rs` (新規: 引数パース処理)
-
-### テスト方法
-```bash
-cargo test
-# 確認: すべてのテストがパスすること
-```
-
-### 完了基準
-- ✅ `cargo test` ですべてのテストがパスすること
-- ✅ `src/options.rs` が削除され、`src/options/mod.rs` が 150 行以下に削減されること
-
----
-
-## 🔄 Step 10: `source.rs` のモジュール分割・整理
-
-### 目的
-`src/source.rs`（現在約360行）を `src/source/` ディレクトリ配下に分割・整理し、ソースバッファ表現 (`SourceBuf`)、インクルードスタック管理 (`SourceStack`)、パス解決ユーティリティの責務を分離することで可読性と保守性を向上させる。
-
-### 対象ファイル
-- `src/source.rs` (削除)
-- `src/source/mod.rs` (新規: エントリポイント)
-- `src/source/buf.rs` (新規: ソースバッファ構造)
-- `src/source/stack.rs` (新規: インクルードスタック処理)
-- `src/source/path.rs` (新規: インクルードパス変換)
-
-### テスト方法
-```bash
-cargo test
-# 確認: すべてのテストがパスすること
-```
-
-### 完了基準
-- ✅ `cargo test` ですべてのテストがパスすること
-- ✅ `src/source.rs` が削除され、`src/source/mod.rs` が 100 行以下に削減されること
-
----
-
-## 📊 進捗チェックリスト
-
-| Step | 説明 | 状態 | テスト結果 | 実施日 |
-|------|------|------|-----------|--------|
-| 0 | ベースライン | ✅ | 184/184 | 2026-03-07 |
-| 1 | ユーティリティ統一 | ✅ | 173/173 | 2026-05-22 |
-| 2 | デッドコード見直し | ✅ | 229/229 (no change) | 2026-03-08 |
-| 3 | pass1 分割 | ✅ | 229/229 | 2026-04-01 |
-| 4 | エラー型安全化 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-23 |
-| 5 | CPU 型統一 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-23 |
-| 6 | pass3 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-24 |
-| 7 | pass1 再分割（命令・オペランドパース） | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-24 |
-| 8 | symbol built-in テーブル分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-25 |
-| 9 | options 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-25 |
-| 10 | source 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-26 |
-| 11 | error 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-26 |
-| 12 | context 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-26 |
-| 13 | instructions 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-30 |
-| 14 | addressing 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-31 |
-| 15 | expr 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-31 |
-| 16 | pass2 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-05-31 |
-| 17 | writer 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-01 |
-| 18 | pass1_macro 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-03 |
-| 19 | pass1_pseudo 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-04 |
-| 20 | instructions ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-08 |
-| 21 | pass1_optimize 分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-10 |
-| 22 | instructions/ops.rs カテゴリ分割 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-11 |
-| 23 | addressing ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-12 |
-| 24 | expr ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-14 |
-| 25 | symbol ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-14 |
-| 26 | pass/pseudo ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-14 |
-| 27 | pass/prn ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-14 |
-| 28 | object/writer ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-17 |
-| 29 | options ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-17 |
-| 30 | source ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-18 |
-| 31 | utils ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-20 |
-| 32 | error ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-20 |
-| 33 | context ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-20 |
-| 34 | pass/pass3/ea ユニットテスト分離 | ✅ | 13/13 (lib), 63/63 (golden), 98/98 (integration) | 2026-06-20 |
-
-
-
-
-
-
-
-
-
----
-
-## 🚀 実施上のポイント
-
-### テスト実行コマンド（毎ステップ後）
-```bash
-# ユニットテスト（推奨、高速）
-cargo test --lib
-
-# 統合テストも含める（時間がある場合）
-cargo test
-
-# 特定テストだけ実行（デバッグ時）
-cargo test symbol::tests::test_lookup_opcode_move
-```
-
-### Git 運用
-```bash
-# 各ステップをfeatureブランチで実施
-git checkout -b refactor/step-1-utils
-# ... 変更 ...
-cargo test --lib  # 確認
-git commit -m "refactor: unify utility functions"
-
-git checkout -b refactor/step-2-deadcode
-# ...
-```
-
-### ロールバック方法
-```bash
-# テスト失敗時は該当ステップをやり直し
-git checkout refactor/step-X
-git reset --hard origin/refactor/step-X
-```
-
----
-
-## ⚠️ 注意事項
-
-1. **各ステップは独立させる** - 前のステップが完了するまで次へ進まない
-2. **テスト失敗 = すぐロールバック** - リグレッションは許さない
-3. **大型ファイル分割では import パス注意** - 循環参照を避ける
-4. **ドキュメント更新** - リファクタ後は README.md に反映検討
-
----
-
-## 📅 予想実施期間
-
-| Step | 所要時間 | 難易度 |
-|------|----------|--------|
-| 1 | 30-45 分 | ⭐☆☆ |
-| 2 | 20-30 分 | ⭐☆☆ |
-| 3 | 2-3 時間 | ⭐⭐⭐ |
-| 4 | 1-1.5 時間 | ⭐⭐☆ |
-| 5 | 1-1.5 時間 | ⭐⭐☆ |
-| 6 | 2-3 時間 | ⭐⭐⭐ |
-| 7 | 2-3 時間 | ⭐⭐⭐ |
-| 8 | 45-60 分 | ⭐☆☆ |
-| **合計** | **10-15 時間** | |
-
----
-
-## 🎓 期待される効果
-
-✅ **コード保守性向上**
-- 関数の責任が明確に → テスト追加が容易
-- ファイルサイズ削減 → 理解しやすく
-
-✅ **開発速度向上**
-- 重複コードがない → バグ修正の影響範囲が狭い
-- 一箇所の修正で複数箇所に効果
-
-✅ **品質向上**
-- 型安全性向上 → IDE 補完強化
-- テスト数維持 → リグレッション防止
-
----
-
-**作成日**: 2026-03-07  
-**版**: 1.0
+#### 2. レポーターの実装
+- **`StderrReporter`**:
+  - `main.rs` で使用する標準エラー出力用レポーター。
+  - 生成時に `warn_level` (u8) を受け取り、設定レベル未満の警告は出力せず、かつカウントも行わない。
+- **`BufferReporter`**:
+  - テストコード等で使用する、メモリ蓄積用レポーター。
+  - 発生したエラー/警告を構造体の `Vec` に保存し、テスト内で「特定のエラーが正しく検出されたか」をアサーションできるようにする。
+
+#### 3. コンテキストおよびパス処理への統合
+- `pass::assemble` のシグネチャを以下のように更新します：
+  ```rust
+  pub fn assemble(
+      ctx: &mut AssemblyContext,
+      reporter: &mut dyn ErrorReporter,
+  ) -> Result<AssembleResult, AssembleError>
+  ```
+- 各アセンブリパス `pass1::pass1`、および `pass3::pass3` に `reporter` への参照を渡します。
+- `P1Ctx` / `P3Ctx` に保持されている `std::io::stderr()` への直接書き込みロジックを、すべて `reporter.report_error` / `report_warning` の呼び出しに置換します。
+- `AssemblyContext` に存在する `num_errors` と `num_warnings` フィールドを廃止、または `ErrorReporter` からの集計値に同期する設計へ統合します。
+
+#### 4. テスト環境の移行とクリーン化
+- テストコード（`tests/integration_test.rs` から分割された各テストファイル）において、`BufferReporter` を用いてアセンブル中のエラーを検証します。
+- テスト実行時の stderr 汚染がなくなり、CI等のテストログがクリーンになります。
