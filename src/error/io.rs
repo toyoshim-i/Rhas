@@ -7,6 +7,7 @@ pub struct FileError {
     pub kind: FileErrorKind,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum FileErrorKind {
     NotFound,

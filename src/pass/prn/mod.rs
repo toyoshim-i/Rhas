@@ -9,6 +9,7 @@
 //! - SSSS...: ソース行テキスト
 
 /// PRNの1行エントリ
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct PrnLine {
     pub line_num: u32,

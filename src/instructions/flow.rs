@@ -1,5 +1,5 @@
 use super::{
-    addr_reg, cas2_reg, data_reg, enc, eval_const, imm_rpn, map_enc_err, push_long, push_word,
+    addr_reg, cas2_reg, data_reg, enc, eval_const, imm_rpn, push_long, push_word,
     size_field, size_to_op_size, InsnError,
 };
 use crate::addressing::EffectiveAddress;

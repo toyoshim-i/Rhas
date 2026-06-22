@@ -2,9 +2,9 @@ mod buf;
 mod path;
 mod stack;
 
-pub use buf::{SourceBuf, MAX_LINE_LEN};
+pub use buf::SourceBuf;
 pub use path::parse_include_paths;
-pub use stack::{ReadResult, SourceStack, INCLD_MAX_NEST};
+pub use stack::{ReadResult, SourceStack};
 
 #[cfg(test)]
 mod tests;

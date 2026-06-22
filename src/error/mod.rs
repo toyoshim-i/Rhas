@@ -8,10 +8,10 @@ pub mod context;
 pub mod io;
 pub mod printer;
 
-pub use codes::{warn, warn_default_level, warn_message, ErrorCode, WarnCode};
+pub use codes::{warn, warn_default_level, ErrorCode, WarnCode};
 pub use context::{ErrorContext, SourcePos, WarnContext};
 pub use io::{FileError, FileErrorKind};
-pub use printer::{print_error, print_error_context, print_warning, print_warning_context};
+pub use printer::{print_error_context, print_warning_context};
 
 #[cfg(test)]
 mod tests;

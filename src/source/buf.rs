@@ -43,6 +43,7 @@ impl SourceBuf {
     }
 
     /// インメモリのバイト列からバッファを作成する（テスト・マクロ展開用）
+    #[allow(dead_code)]
     pub fn from_bytes(data: Vec<u8>, path: PathBuf) -> Self {
         SourceBuf {
             path,

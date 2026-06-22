@@ -8,6 +8,7 @@ use crate::expr::Rpn;
 use crate::symbol::types::{ExtAttrib, InsnHandler, SizeCode};
 
 /// 中間コードレコード
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum TempRecord {
     /// 解決済みバイト列（Pass1で完全にエンコードできた命令／データ）

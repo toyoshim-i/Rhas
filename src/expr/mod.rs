@@ -20,6 +20,7 @@ pub use rpn::{Operator, RPNToken, Rpn};
 
 /// 式パーサーのエラー
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum ParseError {
     /// 式が見つからない（空または予期しない文字）
     ExprExpected,

@@ -19,10 +19,6 @@ fn encode(handler: InsnHandler, opcode: u16, size: SizeCode, ops: Vec<&str>) -> 
     encode_insn(opcode, handler, size, &operands).unwrap()
 }
 
-fn encode_ok(handler: InsnHandler, opcode: u16, size: SizeCode, ops: Vec<&str>) -> Option<Vec<u8>> {
-    let operands: Vec<EffectiveAddress> = ops.iter().map(|s| parse(s)).collect();
-    encode_insn(opcode, handler, size, &operands).ok()
-}
 
 // ---- no-operand (NOP / RTS etc.) ----
 

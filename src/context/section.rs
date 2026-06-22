@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// セクション番号（has.equ: SECT_TEXT〜SECT_RLSTACK）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

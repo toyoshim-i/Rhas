@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// アセンブラエラーコード（error.s の errtbl マクロに対応）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]

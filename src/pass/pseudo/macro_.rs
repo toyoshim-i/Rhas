@@ -2,6 +2,7 @@
 //!
 //! Handles: .macro, .endm, .rept, .irp, .irpc
 //! Complex control flow for assembler-time macro expansion and repetitive code generation.
+#![allow(dead_code)]
 
 use crate::expr::parse_expr;
 use crate::error::ErrorCode;

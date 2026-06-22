@@ -1,6 +1,6 @@
 use super::encode::{encode_ea, EaEncoded, EncodeError};
 use super::{
-    ea, eac, DispSize, Displacement, EaError, EffectiveAddress, IdxSize, IndexSpec, Scale,
+    ea, eac, Displacement, EaError, EffectiveAddress, IdxSize, IndexSpec, Scale,
 };
 use crate::options::cpu;
 use crate::symbol::SymbolTable;

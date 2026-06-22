@@ -1,6 +1,7 @@
 //! HLK オブジェクトファイル形式の型定義
 //!
 //! docs/hlk_object_format.md 参照。
+#![allow(dead_code)]
 
 pub mod writer;
 

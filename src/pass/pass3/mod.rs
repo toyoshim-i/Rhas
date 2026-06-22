@@ -5,12 +5,11 @@
 
 use super::prn::PrnLine;
 use super::temp::TempRecord;
-use crate::addressing::EffectiveAddress;
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;
 use crate::expr::{eval_rpn, Rpn};
 use crate::object::{sym_kind, ExternalSymbol, ObjectCode, ScdEvent, SectionInfo};
-use crate::symbol::types::{DefAttrib, ExtAttrib, InsnHandler, SizeCode};
+use crate::symbol::types::{DefAttrib, ExtAttrib};
 use crate::symbol::{Symbol, SymbolTable};
 
 mod branch;
@@ -23,7 +22,7 @@ mod tests;
 use branch::{process_branch, val_to_bytes};
 use ea::{
     is_external_with_offset, is_simple_external, register_xdefs_in_ea, register_xdefs_in_rpn,
-    resolve_ea_with_ext, resolve_regsym_chain, sym_to_eval,
+    resolve_regsym_chain, sym_to_eval,
 };
 use insn::process_deferred;
 

@@ -2,6 +2,7 @@
 //!
 //! Handles: .org, .fail, .cpu, .globl, .extern, .comm, .even, .align, etc.
 //! These are less complex directives not covered by other modules.
+#![allow(dead_code)]
 
 /// CPU type specification support
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,10 +71,6 @@ pub fn parse_org_address(value: u32) -> u32 {
     value
 }
 
-/// Helper to validate symbol visibility
-pub fn is_visibility_directive(name: &[u8]) -> bool {
-    matches!(name, b"globl" | b"GLOBL" | b"extern" | b"EXTERN")
-}
 
 // bring in utilities needed by handler
 use crate::expr::parse_expr;

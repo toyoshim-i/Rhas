@@ -58,11 +58,9 @@ fn parse_dc(
                 let b = line[*pos];
                 *pos += 1;
                 s.push(b);
-                if (0x81..=0x9F).contains(&b) || (0xE0..=0xFC).contains(&b) {
-                    if *pos < line.len() {
-                        s.push(line[*pos]);
-                        *pos += 1;
-                    }
+                if ((0x81..=0x9F).contains(&b) || (0xE0..=0xFC).contains(&b)) && *pos < line.len() {
+                    s.push(line[*pos]);
+                    *pos += 1;
                 }
             }
             if valid && !s.is_empty() {

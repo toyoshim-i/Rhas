@@ -14,8 +14,7 @@ pub mod types;
 use crate::utils;
 use std::collections::HashMap;
 pub use types::Symbol;
-use types::{cmask, reg, sz};
-use types::{CpuMask, DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeFlags};
+use types::{CpuMask, DefAttrib, ExtAttrib, FirstDef};
 
 // ----------------------------------------------------------------
 // SymbolTable
@@ -200,6 +199,7 @@ impl SymbolTable {
     }
 
     /// シンボルが存在するかどうか確認する
+    #[allow(dead_code)]
     pub fn is_defined(&self, name: &[u8]) -> bool {
         self.lookup_sym(name).is_some()
     }
@@ -226,14 +226,17 @@ impl SymbolTable {
     }
 
     /// 統計情報
+    #[allow(dead_code)]
     pub fn user_sym_count(&self) -> usize {
         self.user_syms.len()
     }
 
+    #[allow(dead_code)]
     pub fn cmd_count(&self) -> usize {
         self.cmd_table.len()
     }
 
+    #[allow(dead_code)]
     pub fn reg_count(&self) -> usize {
         self.reg_table.len()
     }

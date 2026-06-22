@@ -95,6 +95,7 @@ impl Operator {
     }
 
     /// u8 コードから Operator に変換する
+    #[allow(dead_code)]
     pub fn from_u8(v: u8) -> Option<Self> {
         match v {
             0x01 => Some(Operator::Neg),

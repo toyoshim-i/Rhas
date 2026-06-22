@@ -8,7 +8,7 @@ use crate::expr::rpn::RPNToken;
 use crate::expr::{eval_rpn, parse_expr, Rpn};
 use crate::instructions::{encode_insn, InsnError};
 use crate::pass::temp::TempRecord;
-use crate::symbol::types::{reg, DefAttrib, InsnHandler, SizeCode};
+use crate::symbol::types::{DefAttrib, InsnHandler, SizeCode};
 use crate::symbol::{Symbol, SymbolTable};
 
 pub(super) fn handle_real_insn(
@@ -116,9 +116,8 @@ pub(super) fn handle_real_insn(
         return;
     }
 
-    // 通常命令
-    let mut ops = parse_operands(line, pos, &*p1.sym, cpu);
-    let mut enc_size = sz;
+    let ops = parse_operands(line, pos, &*p1.sym, cpu);
+    let enc_size = sz;
 
     // JMP/JSR 最適化（安全に判定できるケースのみ）
     if matches!(handler, InsnHandler::JmpJsr) && p1.ctx.opts.opt_jmp_jsr && ops.len() == 1 {
@@ -453,7 +452,7 @@ fn placeholder_ea(ea: &EffectiveAddress) -> EffectiveAddress {
         }
         EffectiveAddress::MemIndPost { an, bd, idx, od } => EffectiveAddress::MemIndPost {
             an: *an,
-            idx: idx.clone(),
+            idx: *idx,
             bd: Displacement {
                 rpn: if bd.const_val.is_some() {
                     bd.rpn.clone()
@@ -475,7 +474,7 @@ fn placeholder_ea(ea: &EffectiveAddress) -> EffectiveAddress {
         },
         EffectiveAddress::MemIndPre { an, bd, idx, od } => EffectiveAddress::MemIndPre {
             an: *an,
-            idx: idx.clone(),
+            idx: *idx,
             bd: Displacement {
                 rpn: if bd.const_val.is_some() {
                     bd.rpn.clone()
@@ -496,7 +495,7 @@ fn placeholder_ea(ea: &EffectiveAddress) -> EffectiveAddress {
             },
         },
         EffectiveAddress::PcMemIndPost { bd, idx, od } => EffectiveAddress::PcMemIndPost {
-            idx: idx.clone(),
+            idx: *idx,
             bd: Displacement {
                 rpn: if bd.const_val.is_some() {
                     bd.rpn.clone()
@@ -517,7 +516,7 @@ fn placeholder_ea(ea: &EffectiveAddress) -> EffectiveAddress {
             },
         },
         EffectiveAddress::PcMemIndPre { bd, idx, od } => EffectiveAddress::PcMemIndPre {
-            idx: idx.clone(),
+            idx: *idx,
             bd: Displacement {
                 rpn: if bd.const_val.is_some() {
                     bd.rpn.clone()

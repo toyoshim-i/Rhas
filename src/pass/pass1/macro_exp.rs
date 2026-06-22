@@ -2,8 +2,7 @@ use super::{
     parse_line, parse_string_or_ident, read_ident, should_emit_line_info, skip_spaces, P1Ctx,
 };
 use crate::context::AssemblyContext;
-use crate::expr::rpn::RPNToken;
-use crate::expr::{parse_expr, Rpn};
+use crate::expr::parse_expr;
 use crate::pass::temp::TempRecord;
 use crate::source::{ReadResult, SourceStack};
 use crate::symbol::types::InsnHandler;

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // デフォルト値定数（has.equ / work.s より）
 pub const DEFAULT_PRN_WIDTH: u16 = 136;
 pub const DEFAULT_PRN_PAGE_LINES: u16 = 58;

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use super::cpu::CpuType;
 use super::scd::ScdTemp;
 use super::section::{Section, N_SECTIONS};

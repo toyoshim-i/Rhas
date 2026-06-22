@@ -1,7 +1,7 @@
 use super::{
-    ea, eac, DispSize, Displacement, EaError, EffectiveAddress, IdxSize, IndexSpec, Scale,
+    DispSize, Displacement, EaError, EffectiveAddress, IdxSize, IndexSpec, Scale,
 };
-use crate::expr::{parse_expr, RPNToken, Rpn};
+use crate::expr::{parse_expr, RPNToken};
 use crate::symbol::types::reg;
 use crate::symbol::{Symbol, SymbolTable};
 

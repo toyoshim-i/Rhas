@@ -51,6 +51,7 @@ impl<'a> Parser<'a> {
         self.src.get(self.pos + 1).copied()
     }
 
+    #[allow(dead_code)]
     fn advance(&mut self) -> Option<u8> {
         let b = self.src.get(self.pos).copied();
         if b.is_some() {

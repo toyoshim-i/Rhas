@@ -1,4 +1,5 @@
 use super::*;
+use super::printer::print_error;
 
 #[test]
 fn test_error_message() {

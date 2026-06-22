@@ -10,7 +10,7 @@ pub mod section;
 pub use asm::{AsmPass, AssemblyContext};
 pub use cpu::CpuType;
 pub use scd::ScdTemp;
-pub use section::{Section, N_SECTIONS};
+pub use section::Section;
 
 #[cfg(test)]
 mod tests;

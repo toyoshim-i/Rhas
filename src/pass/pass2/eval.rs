@@ -136,7 +136,7 @@ fn resolve_ea_for_pass2(
                         size: disp.size,
                         const_val: Some(ev.value),
                     },
-                    idx: idx.clone(),
+                    idx: *idx,
                 }
             } else {
                 EffectiveAddress::AddrRegIdx {
@@ -146,7 +146,7 @@ fn resolve_ea_for_pass2(
                         size: disp.size,
                         const_val: Some(1),
                     },
-                    idx: idx.clone(),
+                    idx: *idx,
                 }
             }
         }
@@ -179,7 +179,7 @@ fn resolve_ea_for_pass2(
                         size: disp.size,
                         const_val: Some(displacement),
                     },
-                    idx: idx.clone(),
+                    idx: *idx,
                 }
             } else {
                 EffectiveAddress::PcIdx {
@@ -188,7 +188,7 @@ fn resolve_ea_for_pass2(
                         size: disp.size,
                         const_val: Some(0),
                     },
-                    idx: idx.clone(),
+                    idx: *idx,
                 }
             }
         }
@@ -198,7 +198,7 @@ fn resolve_ea_for_pass2(
             EffectiveAddress::MemIndPost {
                 an: *an,
                 bd: new_bd,
-                idx: idx.clone(),
+                idx: *idx,
                 od: new_od,
             }
         }
@@ -208,7 +208,7 @@ fn resolve_ea_for_pass2(
             EffectiveAddress::MemIndPre {
                 an: *an,
                 bd: new_bd,
-                idx: idx.clone(),
+                idx: *idx,
                 od: new_od,
             }
         }
@@ -217,7 +217,7 @@ fn resolve_ea_for_pass2(
             let new_od = resolve_disp_for_pass2(sym, od, loc, sect, false);
             EffectiveAddress::PcMemIndPost {
                 bd: new_bd,
-                idx: idx.clone(),
+                idx: *idx,
                 od: new_od,
             }
         }
@@ -226,7 +226,7 @@ fn resolve_ea_for_pass2(
             let new_od = resolve_disp_for_pass2(sym, od, loc, sect, false);
             EffectiveAddress::PcMemIndPre {
                 bd: new_bd,
-                idx: idx.clone(),
+                idx: *idx,
                 od: new_od,
             }
         }

@@ -5,13 +5,11 @@
 
 use super::pseudo;
 use super::temp::TempRecord;
-use crate::addressing::{parse_reg_list_mask, EffectiveAddress};
 use crate::context::AssemblyContext;
-use crate::error::{warn, ErrorCode, ErrorContext, SourcePos, WarnContext};
+use crate::error::{ErrorCode, ErrorContext, SourcePos, WarnContext};
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;
 use crate::expr::{eval_rpn, parse_expr, Rpn};
-use crate::options::cpu as cpuconst;
 use crate::source::{ReadResult, SourceStack};
 use crate::symbol::types::{DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeCode};
 use crate::symbol::{Symbol, SymbolTable};
@@ -28,7 +26,6 @@ use insn::handle_real_insn;
 pub(crate) use macro_exp::{
     collect_macro_body, expand_macro_body, parse_macro_args, parse_macro_params,
 };
-use operand::parse_operands;
 use preprocess::{preprocess_anon_labels, preprocess_numeric_local_labels};
 use pseudo_dispatch::handle_pseudo;
 pub(crate) use pseudo_dispatch::{

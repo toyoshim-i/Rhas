@@ -4,10 +4,7 @@ mod types;
 
 pub use cpu::cpu_number_to_type;
 pub use parser::parse_args;
-pub use types::{
-    Options, ParseError, PcToAbslMode, DEFAULT_CPU_NUMBER, DEFAULT_LOCAL_LEN_MAX,
-    DEFAULT_LOCAL_NUM_MAX, DEFAULT_PRN_CODE_WIDTH, DEFAULT_PRN_PAGE_LINES, DEFAULT_PRN_WIDTH,
-};
+pub use types::{Options, ParseError};
 
 pub const VERSION: &str = "1.2.5";
 pub const VERSION_BASE: &str = "3.09+91";

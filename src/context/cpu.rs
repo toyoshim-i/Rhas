@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// CPU型情報（cpu_number と cpu_type を統一）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CpuType {
@@ -43,6 +44,7 @@ impl CpuType {
     }
 
     /// CPU番号が68060以降か判定
+    #[allow(dead_code)]
     pub fn supports_060_extended(&self) -> bool {
         self.number >= 68060
     }

@@ -105,15 +105,15 @@ fn test_skip_spaces() {
 fn test_set_if_matched_in_bounds() {
     let mut arr = [false, false, false];
     set_if_matched(&mut arr, 1, true);
-    assert_eq!(arr[1], true);
-    assert_eq!(arr[0], false);
+    assert!(arr[1]);
+    assert!(!arr[0]);
 }
 
 #[test]
 fn test_set_if_matched_out_of_bounds() {
     let mut arr = [false, false];
     set_if_matched(&mut arr, 10, true); // Should not crash
-    assert_eq!(arr[0], false);
+    assert!(!arr[0]);
 }
 
 #[test]
@@ -204,7 +204,7 @@ fn test_is_valid_scd_record_type() {
 // =================================================================
 
 use super::misc::{
-    handle_misc, is_visibility_directive, parse_org_address, AlignmentOperand, CpuDirective,
+    handle_misc, parse_org_address, AlignmentOperand, CpuDirective,
 };
 
 #[test]
@@ -251,13 +251,6 @@ fn test_parse_org_address() {
     assert_eq!(parse_org_address(0), 0);
 }
 
-#[test]
-fn test_is_visibility_directive() {
-    assert!(is_visibility_directive(b"globl"));
-    assert!(is_visibility_directive(b"extern"));
-    assert!(!is_visibility_directive(b"label"));
-    assert!(!is_visibility_directive(b"text"));
-}
 
 #[test]
 fn test_handle_misc_cpu() {

@@ -73,6 +73,7 @@ fn format_sym_file(sym: &SymbolTable) -> Vec<u8> {
 }
 
 /// アセンブルエラー
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum AssembleError {
     /// ソースファイルが開けない
@@ -84,6 +85,7 @@ pub enum AssembleError {
 }
 
 /// アセンブル結果
+#[allow(dead_code)]
 pub struct AssembleResult {
     pub obj_bytes: Vec<u8>,
     pub obj: ObjectCode,

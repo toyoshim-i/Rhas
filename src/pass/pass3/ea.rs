@@ -2,8 +2,8 @@ use super::P3Ctx;
 use crate::addressing::{Displacement, EffectiveAddress};
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::{Operator, RPNToken};
-use crate::expr::{eval_rpn, Rpn};
-use crate::symbol::types::{DefAttrib, ExtAttrib, SizeCode};
+use crate::expr::Rpn;
+use crate::symbol::types::{DefAttrib, SizeCode};
 use crate::symbol::{Symbol, SymbolTable};
 
 /// EA に含まれる外部参照の種別
@@ -57,7 +57,7 @@ pub(super) fn resolve_regsym_chain(sym: &SymbolTable, name: &[u8]) -> Vec<u8> {
             break;
         }
         if let Some(Symbol::RegSym { define }) = sym.lookup_sym(current_name) {
-            if let Some(rpn) = define.get(0) {
+            if let Some(rpn) = define.first() {
                 if let [RPNToken::SymbolRef(target), RPNToken::End] = rpn.as_slice() {
                     current_name = target;
                     depth += 1;
@@ -362,7 +362,7 @@ pub(super) fn resolve_ea_with_ext(
                         (
                             EffectiveAddress::PcIdx {
                                 disp: new_disp,
-                                idx: idx.clone(),
+                                idx: *idx,
                             },
                             None,
                         )
@@ -376,7 +376,7 @@ pub(super) fn resolve_ea_with_ext(
                         (
                             EffectiveAddress::PcIdx {
                                 disp: new_disp,
-                                idx: idx.clone(),
+                                idx: *idx,
                             },
                             Some(EaExtKind::PcRel(name)),
                         )
@@ -411,7 +411,7 @@ pub(super) fn resolve_ea_with_ext(
             (
                 EffectiveAddress::PcMemIndPost {
                     bd: new_bd,
-                    idx: idx.clone(),
+                    idx: *idx,
                     od: new_od,
                 },
                 None,
@@ -443,7 +443,7 @@ pub(super) fn resolve_ea_with_ext(
             (
                 EffectiveAddress::PcMemIndPre {
                     bd: new_bd,
-                    idx: idx.clone(),
+                    idx: *idx,
                     od: new_od,
                 },
                 None,

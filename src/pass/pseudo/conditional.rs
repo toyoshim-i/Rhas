@@ -2,6 +2,7 @@
 //!
 //! Handles: .if, .iff, .ifdef, .ifndef, .else, .elseif, .endif
 //! Complex control flow for assembler-time conditional compilation.
+#![allow(dead_code)]
 
 use crate::expr::parse_expr;
 use crate::symbol::SymbolTable;

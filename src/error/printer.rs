@@ -21,7 +21,7 @@ pub fn print_error(out: &mut dyn Write, pos: &SourcePos, code: ErrorCode, sym: O
 ///
 /// フォーマット: `<filename>  <linenum>: Error: <message>\n`
 pub fn print_error_context(out: &mut dyn Write, ctx: &ErrorContext) {
-    let sym_ref = ctx.symbol.as_ref().map(|s| s.as_slice());
+    let sym_ref = ctx.symbol.as_deref();
     print_error(out, &ctx.pos, ctx.code, sym_ref);
 }
 
@@ -48,7 +48,7 @@ pub fn print_warning(
 
 /// WarnContext 版ワーニング出力（型安全性改善版）
 pub fn print_warning_context(out: &mut dyn Write, ctx: &WarnContext, warn_level: u8) {
-    let sym_ref = ctx.symbol.as_ref().map(|s| s.as_slice());
+    let sym_ref = ctx.symbol.as_deref();
     print_warning(out, &ctx.pos, ctx.code, sym_ref, warn_level);
 }
 

@@ -2,6 +2,7 @@
 //!
 //! Handles: SCD (Source Code Debugging) pseudo-instructions
 //! Provides debug information for linked objects.
+#![allow(dead_code)]
 
 /// SCD record entry type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,7 +29,7 @@ pub fn parse_scd_filename(line: &[u8], pos: &mut usize) -> Vec<u8> {
 
 /// Validate SCD record type value
 pub fn is_valid_scd_record_type(value: u8) -> bool {
-    matches!(value, 0x01 | 0x02 | 0x03)
+    matches!(value, 0x01..=0x03)
 }
 
 /// Handle SCD debug pseudo-instruction from pass1
@@ -85,7 +86,6 @@ pub fn handle_scd(
             skip_spaces(line, pos);
             if *pos < line.len() && line[*pos] != b';' {
                 p1.error_code(ErrorCode::IlOpr, None);
-                return;
             }
         }
         crate::symbol::types::InsnHandler::Endef => {
@@ -127,7 +127,6 @@ pub fn handle_scd(
             skip_spaces(line, pos);
             if *pos < line.len() && line[*pos] != b';' {
                 p1.error_code(ErrorCode::IlOpr, None);
-                return;
             }
         }
         crate::symbol::types::InsnHandler::Val => {
@@ -159,7 +158,7 @@ pub fn handle_scd(
             skip_spaces(line, pos);
             if let Ok(rpn) = parse_expr(line, pos) {
                 if let Some(v) = p1.eval_const(&rpn) {
-                    let scl = v.value as i32;
+                    let scl = v.value;
                     if scl == -1 {
                         // HAS互換: 関数定義終了マーカー。`.endef` での出力を抑止する。
                         p1.ctx.scd_temp.attrib = 0x2F;

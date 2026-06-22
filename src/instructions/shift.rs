@@ -1,4 +1,4 @@
-use super::{data_reg, enc, eval_const, push_word, size_field, size_to_op_size, InsnError};
+use super::{data_reg, enc, eval_const, push_word, size_field, InsnError};
 use crate::addressing::EffectiveAddress;
 use crate::symbol::types::SizeCode;
 

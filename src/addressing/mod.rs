@@ -8,9 +8,7 @@ pub mod parse;
 
 pub use parse::{parse_ea, parse_reg_list_mask};
 
-use crate::expr::{parse_expr, ParseError as ExprParseError, RPNToken, Rpn};
-use crate::symbol::types::reg;
-use crate::symbol::{Symbol, SymbolTable};
+use crate::expr::{ParseError as ExprParseError, Rpn};
 
 // ----------------------------------------------------------------
 // EA モードコード定数（EAC_*、6ビットEAフィールド値）
@@ -49,6 +47,7 @@ pub mod eac {
 // ----------------------------------------------------------------
 
 /// EA モードビットマスク（eamode.equ: EA_* に対応）
+#[allow(dead_code)]
 pub mod ea {
     pub const DN: u16 = 1 << 0;
     pub const AN: u16 = 1 << 1;
@@ -111,11 +110,13 @@ impl Displacement {
     }
 
     /// 定数かどうか
+    #[allow(dead_code)]
     pub fn is_const(&self) -> bool {
         self.const_val.is_some()
     }
 
     /// ゼロかどうか（定数かつ値が0）
+    #[allow(dead_code)]
     pub fn is_zero(&self) -> bool {
         self.const_val == Some(0)
     }
@@ -217,6 +218,7 @@ pub enum EffectiveAddress {
 
 impl EffectiveAddress {
     /// EA ビットマスクを返す
+    #[allow(dead_code)]
     pub fn ea_bits(&self) -> u16 {
         match self {
             Self::DataReg(_) => ea::DN,
