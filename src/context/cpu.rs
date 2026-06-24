@@ -1,3 +1,5 @@
+// HAS060仕様に基づき定義された各種CPU（68010等）の定数定義や、将来追加予定の命令チェック用定数が
+// 現在一部未参照であることによるコンパイラ警告を抑制するために付与しています。
 #![allow(dead_code)]
 /// CPU型情報（cpu_number と cpu_type を統一）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,6 +46,8 @@ impl CpuType {
     }
 
     /// CPU番号が68060以降か判定
+    // 将来的に 68060 固有の命令拡張に対応したアセンブル・チェック処理を行う際に
+    // 参照するため定義を保持しており、コンパイラ警告を抑制しています。
     #[allow(dead_code)]
     pub fn supports_060_extended(&self) -> bool {
         self.number >= 68060

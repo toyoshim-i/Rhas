@@ -8,6 +8,8 @@ use crate::expr::Rpn;
 use crate::symbol::types::{ExtAttrib, InsnHandler, SizeCode};
 
 /// 中間コードレコード
+// HAS060中間ファイルフォーマットの拡張用レコード定義（ScdEndef等）が、
+// 一部のアセンブル処理で読み飛ばされることによる未使用警告を抑制しています。
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum TempRecord {

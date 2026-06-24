@@ -2,6 +2,9 @@
 //!
 //! Handles: .if, .iff, .ifdef, .ifndef, .else, .elseif, .endif
 //! Complex control flow for assembler-time conditional compilation.
+
+// HAS060互換の条件アセンブリ疑似命令の複雑な制御フローや関連ハンドラ群の一部が、
+// 現在の単純化されたアセンブルパス構成において未参照となっている警告を抑制するために付与しています。
 #![allow(dead_code)]
 
 use crate::expr::parse_expr;

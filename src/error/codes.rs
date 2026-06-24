@@ -1,3 +1,5 @@
+// HAS060が定義する広範なエラーコード（errtbl）および警告コード（warntbl）の仕様を完全に
+// 列挙・定義しており、現段階のアセンブラパス実装でまだ使われていないコードに対する警告を抑制するために付与しています。
 #![allow(dead_code)]
 /// アセンブラエラーコード（error.s の errtbl マクロに対応）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

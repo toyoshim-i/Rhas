@@ -2,6 +2,9 @@
 //!
 //! Handles: .macro, .endm, .rept, .irp, .irpc
 //! Complex control flow for assembler-time macro expansion and repetitive code generation.
+
+// HAS060互換のマクロ展開、リピート疑似命令（.rept/.irp/.irpc等）の複雑な制御構造の一部や、
+// 構造体のフィールド群が、現状のアセンブラ実装（簡易マクロ展開）において未参照である警告を抑制するために付与しています。
 #![allow(dead_code)]
 
 use crate::expr::parse_expr;

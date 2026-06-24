@@ -199,6 +199,8 @@ impl SymbolTable {
     }
 
     /// シンボルが存在するかどうか確認する
+    // デバッグ、外部ユーティリティ、または将来の二重定義チェック用として定義した
+    // ユーティリティメソッドであり、現在未参照であることによる警告を抑制しています。
     #[allow(dead_code)]
     pub fn is_defined(&self, name: &[u8]) -> bool {
         self.lookup_sym(name).is_some()
@@ -226,6 +228,8 @@ impl SymbolTable {
     }
 
     /// 統計情報
+    // アセンブル完了時の統計情報表示（ユーザーシンボル数、命令数、レジスタ定義数等）の
+    // ための補助メソッド群であり、現在未使用であることによる警告を抑制しています。
     #[allow(dead_code)]
     pub fn user_sym_count(&self) -> usize {
         self.user_syms.len()

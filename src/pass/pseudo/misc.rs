@@ -2,6 +2,9 @@
 //!
 //! Handles: .org, .fail, .cpu, .globl, .extern, .comm, .even, .align, etc.
 //! These are less complex directives not covered by other modules.
+
+// HAS060互換の各種疑似命令ハンドラ（アラインメントやCPUディレクティブ）や、将来用いる予定の
+// 列挙型バリアント（CpuDirective等）が、現状のビルドで一部未参照となっている警告を抑制するために付与しています。
 #![allow(dead_code)]
 
 /// CPU type specification support

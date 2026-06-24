@@ -2,7 +2,7 @@ use super::codes::{ErrorCode, WarnCode};
 use crate::utils;
 
 /// ソースコード上の位置（ファイル名+行番号）
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcePos {
     /// ファイル名（バイト列、最大16文字表示）
     pub filename: Vec<u8>,
@@ -27,7 +27,7 @@ impl SourcePos {
 }
 
 /// エラーレポート用の構造化コンテキスト
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorContext {
     /// ソースコード位置
     pub pos: SourcePos,
@@ -54,7 +54,7 @@ impl ErrorContext {
 }
 
 /// ワーニングレポート用の構造化コンテキスト
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WarnContext {
     /// ソースコード位置
     pub pos: SourcePos,

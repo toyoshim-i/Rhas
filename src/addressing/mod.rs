@@ -47,6 +47,8 @@ pub mod eac {
 // ----------------------------------------------------------------
 
 /// EA モードビットマスク（eamode.equ: EA_* に対応）
+// 各命令がサポートするアドレッシングモードの検証（ビットマスク積）で用いる仕様定義であり、
+// 将来の全命令サポートに向けたマスク値定義として保持するため警告を抑制しています。
 #[allow(dead_code)]
 pub mod ea {
     pub const DN: u16 = 1 << 0;
@@ -110,12 +112,16 @@ impl Displacement {
     }
 
     /// 定数かどうか
+    // ディスプレースメントが定数式として確定しているかをチェックするヘルパーであり、
+    // 現在の一部のアセンブルパスやテスト用として定義されており、警告を抑制しています。
     #[allow(dead_code)]
     pub fn is_const(&self) -> bool {
         self.const_val.is_some()
     }
 
     /// ゼロかどうか（定数かつ値が0）
+    // ディスプレースメントが 0 かどうかを判定してアドレッシングモードを最適化するための
+    // ヘルパーであり、将来のコード生成最適化の拡充に向けて保持しています。
     #[allow(dead_code)]
     pub fn is_zero(&self) -> bool {
         self.const_val == Some(0)
@@ -218,6 +224,8 @@ pub enum EffectiveAddress {
 
 impl EffectiveAddress {
     /// EA ビットマスクを返す
+    // 各アドレッシングモードに対応するビットマスクを返し、命令のオペランドが
+    // そのアドレッシングモードを許可しているかチェックするために定義しています。
     #[allow(dead_code)]
     pub fn ea_bits(&self) -> u16 {
         match self {

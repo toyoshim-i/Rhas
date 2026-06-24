@@ -2,6 +2,9 @@
 //!
 //! Handles: SCD (Source Code Debugging) pseudo-instructions
 //! Provides debug information for linked objects.
+
+// HAS060互換のSCD（ソースコードデバッグ）疑似命令処理ロジックの一部や、
+// テスト検証用／将来拡張用のSCDデータ型が、未参照となっている警告を抑制するために付与しています。
 #![allow(dead_code)]
 
 /// SCD record entry type

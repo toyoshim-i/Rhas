@@ -1,3 +1,5 @@
+// HAS060仕様に基づき定義された各種相対セクション（Rtext等）などの定義群を
+// 完全な互換性のために保持しており、一部が未参照である警告を抑制するために付与しています。
 #![allow(dead_code)]
 /// セクション番号（has.equ: SECT_TEXT〜SECT_RLSTACK）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
