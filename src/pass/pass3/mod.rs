@@ -11,6 +11,7 @@ use crate::expr::{eval_rpn, Rpn};
 use crate::object::{sym_kind, ExternalSymbol, ObjectCode, ScdEvent, SectionInfo};
 use crate::symbol::types::{DefAttrib, ExtAttrib};
 use crate::symbol::{Symbol, SymbolTable};
+use crate::error::ErrorReporter;
 
 mod branch;
 mod ea;
@@ -29,8 +30,10 @@ use insn::process_deferred;
 /// PRN pending info: (line_num, start_loc, start_sect, text, is_macro, accumulated_bytes)
 type PrnPendingInfo = (u32, u32, u8, Vec<u8>, bool, Vec<u8>);
 
-pub(super) struct P3Ctx<'a> {
+/// Pass3 の作業状態
+pub struct P3Ctx<'a> {
     pub(super) sym: &'a SymbolTable,
+    pub(super) reporter: &'a mut dyn ErrorReporter,
     /// 現在のセクション ID（1=text, 2=data, ...）
     pub(super) cur_sect: u8,
     /// 各セクションのバイト列
@@ -61,7 +64,12 @@ pub(super) struct P3Ctx<'a> {
 }
 
 impl<'a> P3Ctx<'a> {
-    pub(super) fn new(sym: &'a SymbolTable, prn_enable: bool, source_file: Vec<u8>) -> Self {
+    pub(super) fn new(
+        sym: &'a SymbolTable,
+        prn_enable: bool,
+        source_file: Vec<u8>,
+        reporter: &'a mut dyn ErrorReporter,
+    ) -> Self {
         P3Ctx {
             sym,
             cur_sect: 1,
@@ -77,16 +85,12 @@ impl<'a> P3Ctx<'a> {
             prn_pending: None,
             prn_lines: Vec::new(),
             current_pos: crate::error::SourcePos::new(source_file, 0),
+            reporter,
         }
     }
 
     pub(super) fn error_code(&mut self, code: crate::error::ErrorCode, sym: Option<&[u8]>) {
-        let err_ctx = match sym {
-            Some(s) => crate::error::ErrorContext::with_symbol(self.current_pos.clone(), code, s),
-            None => crate::error::ErrorContext::new(self.current_pos.clone(), code, None),
-        };
-        let mut stderr = std::io::stderr();
-        crate::error::print_error_context(&mut stderr, &err_ctx);
+        self.reporter.report_error(&self.current_pos, code, sym);
         self.num_errors += 1;
     }
 
@@ -425,8 +429,9 @@ pub fn pass3(
     source_file: Vec<u8>,
     prn_enable: bool,
     max_align: u8,
+    reporter: &mut dyn ErrorReporter,
 ) -> (ObjectCode, Vec<PrnLine>, u32, u32) {
-    let mut ctx = P3Ctx::new(sym, prn_enable, source_file.clone());
+    let mut ctx = P3Ctx::new(sym, prn_enable, source_file.clone(), reporter);
     let mut obj = ObjectCode::new(source_name);
     obj.source_file = source_file;
     if max_align > 0 {

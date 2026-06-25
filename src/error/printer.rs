@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::codes::{warn_default_level, warn_message, ErrorCode, WarnCode};
 use super::context::{ErrorContext, SourcePos, WarnContext};
 use crate::utils;

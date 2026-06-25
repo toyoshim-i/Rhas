@@ -75,13 +75,14 @@ fn main() {
 
     // コンテキストを作成
     let mut ctx = context::AssemblyContext::new(opts);
+    let mut reporter = error::StderrReporter::new(ctx.effective_warn_level());
 
     // アセンブル実行
     // オリジナルと同様、エラー/成功メッセージは標準出力へ（main.s 参照）
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
 
-    match pass::assemble(&mut ctx) {
+    match pass::assemble(&mut ctx, &mut reporter) {
         Ok(result) => {
             // オブジェクトファイルを書き出し
             match std::fs::write(&output_path, &result.obj_bytes) {

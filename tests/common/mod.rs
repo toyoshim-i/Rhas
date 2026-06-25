@@ -15,7 +15,8 @@ pub fn assemble_src(src: &[u8]) -> rhas::pass::AssembleResult {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble")
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble")
 }
 
 /// -c4 相当の拡張最適化を有効にしてアセンブルする。
@@ -41,7 +42,8 @@ pub fn assemble_src_c4(src: &[u8]) -> rhas::pass::AssembleResult {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble")
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble")
 }
 
 /// コンテキストを返しつつアセンブルする（pass遷移確認用）。
@@ -55,7 +57,8 @@ pub fn assemble_with_ctx(src: &[u8]) -> (rhas::pass::AssembleResult, rhas::conte
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     (result, ctx)
 }
 
@@ -69,7 +72,8 @@ pub fn pass1_records(src: &[u8], make_sym_deb: bool) -> Vec<rhas::pass::temp::Te
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let mut sym = rhas::symbol::SymbolTable::new(false);
-    rhas::pass::pass1::pass1(&mut source, &mut ctx, &mut sym)
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::pass1::pass1(&mut source, &mut ctx, &mut sym, &mut reporter)
 }
 
 pub fn find_scd_footer(bytes: &[u8]) -> (usize, usize, usize, usize) {

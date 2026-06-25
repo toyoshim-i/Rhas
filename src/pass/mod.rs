@@ -17,6 +17,7 @@ use crate::object::ObjectCode;
 use crate::source::{parse_include_paths, SourceBuf, SourceStack};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol::types::{DefAttrib, ExtAttrib};
+use crate::error::ErrorReporter;
 use std::path::PathBuf;
 
 /// シンボルファイルをバイト列として生成する（-x オプション）
@@ -96,7 +97,10 @@ pub struct AssembleResult {
 /// メインのアセンブルエントリポイント
 ///
 /// ソースファイルを読み込み、3 パス処理を行い、HLK オブジェクトバイト列を返す。
-pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleError> {
+pub fn assemble(
+    ctx: &mut AssemblyContext,
+    reporter: &mut dyn ErrorReporter,
+) -> Result<AssembleResult, AssembleError> {
     // ---- ソースファイル準備 ----
     let source_path = ctx.opts.source_file.as_deref()
         .map(crate::utils::path_from_bytes)
@@ -124,7 +128,7 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
 
     // ---- Pass 1: ソース解析 → TempRecord ----
     ctx.pass = AsmPass::Pass1;
-    let mut records = pass1::pass1(&mut source, ctx, &mut sym);
+    let mut records = pass1::pass1(&mut source, ctx, &mut sym, reporter);
 
     // ---- Pass 2: ロケーション再計算 ----
     ctx.pass = AsmPass::Pass2;
@@ -134,7 +138,7 @@ pub fn assemble(ctx: &mut AssemblyContext) -> Result<AssembleResult, AssembleErr
     ctx.pass = AsmPass::Pass3;
     let prn_enable = ctx.opts.make_prn;
     let max_align = ctx.max_align;
-    let (mut obj, prn_lines, p3_errors, p3_warnings) = pass3::pass3(&records, &sym, source_name.clone(), source_file.clone(), prn_enable, max_align);
+    let (mut obj, prn_lines, p3_errors, p3_warnings) = pass3::pass3(&records, &sym, source_name.clone(), source_file.clone(), prn_enable, max_align, reporter);
     ctx.num_errors += p3_errors;
     ctx.num_warnings += p3_warnings;
     obj.has_debug_info = ctx.opts.make_sym_deb;

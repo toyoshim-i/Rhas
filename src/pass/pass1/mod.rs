@@ -6,7 +6,7 @@
 use super::pseudo;
 use super::temp::TempRecord;
 use crate::context::AssemblyContext;
-use crate::error::{ErrorCode, ErrorContext, SourcePos, WarnContext};
+use crate::error::{ErrorCode, SourcePos, ErrorReporter};
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;
 use crate::expr::{eval_rpn, parse_expr, Rpn};
@@ -36,6 +36,7 @@ pub(crate) use pseudo_dispatch::{
 pub struct P1Ctx<'a> {
     pub(super) sym: &'a mut SymbolTable,
     pub(super) ctx: &'a mut AssemblyContext,
+    pub(super) reporter: &'a mut dyn ErrorReporter,
     /// .if ネスト深度（最大 64 段）
     pub(super) if_nest: u16,
     /// スキップ中の .if ネスト深度（0 = スキップしていない）
@@ -57,10 +58,15 @@ pub struct P1Ctx<'a> {
 }
 
 impl<'a> P1Ctx<'a> {
-    pub(crate) fn new(sym: &'a mut SymbolTable, ctx: &'a mut AssemblyContext) -> Self {
+    pub(crate) fn new(
+        sym: &'a mut SymbolTable,
+        ctx: &'a mut AssemblyContext,
+        reporter: &'a mut dyn ErrorReporter,
+    ) -> Self {
         P1Ctx {
             sym,
             ctx,
+            reporter,
             if_nest: 0,
             skip_nest: 0,
             is_skip: false,
@@ -73,26 +79,15 @@ impl<'a> P1Ctx<'a> {
         }
     }
 
-    /// エラーを報告して count を増やす（error.rs テーブル経由）
+    /// エラーを報告して count を増やす
     pub(super) fn error_code(&mut self, code: ErrorCode, sym: Option<&[u8]>) {
-        let err_ctx = match sym {
-            Some(s) => ErrorContext::with_symbol(self.current_pos.clone(), code, s),
-            None => ErrorContext::new(self.current_pos.clone(), code, None),
-        };
-        let mut stderr = std::io::stderr();
-        crate::error::print_error_context(&mut stderr, &err_ctx);
+        self.reporter.report_error(&self.current_pos, code, sym);
         self.ctx.add_error();
     }
 
     pub(super) fn warn_code(&mut self, code: crate::error::WarnCode, sym: Option<&[u8]>) {
-        let level = self.ctx.effective_warn_level();
-        let warn_ctx = match sym {
-            Some(s) => WarnContext::with_symbol(self.current_pos.clone(), code, s),
-            None => WarnContext::new(self.current_pos.clone(), code, None),
-        };
-        let mut stderr = std::io::stderr();
-        crate::error::print_warning_context(&mut stderr, &warn_ctx, level);
-        if level >= crate::error::warn_default_level(code) {
+        self.reporter.report_warning(&self.current_pos, code, sym);
+        if self.ctx.effective_warn_level() >= crate::error::warn_default_level(code) {
             self.ctx.add_warning();
         }
     }
@@ -175,9 +170,10 @@ pub fn pass1(
     source: &mut SourceStack,
     ctx: &mut AssemblyContext,
     sym: &mut SymbolTable,
+    reporter: &mut dyn ErrorReporter,
 ) -> Vec<TempRecord> {
     let mut records: Vec<TempRecord> = Vec::with_capacity(4096);
-    let mut p1 = P1Ctx::new(sym, ctx);
+    let mut p1 = P1Ctx::new(sym, ctx, reporter);
 
     loop {
         match source.read_line() {

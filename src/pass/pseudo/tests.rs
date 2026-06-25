@@ -120,7 +120,8 @@ fn test_set_if_matched_out_of_bounds() {
 fn test_handle_conditional_if_true() {
     let mut sym = crate::symbol::SymbolTable::new(false);
     let mut ctx = crate::context::AssemblyContext::new(crate::options::Options::default());
-    let mut p1 = crate::pass::pass1::P1Ctx::new(&mut sym, &mut ctx);
+    let mut reporter = crate::error::BufferReporter::new(ctx.effective_warn_level());
+    let mut p1 = crate::pass::pass1::P1Ctx::new(&mut sym, &mut ctx, &mut reporter);
     let mut pos = 0;
     let line = b"1";
     handle_conditional(InsnHandler::If, line, &mut pos, &mut p1);
@@ -133,7 +134,8 @@ fn test_handle_conditional_if_true() {
 fn test_handle_conditional_if_false() {
     let mut sym = crate::symbol::SymbolTable::new(false);
     let mut ctx = crate::context::AssemblyContext::new(crate::options::Options::default());
-    let mut p1 = crate::pass::pass1::P1Ctx::new(&mut sym, &mut ctx);
+    let mut reporter = crate::error::BufferReporter::new(ctx.effective_warn_level());
+    let mut p1 = crate::pass::pass1::P1Ctx::new(&mut sym, &mut ctx, &mut reporter);
     let mut pos = 0;
     let line = b"0";
     handle_conditional(InsnHandler::If, line, &mut pos, &mut p1);
@@ -147,7 +149,8 @@ fn test_handle_conditional_if_false() {
 fn test_handle_skip_else_resumes() {
     let mut sym = crate::symbol::SymbolTable::new(false);
     let mut ctx = crate::context::AssemblyContext::new(crate::options::Options::default());
-    let mut p1 = crate::pass::pass1::P1Ctx::new(&mut sym, &mut ctx);
+    let mut reporter = crate::error::BufferReporter::new(ctx.effective_warn_level());
+    let mut p1 = crate::pass::pass1::P1Ctx::new(&mut sym, &mut ctx, &mut reporter);
     p1.is_skip = true;
     p1.if_nest = 1;
     p1.skip_nest = 1;
@@ -256,7 +259,8 @@ fn test_parse_org_address() {
 fn test_handle_misc_cpu() {
     let mut sym = crate::symbol::SymbolTable::new(false);
     let mut ctx = crate::context::AssemblyContext::new(crate::options::Options::default());
-    let mut p1 = crate::pass::pass1::P1Ctx::new(&mut sym, &mut ctx);
+    let mut reporter = crate::error::BufferReporter::new(ctx.effective_warn_level());
+    let mut p1 = crate::pass::pass1::P1Ctx::new(&mut sym, &mut ctx, &mut reporter);
     let mut records = Vec::new();
     let mut pos = 0;
     let line = b"68020";
@@ -281,7 +285,8 @@ fn test_handle_misc_cpu() {
 fn test_handle_misc_globl_and_xref() {
     let mut sym = crate::symbol::SymbolTable::new(false);
     let mut ctx = crate::context::AssemblyContext::new(crate::options::Options::default());
-    let mut p1 = crate::pass::pass1::P1Ctx::new(&mut sym, &mut ctx);
+    let mut reporter = crate::error::BufferReporter::new(ctx.effective_warn_level());
+    let mut p1 = crate::pass::pass1::P1Ctx::new(&mut sym, &mut ctx, &mut reporter);
     let mut records = Vec::new();
     let mut pos = 0;
     let line = b"foo,bar";

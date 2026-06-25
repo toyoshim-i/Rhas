@@ -21,7 +21,8 @@ fn test_prn_list_file() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     // PRNファイルが存在して内容が正しいか確認
     let prn_content = std::fs::read(std::path::Path::new(
@@ -52,7 +53,8 @@ fn test_g_option_emits_b204_record() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     let found = result.obj_bytes.windows(2).any(|w| w == [0xB2, 0x04]);
     assert!(found, "B204 record should exist when -g is enabled");
@@ -71,7 +73,8 @@ fn test_g_only_emits_default_scd_line_entry() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
     let end_pos = (0..bytes.len().saturating_sub(14))
         .find(|&i| {
@@ -112,7 +115,8 @@ fn test_scd_ln_alias_updates_line_state() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let _ = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     assert_eq!(ctx.scd_ln, 123);
 }
 
@@ -129,7 +133,8 @@ fn test_scd_ln_wraps_to_u16() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let _ = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     assert_eq!(ctx.scd_ln, 70000u32 as u16);
 }
 
@@ -146,7 +151,8 @@ fn test_scd_dim_updates_temp_buffer() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let _ = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     assert_eq!(ctx.scd_temp.dim, [1, 2, 3, 4]);
     assert!(ctx.scd_temp.is_long);
 }
@@ -164,7 +170,8 @@ fn test_scd_line_wraps_to_u16_in_temp_size() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let _ = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     assert!(ctx.scd_temp.is_long);
     assert_eq!(ctx.scd_temp.size, (70000u32 as u16) as u32);
 }
@@ -182,7 +189,8 @@ fn test_scd_scl_rejects_out_of_range() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    match rhas::pass::assemble(&mut ctx) {
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    match rhas::pass::assemble(&mut ctx, &mut reporter) {
         Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
         Err(other) => panic!("unexpected error: {:?}", other),
         Ok(_) => panic!("assemble should fail"),
@@ -202,7 +210,8 @@ fn test_scd_directives_are_ignored_without_g() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let _ = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 }
 
 /// HAS互換: SCDフッタの `.file` 名は入力ソースファイル名を使う。
@@ -225,7 +234,8 @@ fn test_scd_footer_uses_input_source_filename() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     assert_eq!(ctx.scd_file, b"".to_vec(), "directive should be ignored in -g mode");
     assert_eq!(result.obj.scd_file, expected_file, "footer name should be input source filename");
 }
@@ -250,7 +260,8 @@ fn test_scd_file_does_not_affect_b204_filename() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let pat = expected_pat.as_bytes();
     assert!(
         result.obj_bytes.windows(pat.len()).any(|w| w == pat),
@@ -293,7 +304,8 @@ fn test_scd_events_are_collected_in_object() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     assert!(result.obj.scd_events.iter().any(|e| matches!(e, rhas::object::ScdEvent::Ln { line, .. } if *line == 7)));
     assert!(result.obj.scd_events.iter().any(|e| matches!(e, rhas::object::ScdEvent::Val { .. })));
     assert!(result.obj.scd_events.iter().any(|e| matches!(
@@ -315,7 +327,8 @@ fn test_g_option_emits_scd_footer_after_terminator() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
     let end_pos = bytes
         .windows(2)
@@ -341,7 +354,8 @@ fn test_g_option_scd_footer_contains_bf_ef_entries() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     assert!(result.obj_bytes.windows(4).any(|w| w == b".bf\0"));
     assert!(result.obj_bytes.windows(4).any(|w| w == b".ef\0"));
 }
@@ -362,7 +376,8 @@ fn test_g_option_scd_footer_emits_exname_for_long_source_filename() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
     let end_pos = bytes
         .windows(2)
@@ -448,7 +463,8 @@ fn test_scd_enum_member_forces_section_minus2_in_footer() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
 
     let (p, line_len, scd_len, _) = find_scd_footer(bytes);
@@ -534,7 +550,8 @@ fn test_scd_funcend_updates_function_size_in_footer() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
 
     let (p, line_len, scd_len, _) = find_scd_footer(bytes);
@@ -578,7 +595,8 @@ fn test_scd_tag_links_to_existing_tag_definition() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
 
     let (p, line_len, scd_len, _) = find_scd_footer(bytes);
@@ -616,7 +634,8 @@ fn test_scd_unresolved_tag_suppresses_endef_entry() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     assert!(
         !result.obj_bytes.windows(5).any(|w| w == b"var1\0"),
         "unresolved tag should suppress var1 SCD entry"
@@ -644,7 +663,8 @@ fn test_scd_file_entry_moves_short_extension_for_long_filename() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
 
     let (p, line_len, scd_len, _) = find_scd_footer(bytes);
@@ -681,7 +701,8 @@ fn test_scd_file_mode_exname_boundary_14_vs_15() {
         ..Default::default()
     };
     let mut ctx14 = rhas::context::AssemblyContext::new(opts14);
-    let result14 = rhas::pass::assemble(&mut ctx14).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx14.effective_warn_level());
+    let result14 = rhas::pass::assemble(&mut ctx14, &mut reporter).expect("assemble");
     let (p14, line14, scd14, ex14) = find_scd_footer(&result14.obj_bytes);
     assert_eq!(ex14, 0, "14-char .file should not use exname");
     let entries14 = scd_entry_offsets(&result14.obj_bytes, p14, line14, scd14);
@@ -708,7 +729,8 @@ fn test_scd_file_mode_exname_boundary_14_vs_15() {
         ..Default::default()
     };
     let mut ctx15 = rhas::context::AssemblyContext::new(opts15);
-    let result15 = rhas::pass::assemble(&mut ctx15).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx15.effective_warn_level());
+    let result15 = rhas::pass::assemble(&mut ctx15, &mut reporter).expect("assemble");
     let (p15, line15, scd15, ex15) = find_scd_footer(&result15.obj_bytes);
     assert!(ex15 >= 4, "15-char .file should use exname");
     let scd_base15 = p15 + 12 + line15;
@@ -741,7 +763,8 @@ fn test_scd_bb_eb_updates_bb_next_chain() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
 
     let (p, line_len, scd_len, _) = find_scd_footer(bytes);
@@ -785,7 +808,8 @@ fn test_scd_orphan_eb_ef_keep_next_unchanged() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
 
     let (p, line_len, scd_len, _) = find_scd_footer(bytes);
@@ -828,7 +852,8 @@ fn test_scd_tag_last_wins_after_unresolved_tag() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
 
     let (p, line_len, scd_len, _) = find_scd_footer(bytes);
@@ -868,7 +893,8 @@ target:\n\
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let result = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     let bytes = &result.obj_bytes;
 
     let (p, line_len, scd_len, _) = find_scd_footer(bytes);
@@ -906,7 +932,8 @@ fn test_prn_nlist_and_list() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     let prn_content = std::fs::read(std::path::Path::new(
         std::str::from_utf8(&prn_path).unwrap()
@@ -936,7 +963,8 @@ fn test_prn_lall_shows_macro_expansion_lines() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     let prn_content = std::fs::read(std::path::Path::new(
         std::str::from_utf8(&prn_path).unwrap()
@@ -968,7 +996,8 @@ fn test_prn_width_directive_limits_line_width() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     let prn_content = std::fs::read(std::path::Path::new(
         std::str::from_utf8(&prn_path).unwrap()
@@ -996,7 +1025,8 @@ fn test_prn_title_and_subttl_are_reflected() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     let prn_content = std::fs::read(std::path::Path::new(
         std::str::from_utf8(&prn_path).unwrap()
@@ -1024,7 +1054,8 @@ fn test_prn_page_emits_formfeed_unless_disabled() {
     };
     opts_a.prn_no_page_ff = false;
     let mut ctx_a = rhas::context::AssemblyContext::new(opts_a);
-    rhas::pass::assemble(&mut ctx_a).expect("assemble a");
+    let mut reporter = rhas::error::BufferReporter::new(ctx_a.effective_warn_level());
+    rhas::pass::assemble(&mut ctx_a, &mut reporter).expect("assemble a");
     let prn_a = std::fs::read(std::path::Path::new(
         std::str::from_utf8(&prn_path_a).unwrap()
     )).expect("read prn a");
@@ -1040,7 +1071,8 @@ fn test_prn_page_emits_formfeed_unless_disabled() {
     };
     opts_b.prn_no_page_ff = true;
     let mut ctx_b = rhas::context::AssemblyContext::new(opts_b);
-    rhas::pass::assemble(&mut ctx_b).expect("assemble b");
+    let mut reporter = rhas::error::BufferReporter::new(ctx_b.effective_warn_level());
+    rhas::pass::assemble(&mut ctx_b, &mut reporter).expect("assemble b");
     let prn_b = std::fs::read(std::path::Path::new(
         std::str::from_utf8(&prn_path_b).unwrap()
     )).expect("read prn b");
@@ -1063,7 +1095,8 @@ fn test_prn_page_with_expr_sets_page_lines_without_formfeed() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     assert_eq!(ctx.opts.prn_page_lines, 60);
 
@@ -1098,7 +1131,8 @@ fn test_prn_auto_page_break_by_line_limit() {
     opts.prn_no_page_ff = false;
 
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     let prn = std::fs::read(std::path::Path::new(
         std::str::from_utf8(&prn_path).unwrap()
@@ -1132,7 +1166,8 @@ fn test_prn_page_minus1_disables_auto_page_break() {
     opts.prn_no_page_ff = false;
 
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     assert_eq!(ctx.opts.prn_page_lines, u16::MAX, ".page -1 should disable auto page break");
     let prn = std::fs::read(std::path::Path::new(
@@ -1160,7 +1195,8 @@ fn test_prn_page_plus_emits_formfeed() {
     opts.prn_no_page_ff = false;
 
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     let prn = std::fs::read(std::path::Path::new(
         std::str::from_utf8(&prn_path).unwrap()
@@ -1194,7 +1230,8 @@ fn test_prn_no_page_ff_disables_all_formfeed() {
     opts.prn_page_lines = 10;
 
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     let prn = std::fs::read(std::path::Path::new(
         std::str::from_utf8(&prn_path).unwrap()

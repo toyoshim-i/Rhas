@@ -14,7 +14,8 @@ fn test_fpid_sets_id_and_can_disable_fpu() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    let _ = rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    let _ = rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
     assert_eq!(ctx.fpid, 3);
     assert_eq!(ctx.cpu.features & rhas::options::cpu::CFPP, 0, "negative .fpid should disable CFPP");
 }
@@ -31,7 +32,8 @@ fn test_fpid_rejects_out_of_range() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    match rhas::pass::assemble(&mut ctx) {
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    match rhas::pass::assemble(&mut ctx, &mut reporter) {
         Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
         Err(other) => panic!("unexpected error: {:?}", other),
         Ok(_) => panic!("assemble should fail"),
@@ -277,7 +279,8 @@ fn test_fmovecr_rejects_non_extend_size() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    match rhas::pass::assemble(&mut ctx) {
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    match rhas::pass::assemble(&mut ctx, &mut reporter) {
         Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
         Err(other) => panic!("unexpected error: {:?}", other),
         Ok(_) => panic!("assemble should fail"),

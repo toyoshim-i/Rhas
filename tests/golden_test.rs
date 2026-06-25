@@ -19,7 +19,8 @@ fn assemble_file(path: &str) -> Vec<u8> {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx)
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter)
         .expect("assemble failed")
         .obj_bytes
 }
@@ -45,7 +46,8 @@ fn assemble_file_c4(path: &str) -> Vec<u8> {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx)
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter)
         .expect("assemble failed")
         .obj_bytes
 }
@@ -62,7 +64,8 @@ fn assemble_file_c0(path: &str) -> Vec<u8> {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx)
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter)
         .expect("assemble failed")
         .obj_bytes
 }
@@ -77,7 +80,8 @@ fn assemble_file_c2(path: &str) -> Vec<u8> {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx)
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter)
         .expect("assemble failed")
         .obj_bytes
 }
@@ -92,7 +96,8 @@ fn assemble_file_g(path: &str) -> Vec<u8> {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx)
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter)
         .expect("assemble failed")
         .obj_bytes
 }

@@ -116,7 +116,8 @@ fn test_comm_rejects_non_positive_size() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    match rhas::pass::assemble(&mut ctx) {
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    match rhas::pass::assemble(&mut ctx, &mut reporter) {
         Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
         Err(other) => panic!("unexpected error: {:?}", other),
         Ok(_) => panic!("assemble should fail"),
@@ -140,7 +141,8 @@ fn test_comm_symbol_is_visible_in_sym_file() {
         ..Default::default()
     };
     let mut ctx = rhas::context::AssemblyContext::new(opts);
-    rhas::pass::assemble(&mut ctx).expect("assemble");
+    let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+    rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     let sym_content = std::fs::read(std::path::Path::new(
         std::str::from_utf8(&sym_path).unwrap()
@@ -194,7 +196,8 @@ fn test_offsym_with_symbol_rejects_alignment_directives() {
             ..Default::default()
         };
         let mut ctx = rhas::context::AssemblyContext::new(opts);
-        match rhas::pass::assemble(&mut ctx) {
+        let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
+        match rhas::pass::assemble(&mut ctx, &mut reporter) {
             Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
             Err(other) => panic!("unexpected error: {:?}", other),
             Ok(_) => panic!("assemble should fail"),
@@ -214,7 +217,8 @@ fn test_offsym_overwrite_warning_and_error_mode() {
         ..Default::default()
     };
     let mut ctx_warn = rhas::context::AssemblyContext::new(opts_warn);
-    let result = rhas::pass::assemble(&mut ctx_warn).expect("assemble warn mode");
+    let mut reporter = rhas::error::BufferReporter::new(ctx_warn.effective_warn_level());
+    let result = rhas::pass::assemble(&mut ctx_warn, &mut reporter).expect("assemble warn mode");
     assert!(result.num_warnings >= 1, "overwrite should emit warning in default mode");
 
     let mut opts_err = rhas::options::Options {
@@ -223,7 +227,8 @@ fn test_offsym_overwrite_warning_and_error_mode() {
     };
     opts_err.ow_offsym = true;
     let mut ctx_err = rhas::context::AssemblyContext::new(opts_err);
-    match rhas::pass::assemble(&mut ctx_err) {
+    let mut reporter = rhas::error::BufferReporter::new(ctx_err.effective_warn_level());
+    match rhas::pass::assemble(&mut ctx_err, &mut reporter) {
         Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
         Err(other) => panic!("unexpected error: {:?}", other),
         Ok(_) => panic!("assemble should fail when ow_offsym is enabled"),
