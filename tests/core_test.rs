@@ -210,7 +210,11 @@ label:\n\
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     match rhas::pass::assemble(&mut ctx, &mut reporter) {
-        Err(rhas::pass::AssembleError::HasErrors(n)) => assert_eq!(n, 1),
+        Err(rhas::pass::AssembleError::HasErrors(n)) => {
+            assert_eq!(n, 1);
+            assert_eq!(reporter.errors.len(), 1);
+            assert_eq!(reporter.errors[0].code, rhas::error::ErrorCode::IlRelOutside);
+        }
         Err(other) => panic!("unexpected error: {:?}", other),
         Ok(_) => panic!("assemble should fail due to displacement overflow in pass 3"),
     }

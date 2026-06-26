@@ -34,7 +34,10 @@ fn test_fpid_rejects_out_of_range() {
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     match rhas::pass::assemble(&mut ctx, &mut reporter) {
-        Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
+        Err(rhas::pass::AssembleError::HasErrors(n)) => {
+            assert!(n >= 1);
+            assert!(reporter.errors.iter().any(|e| e.code == rhas::error::ErrorCode::IlValue));
+        }
         Err(other) => panic!("unexpected error: {:?}", other),
         Ok(_) => panic!("assemble should fail"),
     }
@@ -281,7 +284,10 @@ fn test_fmovecr_rejects_non_extend_size() {
     let mut ctx = rhas::context::AssemblyContext::new(opts);
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     match rhas::pass::assemble(&mut ctx, &mut reporter) {
-        Err(rhas::pass::AssembleError::HasErrors(n)) => assert!(n >= 1),
+        Err(rhas::pass::AssembleError::HasErrors(n)) => {
+            assert!(n >= 1);
+            assert!(reporter.errors.iter().any(|e| e.code == rhas::error::ErrorCode::Expr));
+        }
         Err(other) => panic!("unexpected error: {:?}", other),
         Ok(_) => panic!("assemble should fail"),
     }
