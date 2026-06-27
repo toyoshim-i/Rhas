@@ -30,7 +30,7 @@ fn test_error_message_invalid_size_fmovecr() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert!(stderr.contains("記述が間違っています"), "stderr: {}", stderr);
+    assert!(stderr.contains("指定できないサイズです"), "stderr: {}", stderr);
     assert!(stdout.contains("エラーが 1 個ありました"));
 }
 
@@ -98,7 +98,7 @@ fn test_error_message_fmovem_size_boundaries() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert_eq!(stderr.matches("記述が間違っています").count(), 5, "stderr: {}", stderr);
+    assert_eq!(stderr.matches("指定できないサイズです").count(), 5, "stderr: {}", stderr);
     assert!(stdout.contains("エラーが 5 個ありました"));
 }
 

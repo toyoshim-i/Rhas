@@ -249,8 +249,16 @@ pub(super) fn handle_real_insn(
                 });
             }
         }
-        Err(_) => {
-            p1.error_code(ErrorCode::Expr, None);
+        Err(e) => {
+            let code = match e {
+                InsnError::InvalidSize => ErrorCode::IlSize,
+                InsnError::OutOfRange { .. } => ErrorCode::Overflow,
+                InsnError::OperandCount => ErrorCode::Expr,
+                InsnError::InvalidOperand => ErrorCode::IlOpr,
+                InsnError::InvalidAddressingMode => ErrorCode::IlAdr,
+                _ => ErrorCode::IlAdr,
+            };
+            p1.error_code(code, None);
         }
     }
 }

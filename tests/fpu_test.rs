@@ -286,7 +286,7 @@ fn test_fmovecr_rejects_non_extend_size() {
     match rhas::pass::assemble(&mut ctx, &mut reporter) {
         Err(rhas::pass::AssembleError::HasErrors(n)) => {
             assert!(n >= 1);
-            assert!(reporter.errors.iter().any(|e| e.code == rhas::error::ErrorCode::Expr));
+            assert!(reporter.errors.iter().any(|e| e.code == rhas::error::ErrorCode::IlSize));
         }
         Err(other) => panic!("unexpected error: {:?}", other),
         Ok(_) => panic!("assemble should fail"),
