@@ -1,21 +1,10 @@
 // rhas - X68000 HAS060X assembler ported to Rust
 // Based on HAS060X.X by TcbnErik, HAS060.X by M.Kamada, HAS.X v3.09 by Y.Nakamura
 
-mod addressing;
-mod context;
-mod instructions;
-mod error;
-mod expr;
-mod object;
-mod options;
-mod pass;
-mod source;
-mod symbol;
-
-use options::{parse_args, ParseError};
+use rhas::{context, error, options, pass, utils};
+use rhas::options::{parse_args, ParseError};
 use std::io::Write;
 use std::path::PathBuf;
-use rhas::utils;
 
 fn main() {
     // 実行ファイル名から g2as モードかどうかを判定（main.s: docmdline 冒頭）
