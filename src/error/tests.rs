@@ -3,15 +3,14 @@ use super::printer::print_error;
 
 #[test]
 fn test_error_message() {
-    assert_eq!(ErrorCode::BadOpe.message(), "命令が解釈できません");
-    assert_eq!(ErrorCode::UndefSym.message(), "シンボル %s が未定義です");
+    assert_eq!(ErrorCode::BadOpe.to_string(), "命令が解釈できません");
+    assert_eq!(ErrorCode::UndefSym.to_string(), "シンボル %s が未定義です");
 }
 
 #[test]
 fn test_format_message() {
     let mut buf = Vec::new();
     let pos = SourcePos::new(b"test.s".to_vec(), 1);
-    // format_message is private helper in printer.rs, but we can verify it indirectly via print_error
     print_error(&mut buf, &pos, ErrorCode::UndefSym, Some(b"LABEL"));
     let output = String::from_utf8(buf).unwrap();
     assert!(output.contains("シンボル LABEL が未定義です"));
@@ -35,7 +34,7 @@ fn test_warn_level() {
 #[test]
 fn test_error_context_new() {
     let pos = SourcePos::new(b"test.s".to_vec(), 10);
-    let ctx = ErrorContext::new(pos.clone(), ErrorCode::BadOpe, None);
+    let ctx = ErrorContext::new(&pos, ErrorCode::BadOpe, None);
     assert_eq!(ctx.code, ErrorCode::BadOpe);
     assert_eq!(ctx.pos.line, 10);
     assert!(ctx.symbol.is_none());
@@ -44,15 +43,15 @@ fn test_error_context_new() {
 #[test]
 fn test_error_context_with_symbol() {
     let pos = SourcePos::new(b"test.s".to_vec(), 10);
-    let ctx = ErrorContext::with_symbol(pos, ErrorCode::UndefSym, b"LABEL");
+    let ctx = ErrorContext::new(&pos, ErrorCode::UndefSym, Some(b"LABEL"));
     assert_eq!(ctx.code, ErrorCode::UndefSym);
-    assert_eq!(ctx.symbol, Some(b"LABEL".to_vec()));
+    assert_eq!(ctx.symbol, Some(b"LABEL".as_slice()));
 }
 
 #[test]
 fn test_warn_context_new() {
     let pos = SourcePos::new(b"test.s".to_vec(), 20);
-    let ctx = WarnContext::new(pos.clone(), warn::ABS, None);
+    let ctx = WarnContext::new(&pos, warn::ABS, None);
     assert_eq!(ctx.code, warn::ABS);
     assert_eq!(ctx.pos.line, 20);
     assert!(ctx.symbol.is_none());
@@ -61,15 +60,15 @@ fn test_warn_context_new() {
 #[test]
 fn test_warn_context_with_symbol() {
     let pos = SourcePos::new(b"test.s".to_vec(), 20);
-    let ctx = WarnContext::with_symbol(pos, warn::REDEF_SET, b"VAR");
+    let ctx = WarnContext::new(&pos, warn::REDEF_SET, Some(b"VAR"));
     assert_eq!(ctx.code, warn::REDEF_SET);
-    assert_eq!(ctx.symbol, Some(b"VAR".to_vec()));
+    assert_eq!(ctx.symbol, Some(b"VAR".as_slice()));
 }
 
 #[test]
 fn test_print_error_context() {
     let pos = SourcePos::new(b"prog.s".to_vec(), 42);
-    let ctx = ErrorContext::with_symbol(pos, ErrorCode::UndefSym, b"FOO");
+    let ctx = ErrorContext::new(&pos, ErrorCode::UndefSym, Some(b"FOO"));
     let mut buf = Vec::new();
     print_error_context(&mut buf, &ctx);
     let output = String::from_utf8(buf).unwrap();
@@ -82,7 +81,7 @@ fn test_print_error_context() {
 #[test]
 fn test_print_warning_context() {
     let pos = SourcePos::new(b"prog.s".to_vec(), 50);
-    let ctx = WarnContext::new(pos, warn::ABS, None);
+    let ctx = WarnContext::new(&pos, warn::ABS, None);
     let mut buf = Vec::new();
     print_warning_context(&mut buf, &ctx, 5);
     let output = String::from_utf8(buf).unwrap();

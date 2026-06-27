@@ -6,7 +6,7 @@
 use super::pseudo;
 use super::temp::TempRecord;
 use crate::context::AssemblyContext;
-use crate::error::{ErrorCode, SourcePos, ErrorReporter};
+use crate::error::{ErrorCode, ErrorContext, SourcePos, WarnContext, ErrorReporter};
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;
 use crate::expr::{eval_rpn, parse_expr, Rpn};
@@ -79,14 +79,15 @@ impl<'a> P1Ctx<'a> {
         }
     }
 
-    /// エラーを報告して count を増やす
     pub(super) fn error_code(&mut self, code: ErrorCode, sym: Option<&[u8]>) {
-        self.reporter.report_error(&self.current_pos, code, sym);
+        let err = ErrorContext::new(&self.current_pos, code, sym);
+        self.reporter.report_error(&err);
         self.ctx.add_error();
     }
 
     pub(super) fn warn_code(&mut self, code: crate::error::WarnCode, sym: Option<&[u8]>) {
-        self.reporter.report_warning(&self.current_pos, code, sym);
+        let warn = WarnContext::new(&self.current_pos, code, sym);
+        self.reporter.report_warning(&warn);
         if self.ctx.effective_warn_level() >= crate::error::warn_default_level(code) {
             self.ctx.add_warning();
         }

@@ -11,7 +11,7 @@ use crate::expr::{eval_rpn, Rpn};
 use crate::object::{sym_kind, ExternalSymbol, ObjectCode, ScdEvent, SectionInfo};
 use crate::symbol::types::{DefAttrib, ExtAttrib};
 use crate::symbol::{Symbol, SymbolTable};
-use crate::error::ErrorReporter;
+use crate::error::{ErrorReporter, ErrorContext};
 
 mod branch;
 mod ea;
@@ -90,7 +90,8 @@ impl<'a> P3Ctx<'a> {
     }
 
     pub(super) fn error_code(&mut self, code: crate::error::ErrorCode, sym: Option<&[u8]>) {
-        self.reporter.report_error(&self.current_pos, code, sym);
+        let err = ErrorContext::new(&self.current_pos, code, sym);
+        self.reporter.report_error(&err);
         self.num_errors += 1;
     }
 

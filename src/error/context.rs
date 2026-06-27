@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::codes::{ErrorCode, WarnCode};
 use crate::utils;
 
@@ -28,56 +26,38 @@ impl SourcePos {
     }
 }
 
-/// エラーレポート用の構造化コンテキスト
+/// エラーレポート用の構造化コンテキスト（参照型）
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ErrorContext {
+pub struct ErrorContext<'a> {
     /// ソースコード位置
-    pub pos: SourcePos,
+    pub pos: &'a SourcePos,
     /// エラーコード
     pub code: ErrorCode,
     /// 関連シンボル（オプション）
-    pub symbol: Option<Vec<u8>>,
+    pub symbol: Option<&'a [u8]>,
 }
 
-impl ErrorContext {
+impl<'a> ErrorContext<'a> {
     /// 新しい ErrorContext を生成
-    pub fn new(pos: SourcePos, code: ErrorCode, symbol: Option<Vec<u8>>) -> Self {
+    pub fn new(pos: &'a SourcePos, code: ErrorCode, symbol: Option<&'a [u8]>) -> Self {
         ErrorContext { pos, code, symbol }
     }
-
-    /// ErrorContext をシンボル付きで生成（&[u8] から）
-    pub fn with_symbol(pos: SourcePos, code: ErrorCode, symbol: &[u8]) -> Self {
-        ErrorContext {
-            pos,
-            code,
-            symbol: Some(symbol.to_vec()),
-        }
-    }
 }
 
-/// ワーニングレポート用の構造化コンテキスト
+/// ワーニングレポート用の構造化コンテキスト（参照型）
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WarnContext {
+pub struct WarnContext<'a> {
     /// ソースコード位置
-    pub pos: SourcePos,
+    pub pos: &'a SourcePos,
     /// ワーニングコード
     pub code: WarnCode,
     /// 関連シンボル（オプション）
-    pub symbol: Option<Vec<u8>>,
+    pub symbol: Option<&'a [u8]>,
 }
 
-impl WarnContext {
+impl<'a> WarnContext<'a> {
     /// 新しい WarnContext を生成
-    pub fn new(pos: SourcePos, code: WarnCode, symbol: Option<Vec<u8>>) -> Self {
+    pub fn new(pos: &'a SourcePos, code: WarnCode, symbol: Option<&'a [u8]>) -> Self {
         WarnContext { pos, code, symbol }
-    }
-
-    /// WarnContext をシンボル付きで生成（&[u8] から）
-    pub fn with_symbol(pos: SourcePos, code: WarnCode, symbol: &[u8]) -> Self {
-        WarnContext {
-            pos,
-            code,
-            symbol: Some(symbol.to_vec()),
-        }
     }
 }

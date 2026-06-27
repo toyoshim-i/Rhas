@@ -1,14 +1,14 @@
 #![allow(dead_code)]
 use std::io::Write;
 use crate::error::codes::{ErrorCode, WarnCode, warn_default_level};
-use crate::error::context::SourcePos;
+use crate::error::context::{SourcePos, ErrorContext, WarnContext};
 
 /// エラーと警告の報告を行うトレイト
 pub trait ErrorReporter {
     /// エラーを報告する
-    fn report_error(&mut self, pos: &SourcePos, code: ErrorCode, symbol: Option<&[u8]>);
+    fn report_error(&mut self, ctx: &ErrorContext<'_>);
     /// 警告を報告する
-    fn report_warning(&mut self, pos: &SourcePos, code: WarnCode, symbol: Option<&[u8]>);
+    fn report_warning(&mut self, ctx: &WarnContext<'_>);
     /// 報告されたエラーの総数を返す
     fn error_count(&self) -> u32;
     /// 報告された警告の総数を返す
@@ -48,14 +48,14 @@ impl<W: Write> StderrReporter<W> {
 }
 
 impl<W: Write> ErrorReporter for StderrReporter<W> {
-    fn report_error(&mut self, pos: &SourcePos, code: ErrorCode, symbol: Option<&[u8]>) {
-        super::printer::print_error(&mut self.out, pos, code, symbol);
+    fn report_error(&mut self, ctx: &ErrorContext<'_>) {
+        super::printer::print_error_context(&mut self.out, ctx);
         self.error_count += 1;
     }
 
-    fn report_warning(&mut self, pos: &SourcePos, code: WarnCode, symbol: Option<&[u8]>) {
-        super::printer::print_warning(&mut self.out, pos, code, symbol, self.warn_level);
-        if self.warn_level >= warn_default_level(code) {
+    fn report_warning(&mut self, ctx: &WarnContext<'_>) {
+        super::printer::print_warning_context(&mut self.out, ctx, self.warn_level);
+        if self.warn_level >= warn_default_level(ctx.code) {
             self.warning_count += 1;
         }
     }
@@ -103,20 +103,20 @@ impl BufferReporter {
 }
 
 impl ErrorReporter for BufferReporter {
-    fn report_error(&mut self, pos: &SourcePos, code: ErrorCode, symbol: Option<&[u8]>) {
+    fn report_error(&mut self, ctx: &ErrorContext<'_>) {
         self.errors.push(StoredError {
-            pos: pos.clone(),
-            code,
-            symbol: symbol.map(|s| s.to_vec()),
+            pos: ctx.pos.clone(),
+            code: ctx.code,
+            symbol: ctx.symbol.map(|s| s.to_vec()),
         });
     }
 
-    fn report_warning(&mut self, pos: &SourcePos, code: WarnCode, symbol: Option<&[u8]>) {
-        if self.warn_level >= warn_default_level(code) {
+    fn report_warning(&mut self, ctx: &WarnContext<'_>) {
+        if self.warn_level >= warn_default_level(ctx.code) {
             self.warnings.push(StoredWarning {
-                pos: pos.clone(),
-                code,
-                symbol: symbol.map(|s| s.to_vec()),
+                pos: ctx.pos.clone(),
+                code: ctx.code,
+                symbol: ctx.symbol.map(|s| s.to_vec()),
             });
         }
     }
