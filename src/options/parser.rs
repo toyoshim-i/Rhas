@@ -120,48 +120,28 @@ fn process_switch(
         pos += 1;
         match ch {
             b't' => {
-                // -t path
-                let (s, n) = get_cmd_string(chars, remaining_args, consumed, pos)?;
-                opts.temp_path = Some(s);
+                let n = parse_t_option(chars, remaining_args, consumed, pos, opts)?;
                 consumed += n;
                 break; // 次の引数へ
             }
             b'o' => {
-                // -o name
-                let (mut name, n) = get_cmd_string(chars, remaining_args, consumed, pos)?;
+                let n = parse_o_option(chars, remaining_args, consumed, pos, opts)?;
                 consumed += n;
-                // 拡張子がなければ .o を付ける
-                if !name.contains(&b'.') {
-                    name.extend_from_slice(b".o");
-                }
-                opts.object_file = Some(name);
                 break;
             }
             b'i' => {
-                // -i path
-                let (path, n) = get_cmd_string(chars, remaining_args, consumed, pos)?;
+                let n = parse_i_option(chars, remaining_args, consumed, pos, inc_list)?;
                 consumed += n;
-                inc_list.push(path);
                 break;
             }
             b'p' => {
-                // -p [file]
-                opts.make_prn = true;
-                let (file, n) = get_optional_filename(&chars[pos..], remaining_args, consumed);
+                let n = parse_p_option(chars, remaining_args, consumed, pos, opts);
                 consumed += n;
-                if let Some(f) = file {
-                    opts.prn_file = Some(f);
-                }
                 break;
             }
             b'x' => {
-                // -x [file]
-                opts.make_sym = true;
-                let (file, n) = get_optional_filename(&chars[pos..], remaining_args, consumed);
+                let n = parse_x_option(chars, remaining_args, consumed, pos, opts);
                 consumed += n;
-                if let Some(f) = file {
-                    opts.sym_file = Some(f);
-                }
                 break;
             }
             b'n' => {
@@ -172,13 +152,8 @@ fn process_switch(
             }
             b'w' => {
                 // -w [level]
-                let (level, n) = get_optional_num(&chars[pos..]);
+                let n = parse_w_option(&chars[pos..], opts)?;
                 pos += n;
-                opts.warn_level = match level {
-                    Some(v) if v <= 4 => v as i8,
-                    Some(_) => return Err(ParseError::Usage("-w: レベルは0-4".into())),
-                    None => 2,
-                };
             }
             b'u' => opts.all_xref = true,
             b'd' => opts.all_xdef = true,
@@ -193,39 +168,17 @@ fn process_switch(
             b'g' => opts.make_sym_deb = true,
             b'm' => {
                 // -m <cpu>
-                let (s, n) = get_cmd_string(chars, remaining_args, consumed, pos)?;
+                let n = parse_m_option(chars, remaining_args, consumed, pos, opts)?;
                 consumed += n;
-                let num_str = utils::bytes_to_string(&s);
-                let num: u32 = num_str.trim().parse().unwrap_or(0);
-                if let Some(cpu) = cpu_number_to_type(num) {
-                    opts.cpu = cpu;
-                } else if num > 1000 && num < 32768 {
-                    // 最大シンボル数指定（無視）
-                } else {
-                    return Err(ParseError::Usage(format!(
-                        "-m: 不正なCPU指定 '{}'",
-                        num_str
-                    )));
-                }
                 break;
             }
             b's' => {
                 // -s n（ローカルラベル最大桁数）or -s symbol[=n]（シンボル定義）
-                let rest = &chars[pos..];
-                if !rest.is_empty() && rest[0].is_ascii_digit() {
-                    let d = (rest[0] - b'0') as u16;
-                    if d == 0 || d > 4 {
-                        return Err(ParseError::Usage("-s: 1-4を指定してください".into()));
-                    }
-                    pos += 1;
-                    opts.local_len_max = d;
-                    opts.local_num_max = [10, 100, 1000, 10000][(d - 1) as usize];
-                } else {
-                    // -s symbol[=n] もしくは次の引数
-                    let (sym_str, n) = get_cmd_string(chars, remaining_args, consumed, pos)?;
-                    consumed += n;
-                    let (name, val) = parse_symbol_def(&sym_str)?;
-                    opts.symbol_defs.push((name, val));
+                let (pos_add, cons_add, should_break) =
+                    parse_s_option(chars, remaining_args, consumed, pos, opts)?;
+                pos += pos_add;
+                consumed += cons_add;
+                if should_break {
                     break;
                 }
             }
@@ -254,37 +207,18 @@ fn process_switch(
             }
             b'y' => {
                 // -y[n]
-                let n = parse_optional_01(&chars[pos..]);
-                pos += n.0;
-                match n.1 {
-                    Some(1) | None => opts.predefine = true,
-                    Some(0) => opts.predefine = false,
-                    _ => return Err(ParseError::Usage("-y: 0または1を指定".into())),
-                }
+                let n = parse_y_option(&chars[pos..], opts)?;
+                pos += n;
             }
             b'k' => {
                 // -k[n]: エラッタ対策
-                let n = parse_optional_01(&chars[pos..]);
-                pos += n.0;
-                match n.1 {
-                    Some(1) | None => {
-                        opts.ignore_errata = true;
-                        opts.f43g_test = false;
-                    }
-                    Some(0) => {
-                        opts.ignore_errata = false;
-                        opts.optimize_disabled = false;
-                    }
-                    _ => return Err(ParseError::Usage("-k: 0または1を指定".into())),
-                }
+                let n = parse_k_option(&chars[pos..], opts)?;
+                pos += n;
             }
             b'j' => {
                 // -j[n]
-                let (val, n) = get_optional_num(&chars[pos..]);
+                let n = parse_j_option(&chars[pos..], opts);
                 pos += n;
-                let v = val.unwrap_or(0xFF) as u8;
-                opts.ow_set = (v & 1) != 0;
-                opts.ow_offsym = (v & 2) != 0;
             }
             // ダミーオプション（無視）
             b'a' => opts.compat_sw_a = true,
@@ -300,6 +234,168 @@ fn process_switch(
     }
 
     Ok(consumed)
+}
+
+fn parse_t_option(
+    chars: &[u8],
+    remaining_args: &[Vec<u8>],
+    already_consumed: usize,
+    pos: usize,
+    opts: &mut Options,
+) -> Result<usize, ParseError> {
+    let (s, n) = get_cmd_string(chars, remaining_args, already_consumed, pos)?;
+    opts.temp_path = Some(s);
+    Ok(n)
+}
+
+fn parse_o_option(
+    chars: &[u8],
+    remaining_args: &[Vec<u8>],
+    already_consumed: usize,
+    pos: usize,
+    opts: &mut Options,
+) -> Result<usize, ParseError> {
+    let (mut name, n) = get_cmd_string(chars, remaining_args, already_consumed, pos)?;
+    // 拡張子がなければ .o を付ける
+    if !name.contains(&b'.') {
+        name.extend_from_slice(b".o");
+    }
+    opts.object_file = Some(name);
+    Ok(n)
+}
+
+fn parse_i_option(
+    chars: &[u8],
+    remaining_args: &[Vec<u8>],
+    already_consumed: usize,
+    pos: usize,
+    inc_list: &mut Vec<Vec<u8>>,
+) -> Result<usize, ParseError> {
+    let (path, n) = get_cmd_string(chars, remaining_args, already_consumed, pos)?;
+    inc_list.push(path);
+    Ok(n)
+}
+
+fn parse_p_option(
+    chars: &[u8],
+    remaining_args: &[Vec<u8>],
+    already_consumed: usize,
+    pos: usize,
+    opts: &mut Options,
+) -> usize {
+    opts.make_prn = true;
+    let (file, n) = get_optional_filename(&chars[pos..], remaining_args, already_consumed);
+    if let Some(f) = file {
+        opts.prn_file = Some(f);
+    }
+    n
+}
+
+fn parse_x_option(
+    chars: &[u8],
+    remaining_args: &[Vec<u8>],
+    already_consumed: usize,
+    pos: usize,
+    opts: &mut Options,
+) -> usize {
+    opts.make_sym = true;
+    let (file, n) = get_optional_filename(&chars[pos..], remaining_args, already_consumed);
+    if let Some(f) = file {
+        opts.sym_file = Some(f);
+    }
+    n
+}
+
+fn parse_w_option(chars: &[u8], opts: &mut Options) -> Result<usize, ParseError> {
+    let (level, n) = get_optional_num(chars);
+    opts.warn_level = match level {
+        Some(v) if v <= 4 => v as i8,
+        Some(_) => return Err(ParseError::Usage("-w: レベルは0-4".into())),
+        None => 2,
+    };
+    Ok(n)
+}
+
+fn parse_m_option(
+    chars: &[u8],
+    remaining_args: &[Vec<u8>],
+    already_consumed: usize,
+    pos: usize,
+    opts: &mut Options,
+) -> Result<usize, ParseError> {
+    let (s, n) = get_cmd_string(chars, remaining_args, already_consumed, pos)?;
+    let num_str = utils::bytes_to_string(&s);
+    let num: u32 = num_str.trim().parse().unwrap_or(0);
+    if let Some(cpu) = cpu_number_to_type(num) {
+        opts.cpu = cpu;
+    } else if num > 1000 && num < 32768 {
+        // 最大シンボル数指定（無視）
+    } else {
+        return Err(ParseError::Usage(format!(
+            "-m: 不正なCPU指定 '{}'",
+            num_str
+        )));
+    }
+    Ok(n)
+}
+
+fn parse_s_option(
+    chars: &[u8],
+    remaining_args: &[Vec<u8>],
+    already_consumed: usize,
+    pos: usize,
+    opts: &mut Options,
+) -> Result<(usize, usize, bool), ParseError> {
+    let rest = &chars[pos..];
+    if !rest.is_empty() && rest[0].is_ascii_digit() {
+        let d = (rest[0] - b'0') as u16;
+        if d == 0 || d > 4 {
+            return Err(ParseError::Usage("-s: 1-4を指定してください".into()));
+        }
+        opts.local_len_max = d;
+        opts.local_num_max = [10, 100, 1000, 10000][(d - 1) as usize];
+        Ok((1, 0, false))
+    } else {
+        // -s symbol[=n] もしくは次の引数
+        let (sym_str, n) = get_cmd_string(chars, remaining_args, already_consumed, pos)?;
+        let (name, val) = parse_symbol_def(&sym_str)?;
+        opts.symbol_defs.push((name, val));
+        Ok((0, n, true))
+    }
+}
+
+fn parse_y_option(chars: &[u8], opts: &mut Options) -> Result<usize, ParseError> {
+    let n = parse_optional_01(chars);
+    match n.1 {
+        Some(1) | None => opts.predefine = true,
+        Some(0) => opts.predefine = false,
+        _ => return Err(ParseError::Usage("-y: 0または1を指定".into())),
+    }
+    Ok(n.0)
+}
+
+fn parse_k_option(chars: &[u8], opts: &mut Options) -> Result<usize, ParseError> {
+    let n = parse_optional_01(chars);
+    match n.1 {
+        Some(1) | None => {
+            opts.ignore_errata = true;
+            opts.f43g_test = false;
+        }
+        Some(0) => {
+            opts.ignore_errata = false;
+            opts.optimize_disabled = false;
+        }
+        _ => return Err(ParseError::Usage("-k: 0または1を指定".into())),
+    }
+    Ok(n.0)
+}
+
+fn parse_j_option(chars: &[u8], opts: &mut Options) -> usize {
+    let (val, n) = get_optional_num(chars);
+    let v = val.unwrap_or(0xFF) as u8;
+    opts.ow_set = (v & 1) != 0;
+    opts.ow_offsym = (v & 2) != 0;
+    n
 }
 
 /// `-c` オプションを解析。返値は消費文字数。
