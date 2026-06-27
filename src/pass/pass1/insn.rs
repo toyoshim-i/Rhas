@@ -1,7 +1,7 @@
 use super::operand::parse_operands;
 use super::skip_spaces;
 use super::P1Ctx;
-use crate::addressing::EffectiveAddress;
+use crate::addressing::{EffectiveAddress, EaError};
 use crate::error::ErrorCode;
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;
@@ -10,6 +10,14 @@ use crate::instructions::{encode_insn, InsnError};
 use crate::pass::temp::TempRecord;
 use crate::symbol::types::{DefAttrib, InsnHandler, SizeCode};
 use crate::symbol::{Symbol, SymbolTable};
+
+fn map_ea_err(e: EaError) -> ErrorCode {
+    match e {
+        EaError::InvalidSize => ErrorCode::IlSize,
+        EaError::ExprError(_) => ErrorCode::Expr,
+        _ => ErrorCode::ExprEa,
+    }
+}
 
 pub(super) fn handle_real_insn(
     handler: InsnHandler,
@@ -70,7 +78,13 @@ pub(super) fn handle_real_insn(
 
     // DBcc: ターゲットを RPN として保持
     if matches!(handler, InsnHandler::DBcc) {
-        let mut ops = parse_operands(line, pos, p1.sym, cpu);
+        let mut ops = match parse_operands(line, pos, p1.sym, cpu) {
+            Ok(v) => v,
+            Err(e) => {
+                p1.error_code(map_ea_err(e), None);
+                return;
+            }
+        };
         if ops.len() == 2 {
             // ops[0] = Dn, ops[1] = label (as AbsLong RPN)
             let dn = ops.remove(0);
@@ -95,7 +109,13 @@ pub(super) fn handle_real_insn(
 
     // FDBcc: Dn,ターゲットを保持（Pass3 でPC相対計算）
     if matches!(handler, InsnHandler::FDBcc) {
-        let mut ops = parse_operands(line, pos, p1.sym, cpu);
+        let mut ops = match parse_operands(line, pos, p1.sym, cpu) {
+            Ok(v) => v,
+            Err(e) => {
+                p1.error_code(map_ea_err(e), None);
+                return;
+            }
+        };
         if ops.len() == 2 {
             let opcode = (opcode & !0x0E00) | ((u16::from(p1.ctx.fpid & 0x07)) << 9);
             let dn = ops.remove(0);
@@ -116,7 +136,13 @@ pub(super) fn handle_real_insn(
         return;
     }
 
-    let ops = parse_operands(line, pos, &*p1.sym, cpu);
+    let ops = match parse_operands(line, pos, &*p1.sym, cpu) {
+        Ok(v) => v,
+        Err(e) => {
+            p1.error_code(map_ea_err(e), None);
+            return;
+        }
+    };
     let enc_size = sz;
 
     // JMP/JSR 最適化（安全に判定できるケースのみ）

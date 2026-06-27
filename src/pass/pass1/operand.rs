@@ -1,5 +1,5 @@
 use super::skip_spaces;
-use crate::addressing::{parse_ea, EffectiveAddress};
+use crate::addressing::{parse_ea, EffectiveAddress, EaError};
 use crate::expr::rpn::RPNToken;
 use crate::symbol::types::reg;
 use crate::symbol::{Symbol, SymbolTable};
@@ -9,7 +9,7 @@ pub(super) fn parse_operands(
     mut pos: usize,
     sym: &SymbolTable,
     cpu_type: u16,
-) -> Vec<EffectiveAddress> {
+) -> Result<Vec<EffectiveAddress>, EaError> {
     fn fp_mask_bit(fp_idx: u8) -> u16 {
         1u16 << (7 - (fp_idx & 7))
     }
@@ -299,7 +299,7 @@ pub(super) fn parse_operands(
                     skip_spaces(line, &mut pos);
                     match parse_ea(line, &mut pos, sym, cpu_type) {
                         Ok(off) => ops.push(abs_to_imm(off)),
-                        Err(_) => break,
+                        Err(e) => return Err(e),
                     }
                     skip_spaces(line, &mut pos);
                     if pos < line.len() && line[pos] == b':' {
@@ -307,7 +307,7 @@ pub(super) fn parse_operands(
                         skip_spaces(line, &mut pos);
                         match parse_ea(line, &mut pos, sym, cpu_type) {
                             Ok(w) => ops.push(abs_to_imm(w)),
-                            Err(_) => break,
+                            Err(e) => return Err(e),
                         }
                     }
                     skip_spaces(line, &mut pos);
@@ -328,7 +328,7 @@ pub(super) fn parse_operands(
                     }
                 }
             }
-            Err(_) => break,
+            Err(e) => return Err(e),
         }
         skip_spaces(line, &mut pos);
         if pos < line.len() && line[pos] == b',' {
@@ -338,7 +338,7 @@ pub(super) fn parse_operands(
             break;
         }
     }
-    ops
+    Ok(ops)
 }
 
 fn abs_to_imm(ea: EffectiveAddress) -> EffectiveAddress {
