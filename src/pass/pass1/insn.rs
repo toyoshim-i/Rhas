@@ -34,6 +34,10 @@ pub(super) fn handle_real_insn(
 
     // 分岐命令（ターゲットを RPN として保持）
     if matches!(handler, InsnHandler::Bcc | InsnHandler::JBcc) {
+        if size == Some(SizeCode::Long) && p1.ctx.cpu.is_older_than_020() {
+            p1.error_code(ErrorCode::IlSize000BccL, None);
+            return;
+        }
         let target = parse_branch_target(line, pos);
         if let Some(rpn) = target {
             let byte_sz = crate::pass::temp::branch_word_size(size);
@@ -143,6 +147,78 @@ pub(super) fn handle_real_insn(
             return;
         }
     };
+
+    // ---- Category 2 validation checks ----
+
+    // 2. MOVE.B to An (address register byte access)
+    if matches!(handler, InsnHandler::Move | InsnHandler::MoveA)
+        && ops.len() == 2
+        && size == Some(SizeCode::Byte)
+        && matches!(ops[1], EffectiveAddress::AddrReg(_))
+    {
+        p1.error_code(ErrorCode::IlSizeAn, None);
+        return;
+    }
+
+    // 3. MOVE to/from CCR/SR size constraints
+    if matches!(handler, InsnHandler::Move) && ops.len() == 2 {
+        // MOVE <ea>, CCR / MOVE <ea>, SR
+        if matches!(ops[1], EffectiveAddress::CcrReg | EffectiveAddress::SrReg)
+            && size.is_some()
+            && size != Some(SizeCode::Word)
+        {
+            p1.error_code(ErrorCode::IlSizeMoveToSr, None);
+            return;
+        }
+        // MOVE SR, <ea> / MOVE CCR, <ea>
+        if matches!(ops[0], EffectiveAddress::CcrReg | EffectiveAddress::SrReg)
+            && size.is_some()
+            && size != Some(SizeCode::Word)
+        {
+            p1.error_code(ErrorCode::IlSizeMoveFrSr, None);
+            return;
+        }
+    }
+
+    // 4. Memory shift/rotate size constraints (word size only)
+    if matches!(handler, InsnHandler::SftRot | InsnHandler::Asl)
+        && ops.len() == 1
+        && size.is_some()
+        && size != Some(SizeCode::Word)
+    {
+        p1.error_code(ErrorCode::IlSizeSftRotMem, None);
+        return;
+    }
+
+    // 5. Bit operations (BTST/BCLR/BSET/BCHG) size constraints
+    if matches!(handler, InsnHandler::BchClSt | InsnHandler::Btst) && ops.len() == 2 {
+        if let Some(s) = size {
+            match &ops[1] {
+                EffectiveAddress::DataReg(_) => {
+                    if s != SizeCode::Long {
+                        p1.error_code(ErrorCode::IlSizeBitReg, None);
+                        return;
+                    }
+                }
+                _ => {
+                    if s != SizeCode::Byte {
+                        p1.error_code(ErrorCode::IlSizeBitMem, None);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    // 6. CHK.L on 68000/68010
+    if matches!(handler, InsnHandler::Chk)
+        && size == Some(SizeCode::Long)
+        && p1.ctx.cpu.is_older_than_020()
+    {
+        p1.error_code(ErrorCode::IlSize000Long, None);
+        return;
+    }
+
     let enc_size = sz;
 
     // JMP/JSR 最適化（安全に判定できるケースのみ）

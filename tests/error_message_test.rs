@@ -155,7 +155,6 @@ fn test_error_extb_on_68000() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not gate Bcc.L to 68020+; assembles without error
 fn test_error_bcc_long_on_68000() {
     // Bcc.L is 68020+ only; on 68000 it should error
     let out = run_rhas(
@@ -203,7 +202,6 @@ fn test_ok_bcc_long_on_68020() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not gate CHK.L to 68020+; assembles without error
 fn test_error_chk_long_on_68000() {
     // CHK.L is 68020+; on 68000 only CHK.W is valid
     let out = run_rhas(b"\tchk.l\td0,d1\n");
@@ -319,7 +317,6 @@ fn test_error_div_zero() {
 // ─── Size restriction errors ──────────────────────────────────────────────────
 
 #[test]
-#[ignore] // BUG: rhas does not reject An byte access; assembles without error
 fn test_error_address_register_byte() {
     // Address registers cannot be accessed in byte size
     let out = run_rhas(b"\tmove.b\td0,a0\n");
@@ -332,7 +329,6 @@ fn test_error_address_register_byte() {
 }
 
 #[test]
-#[ignore] // BUG: rhas errors but with generic message instead of memory shift size
 fn test_error_memory_shift_non_word() {
     // Memory shift/rotate is word-only
     let out = run_rhas(b"\tasl.l\t(a0)\n");
@@ -345,7 +341,6 @@ fn test_error_memory_shift_non_word() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not reject memory bit non-byte; assembles without error
 fn test_error_memory_bit_non_byte() {
     // Memory bit operations are byte-only
     let out = run_rhas(b"\tbclr.w\t#3,(a0)\n");
@@ -358,7 +353,6 @@ fn test_error_memory_bit_non_byte() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not reject register bit non-long; assembles without error
 fn test_error_register_bit_non_long() {
     // Register bit operations are long-only
     let out = run_rhas(b"\tbtst.w\t#3,d0\n");
@@ -371,7 +365,6 @@ fn test_error_register_bit_non_long() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not reject MOVE.L to CCR; assembles without error
 fn test_error_move_to_ccr_non_word() {
     // MOVE to CCR must be word size
     let out = run_rhas(b"\tmove.l\td0,ccr\n");
@@ -384,7 +377,6 @@ fn test_error_move_to_ccr_non_word() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not reject MOVE.L to SR; assembles without error
 fn test_error_move_to_sr_non_word() {
     // MOVE to SR must be word size
     let out = run_rhas(b"\tmove.l\td0,sr\n");
