@@ -252,7 +252,19 @@ pub(super) fn handle_real_insn(
         Err(e) => {
             let code = match e {
                 InsnError::InvalidSize => ErrorCode::IlSize,
-                InsnError::OutOfRange { .. } => ErrorCode::Overflow,
+                InsnError::OutOfRange { min, max, .. } => {
+                    if min == -128 && max == 127 {
+                        ErrorCode::IlQuickMoveQ
+                    } else if min == 1 && max == 8 {
+                        if matches!(handler, InsnHandler::SftRot | InsnHandler::Asl) {
+                            ErrorCode::IlSft
+                        } else {
+                            ErrorCode::IlQuickAddSubQ
+                        }
+                    } else {
+                        ErrorCode::Overflow
+                    }
+                }
                 InsnError::OperandCount => ErrorCode::Expr,
                 InsnError::InvalidOperand => ErrorCode::IlOpr,
                 InsnError::InvalidAddressingMode => ErrorCode::IlAdr,

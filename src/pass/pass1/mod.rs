@@ -9,7 +9,7 @@ use crate::context::AssemblyContext;
 use crate::error::{ErrorCode, ErrorContext, SourcePos, WarnContext, ErrorReporter};
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;
-use crate::expr::{eval_rpn, parse_expr, Rpn};
+use crate::expr::{eval_rpn, parse_expr, EvalError, Rpn};
 use crate::source::{ReadResult, SourceStack};
 use crate::symbol::types::{DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeCode};
 use crate::symbol::{Symbol, SymbolTable};
@@ -194,15 +194,18 @@ impl<'a> P1Ctx<'a> {
         self.define_value_symbol(name, DefAttrib::Define, FirstDef::Other, section, offset as i32);
     }
 
-    /// RPN 式を定数評価する
-    pub(super) fn eval_const(&self, rpn: &Rpn) -> Option<EvalValue> {
+    pub(super) fn eval_const_result(&self, rpn: &Rpn) -> Result<EvalValue, EvalError> {
         let loc = self.ctx.loc_top;
         let cur = self.location();
         let sec = self.section_id();
-        let result = eval_rpn(rpn, loc, cur, sec, &|name| {
+        eval_rpn(rpn, loc, cur, sec, &|name| {
             self.sym.lookup_sym(name).and_then(sym_to_eval)
-        });
-        result.ok()
+        })
+    }
+
+    /// RPN 式を定数評価する
+    pub(super) fn eval_const(&self, rpn: &Rpn) -> Option<EvalValue> {
+        self.eval_const_result(rpn).ok()
     }
 }
 
@@ -550,7 +553,11 @@ pub(super) fn parse_line(
 /// `name := expr` 形式の代入を処理する（.set と同等）
 fn handle_set_assignment(name: &[u8], line: &[u8], pos: &mut usize, p1: &mut P1Ctx<'_>) {
     if let Ok(rpn) = parse_expr(line, pos) {
-        if let Some(v) = p1.eval_const(&rpn) {
+        let eval_res = p1.eval_const_result(&rpn);
+        if let Err(EvalError::DivisionByZero) = eval_res {
+            p1.error_code(ErrorCode::DivZero, None);
+        }
+        if let Ok(v) = eval_res {
             p1.define_value_symbol(name.to_vec(), DefAttrib::Define, FirstDef::Set, v.section, v.value);
         }
     }

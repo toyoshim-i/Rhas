@@ -218,7 +218,6 @@ fn test_error_chk_long_on_68000() {
 // ─── Range / overflow errors ──────────────────────────────────────────────────
 
 #[test]
-#[ignore] // BUG: rhas does not check MOVEQ range; assembles without error
 fn test_error_moveq_overflow() {
     // MOVEQ immediate must be -128..127
     let out = run_rhas(b"\tmoveq\t#128,d0\n");
@@ -231,7 +230,6 @@ fn test_error_moveq_overflow() {
 }
 
 #[test]
-#[ignore] // BUG: rhas errors but with generic message instead of MOVEQ range
 fn test_error_moveq_negative_overflow() {
     let out = run_rhas(b"\tmoveq\t#-129,d0\n");
     assert!(!out.status.success(), "MOVEQ #-129 should fail");
@@ -243,7 +241,6 @@ fn test_error_moveq_negative_overflow() {
 }
 
 #[test]
-#[ignore] // BUG: rhas errors but with generic message instead of ADDQ range
 fn test_error_addq_overflow() {
     // ADDQ immediate must be 1..8
     let out = run_rhas(b"\taddq.w\t#9,d0\n");
@@ -256,7 +253,6 @@ fn test_error_addq_overflow() {
 }
 
 #[test]
-#[ignore] // BUG: rhas errors but with generic message instead of ADDQ range
 fn test_error_addq_zero() {
     let out = run_rhas(b"\taddq.w\t#0,d0\n");
     assert!(!out.status.success(), "ADDQ #0 should fail");
@@ -268,7 +264,6 @@ fn test_error_addq_zero() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not detect bra.s out of range; assembles without error
 fn test_error_bra_short_out_of_range() {
     // bra.s can only reach -128..+127 from next instruction
     let mut src = Vec::new();
@@ -288,7 +283,6 @@ fn test_error_bra_short_out_of_range() {
 }
 
 #[test]
-#[ignore] // BUG: rhas errors but with generic message instead of shift count range
 fn test_error_shift_count_overflow() {
     // Immediate shift count must be 1..8
     let out = run_rhas(b"\tasl.w\t#9,d0\n");
@@ -301,7 +295,6 @@ fn test_error_shift_count_overflow() {
 }
 
 #[test]
-#[ignore] // BUG: rhas errors but with generic message instead of shift count range
 fn test_error_shift_count_zero() {
     let out = run_rhas(b"\tasl.w\t#0,d0\n");
     assert!(!out.status.success(), "ASL #0 should fail");
@@ -313,7 +306,6 @@ fn test_error_shift_count_zero() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not detect division by zero; assembles without error
 fn test_error_div_zero() {
     let out = run_rhas(b"x\t.equ\t10/0\n");
     assert!(!out.status.success(), "division by zero should fail");

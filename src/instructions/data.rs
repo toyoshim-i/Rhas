@@ -110,11 +110,11 @@ pub fn encode_moveq(operands: &[EffectiveAddress]) -> Result<Vec<u8>, InsnError>
     let rpn = imm_rpn(&operands[0]).ok_or(InsnError::InvalidOperand)?;
     let dn = data_reg(&operands[1]).ok_or(InsnError::InvalidOperand)?;
     let val = eval_const(rpn).ok_or(InsnError::DeferToLinker)?;
-    if !(-128..=255).contains(&val) {
+    if !(-128..=127).contains(&val) {
         return Err(InsnError::OutOfRange {
             value: val,
             min: -128,
-            max: 255,
+            max: 127,
         });
     }
     let word = 0x7000u16 | ((dn as u16) << 9) | (val as u8 as u16);

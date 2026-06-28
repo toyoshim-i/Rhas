@@ -1,7 +1,7 @@
 use crate::addressing::parse_reg_list_mask;
 use crate::error::{warn, ErrorCode};
 use crate::expr::rpn::RPNToken;
-use crate::expr::{parse_expr, Rpn};
+use crate::expr::{parse_expr, EvalError, Rpn};
 use crate::options::cpu as cpuconst;
 use crate::pass::pseudo;
 use crate::pass::temp::TempRecord;
@@ -62,7 +62,11 @@ pub(super) fn handle_pseudo(
                         InsnHandler::Set => FirstDef::Set,
                         _ => FirstDef::Other,
                     };
-                    if let Some(v) = p1.eval_const(&rpn) {
+                    let eval_res = p1.eval_const_result(&rpn);
+                    if let Err(EvalError::DivisionByZero) = eval_res {
+                        p1.error_code(ErrorCode::DivZero, None);
+                    }
+                    if let Ok(v) = eval_res {
                         let attrib = match handler {
                             // .set は時系列値としてその時点で確定させる
                             InsnHandler::Set => DefAttrib::Define,

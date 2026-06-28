@@ -308,18 +308,23 @@ impl<'a> P3Ctx<'a> {
     }
 
     /// RPN 式を評価する
-    pub(super) fn eval(&self, rpn: &Rpn) -> Result<EvalValue, Vec<u8>> {
+    pub(super) fn eval(&mut self, rpn: &Rpn) -> Result<EvalValue, Vec<u8>> {
         let loc = self.loc_top;
         let cur = self.location();
         let sec = self.cur_sect;
         let sym = self.sym;
-        eval_rpn(rpn, loc, cur, sec, &|name| {
+        let result = eval_rpn(rpn, loc, cur, sec, &|name| {
             sym.lookup_sym(name).and_then(sym_to_eval)
-        })
-        .map_err(|e| match e {
-            crate::expr::eval::EvalError::UndefinedSymbol(n) => n,
-            _ => b"<eval error>".to_vec(),
-        })
+        });
+        match result {
+            Ok(v) => Ok(v),
+            Err(crate::expr::eval::EvalError::DivisionByZero) => {
+                self.error_code(crate::error::ErrorCode::DivZero, None);
+                Err(b"<eval error>".to_vec())
+            }
+            Err(crate::expr::eval::EvalError::UndefinedSymbol(n)) => Err(n),
+            Err(_) => Err(b"<eval error>".to_vec()),
+        }
     }
 }
 

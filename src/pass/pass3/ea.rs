@@ -218,16 +218,16 @@ pub(super) fn register_xdefs_in_ea(ctx: &mut P3Ctx<'_>, ea: &EffectiveAddress) {
 
 /// EA 内の RPN 式を評価して定数 EA を返す。外部参照の場合は (EA_with_zero, Some(EaExtKind)) を返す。
 pub(super) fn resolve_ea_with_ext(
-    ctx: &P3Ctx<'_>,
+    ctx: &mut P3Ctx<'_>,
     ea: &EffectiveAddress,
 ) -> (EffectiveAddress, Option<EaExtKind>) {
     let zero_rpn = || vec![RPNToken::Value(0u32), RPNToken::End];
 
     // RPN 評価を試み、外部参照の場合に EaExtKind を決定する
-    let classify_ext = |rpn: &Rpn| -> EaExtKind {
+    let classify_ext = |rpn: &Rpn, sym: &SymbolTable| -> EaExtKind {
         if let Some(name) = is_simple_external(rpn) {
             EaExtKind::SimpleAbs(name.clone())
-        } else if let Some((name, offset)) = is_external_with_offset(rpn, ctx.sym) {
+        } else if let Some((name, offset)) = is_external_with_offset(rpn, sym) {
             EaExtKind::ExtWithOffset(name.clone(), offset)
         } else {
             EaExtKind::Complex(rpn.clone())
@@ -240,10 +240,13 @@ pub(super) fn resolve_ea_with_ext(
                 EffectiveAddress::Immediate(vec![RPNToken::Value(v.value as u32), RPNToken::End]),
                 None,
             ),
-            Err(_) => (
-                EffectiveAddress::Immediate(zero_rpn()),
-                Some(classify_ext(rpn)),
-            ),
+            Err(_) => {
+                let kind = classify_ext(rpn, ctx.sym);
+                (
+                    EffectiveAddress::Immediate(zero_rpn()),
+                    Some(kind),
+                )
+            }
         },
         EffectiveAddress::AbsShort(rpn) => match ctx.eval(rpn) {
             Ok(v) if v.section != 0 => (
@@ -305,7 +308,7 @@ pub(super) fn resolve_ea_with_ext(
                                 an: *an,
                                 disp: new_disp,
                             },
-                            Some(classify_ext(&disp.rpn)),
+                            Some(classify_ext(&disp.rpn, ctx.sym)),
                         )
                     }
                 }
@@ -385,7 +388,7 @@ pub(super) fn resolve_ea_with_ext(
             }
         }
         EffectiveAddress::PcMemIndPost { bd, idx, od } => {
-            let resolve_disp = |d: &Displacement, is_pc_rel: bool| -> Displacement {
+            let resolve_disp = |ctx: &mut P3Ctx<'_>, d: &Displacement, is_pc_rel: bool| -> Displacement {
                 if d.const_val.is_some() || d.rpn.is_empty() {
                     return d.clone();
                 }
@@ -406,8 +409,8 @@ pub(super) fn resolve_ea_with_ext(
                     Err(_) => d.clone(),
                 }
             };
-            let new_bd = resolve_disp(bd, true);
-            let new_od = resolve_disp(od, false);
+            let new_bd = resolve_disp(ctx, bd, true);
+            let new_od = resolve_disp(ctx, od, false);
             (
                 EffectiveAddress::PcMemIndPost {
                     bd: new_bd,
@@ -418,7 +421,7 @@ pub(super) fn resolve_ea_with_ext(
             )
         }
         EffectiveAddress::PcMemIndPre { bd, idx, od } => {
-            let resolve_disp = |d: &Displacement, is_pc_rel: bool| -> Displacement {
+            let resolve_disp = |ctx: &mut P3Ctx<'_>, d: &Displacement, is_pc_rel: bool| -> Displacement {
                 if d.const_val.is_some() || d.rpn.is_empty() {
                     return d.clone();
                 }
@@ -438,8 +441,8 @@ pub(super) fn resolve_ea_with_ext(
                     Err(_) => d.clone(),
                 }
             };
-            let new_bd = resolve_disp(bd, true);
-            let new_od = resolve_disp(od, false);
+            let new_bd = resolve_disp(ctx, bd, true);
+            let new_od = resolve_disp(ctx, od, false);
             (
                 EffectiveAddress::PcMemIndPre {
                     bd: new_bd,

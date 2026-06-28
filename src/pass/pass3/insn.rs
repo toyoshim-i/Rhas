@@ -375,7 +375,19 @@ pub(super) fn process_deferred(
             ctx.emit_zeros(est);
             let code = match e {
                 crate::instructions::InsnError::InvalidSize => ErrorCode::IlSize,
-                crate::instructions::InsnError::OutOfRange { .. } => ErrorCode::Overflow,
+                crate::instructions::InsnError::OutOfRange { min, max, .. } => {
+                    if min == -128 && max == 127 {
+                        ErrorCode::IlQuickMoveQ
+                    } else if min == 1 && max == 8 {
+                        if matches!(handler, InsnHandler::SftRot | InsnHandler::Asl) {
+                            ErrorCode::IlSft
+                        } else {
+                            ErrorCode::IlQuickAddSubQ
+                        }
+                    } else {
+                        ErrorCode::Overflow
+                    }
+                }
                 crate::instructions::InsnError::OperandCount => ErrorCode::Expr,
                 _ => ErrorCode::IlAdr,
             };
