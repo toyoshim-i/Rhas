@@ -58,6 +58,10 @@ pub(super) fn handle_pseudo(
                         name: name.clone(),
                         rpn: rpn.clone(),
                     });
+                    let first = match handler {
+                        InsnHandler::Set => FirstDef::Set,
+                        _ => FirstDef::Other,
+                    };
                     if let Some(v) = p1.eval_const(&rpn) {
                         let attrib = match handler {
                             // .set は時系列値としてその時点で確定させる
@@ -71,27 +75,9 @@ pub(super) fn handle_pseudo(
                                 }
                             }
                         };
-                        let sym = Symbol::Value {
-                            attrib,
-                            ext_attrib: ExtAttrib::None,
-                            section: v.section,
-                            org_num: 0,
-                            first: FirstDef::Other,
-                            opt_count: 0,
-                            value: v.value,
-                        };
-                        p1.sym.define(name.clone(), sym);
+                        p1.define_value_symbol(name.clone(), attrib, first, v.section, v.value);
                     } else {
-                        let sym = Symbol::Value {
-                            attrib: DefAttrib::NoDet,
-                            ext_attrib: ExtAttrib::None,
-                            section: 0,
-                            org_num: 0,
-                            first: FirstDef::Other,
-                            opt_count: 0,
-                            value: 0,
-                        };
-                        p1.sym.define(name.clone(), sym);
+                        p1.define_value_symbol(name.clone(), DefAttrib::NoDet, first, 0, 0);
                     }
                 }
             }
@@ -247,7 +233,18 @@ pub(super) fn handle_pseudo(
         }
 
         // ---- .endm / .exitm / .local / .sizem ----
-        InsnHandler::EndM | InsnHandler::ExitM | InsnHandler::Local | InsnHandler::SizeM => {}
+        InsnHandler::EndM => {
+            p1.error_code(ErrorCode::MisMacEndm, None);
+        }
+        InsnHandler::ExitM => {
+            p1.error_code(ErrorCode::MisMacExitm, Some(b".exitm"));
+        }
+        InsnHandler::Local => {
+            p1.error_code(ErrorCode::MisMacLocal, None);
+        }
+        InsnHandler::SizeM => {
+            p1.error_code(ErrorCode::MisMacSizem, Some(b".sizem"));
+        }
 
         // ---- SCD デバッグ ----
         InsnHandler::FileScd

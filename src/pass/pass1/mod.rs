@@ -121,18 +121,77 @@ impl<'a> P1Ctx<'a> {
         self.ctx.advance_location(n);
     }
 
-    /// シンボル定義（ロケーションラベル）
-    pub(super) fn define_label(&mut self, name: Vec<u8>, section: u8, offset: u32) {
+    pub(super) fn define_value_symbol(
+        &mut self,
+        name: Vec<u8>,
+        attrib: DefAttrib,
+        first: FirstDef,
+        section: u8,
+        value: i32,
+    ) {
+        let mut warn_overwrite = false;
+        if let Some(existing) = self.sym.lookup_sym(&name) {
+            match existing {
+                Symbol::Value { attrib: old_attrib, first: old_first, .. } => {
+                    if *old_attrib == DefAttrib::Predefine {
+                        self.error_code(ErrorCode::RedefPredefine, Some(&name));
+                        return;
+                    }
+                    if *old_attrib >= DefAttrib::NoDet {
+                        if first == FirstDef::Set {
+                            // Defining via .set or =
+                            if *old_first == FirstDef::Set {
+                                if self.ctx.opts.ow_set {
+                                    self.error_code(ErrorCode::RedefSet, Some(&name));
+                                    return;
+                                }
+                                warn_overwrite = true;
+                            } else {
+                                self.error_code(ErrorCode::RedefSet, Some(&name));
+                                return;
+                            }
+                        } else {
+                            // Defining via .equ or label
+                            if *old_first == FirstDef::Set {
+                                self.error_code(ErrorCode::RedefSet, Some(&name));
+                            } else if *old_first == FirstDef::Offsym {
+                                self.error_code(ErrorCode::RedefOffsym, Some(&name));
+                            } else {
+                                self.error_code(ErrorCode::Redef, Some(&name));
+                            }
+                            return;
+                        }
+                    }
+                }
+                Symbol::Macro { .. } => {
+                    self.error_code(ErrorCode::Redef, Some(&name));
+                    return;
+                }
+                _ => {
+                    self.error_code(ErrorCode::Redef, Some(&name));
+                    return;
+                }
+            }
+        }
+
         let sym = Symbol::Value {
-            attrib: DefAttrib::Define,
+            attrib,
             ext_attrib: ExtAttrib::None,
             section,
             org_num: 0,
-            first: FirstDef::Other,
+            first,
             opt_count: 0,
-            value: offset as i32,
+            value,
         };
-        self.sym.define(name, sym);
+        self.sym.define(name.clone(), sym);
+        if warn_overwrite {
+            self.warn_code(crate::error::warn::REDEF_SET, Some(&name));
+        }
+    }
+
+    /// シンボル定義（ロケーションラベル）
+    pub(super) fn define_label(&mut self, name: Vec<u8>, section: u8, offset: u32) {
+        self.define_value_symbol(name, DefAttrib::Define, FirstDef::Other, section, offset as i32);
     }
 
     /// RPN 式を定数評価する
@@ -210,6 +269,10 @@ pub fn pass1(
                 }
             }
         }
+    }
+
+    if p1.if_nest > 0 {
+        p1.error_code(ErrorCode::MisIfEof, None);
     }
 
     records
@@ -488,16 +551,7 @@ pub(super) fn parse_line(
 fn handle_set_assignment(name: &[u8], line: &[u8], pos: &mut usize, p1: &mut P1Ctx<'_>) {
     if let Ok(rpn) = parse_expr(line, pos) {
         if let Some(v) = p1.eval_const(&rpn) {
-            let sym = Symbol::Value {
-                attrib: DefAttrib::Define,
-                ext_attrib: ExtAttrib::None,
-                section: v.section,
-                org_num: 0,
-                first: FirstDef::Other,
-                opt_count: 0,
-                value: v.value,
-            };
-            p1.sym.define(name.to_vec(), sym);
+            p1.define_value_symbol(name.to_vec(), DefAttrib::Define, FirstDef::Set, v.section, v.value);
         }
     }
 }

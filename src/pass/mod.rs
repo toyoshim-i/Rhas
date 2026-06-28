@@ -138,7 +138,16 @@ pub fn assemble(
     ctx.pass = AsmPass::Pass3;
     let prn_enable = ctx.opts.make_prn;
     let max_align = ctx.max_align;
-    let (mut obj, prn_lines, p3_errors, p3_warnings) = pass3::pass3(&records, &sym, source_name.clone(), source_file.clone(), prn_enable, max_align, reporter);
+    let (mut obj, prn_lines, p3_errors, p3_warnings) = pass3::pass3(
+        &records,
+        &sym,
+        source_name.clone(),
+        source_file.clone(),
+        prn_enable,
+        max_align,
+        ctx.opts.all_xref,
+        reporter,
+    );
     ctx.num_errors += p3_errors;
     ctx.num_warnings += p3_warnings;
     obj.has_debug_info = ctx.opts.make_sym_deb;

@@ -10,6 +10,7 @@
 use crate::expr::parse_expr;
 use crate::symbol::SymbolTable;
 use crate::symbol::types::InsnHandler;
+use crate::error::ErrorCode;
 
 /// Helper to read identifier from line starting at pos
 pub fn read_ident(line: &[u8], pos: &mut usize) -> Vec<u8> {
@@ -182,6 +183,8 @@ pub fn handle_conditional(
                 set_if_matched(&mut p1.if_matched, idx, true);
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
+            } else {
+                p1.error_code(ErrorCode::MisIfElse, None);
             }
         }
         InsnHandler::Elseif => {
@@ -190,6 +193,8 @@ pub fn handle_conditional(
                 set_if_matched(&mut p1.if_matched, idx, true);
                 p1.is_skip = true;
                 p1.skip_nest = p1.if_nest;
+            } else {
+                p1.error_code(ErrorCode::MisIfElseif, None);
             }
         }
         InsnHandler::Endif => {
@@ -197,6 +202,8 @@ pub fn handle_conditional(
                 let idx = p1.if_nest as usize;
                 set_if_matched(&mut p1.if_matched, idx, false);
                 p1.if_nest -= 1;
+            } else {
+                p1.error_code(ErrorCode::MisIfEndif, Some(b".endif"));
             }
         }
         _ => {}

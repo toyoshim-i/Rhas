@@ -407,7 +407,6 @@ fn test_error_move_to_sr_non_word() {
 // ─── Symbol / expression errors ───────────────────────────────────────────────
 
 #[test]
-#[ignore] // BUG: rhas does not reject undefined symbol; assembles without error
 fn test_error_undefined_symbol() {
     let out = run_rhas(b"\tmove.l\tnoexist,d0\n");
     assert!(!out.status.success(), "undefined symbol should fail");
@@ -419,7 +418,6 @@ fn test_error_undefined_symbol() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not reject duplicate labels; assembles without error
 fn test_error_symbol_redefinition() {
     let out = run_rhas(b"dup:\tnop\ndup:\tnop\n");
     assert!(!out.status.success(), "duplicate label should fail");
@@ -431,7 +429,6 @@ fn test_error_symbol_redefinition() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not reject unclosed string; assembles without error
 fn test_error_unclosed_string() {
     let out = run_rhas(b"\t.dc.b\t\"hello\n");
     assert!(!out.status.success(), "unclosed string should fail");
@@ -445,7 +442,6 @@ fn test_error_unclosed_string() {
 // ─── Macro errors ─────────────────────────────────────────────────────────────
 
 #[test]
-#[ignore] // BUG: rhas does not reject orphan .endm; assembles without error
 fn test_error_endm_without_macro() {
     let out = run_rhas(b"\t.endm\n");
     assert!(!out.status.success(), ".endm without .macro should fail");
@@ -457,7 +453,6 @@ fn test_error_endm_without_macro() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not reject orphan .else; assembles without error
 fn test_error_else_without_if() {
     let out = run_rhas(b"\t.else\n");
     assert!(!out.status.success(), ".else without .if should fail");
@@ -469,7 +464,6 @@ fn test_error_else_without_if() {
 }
 
 #[test]
-#[ignore] // BUG: rhas does not reject orphan .endif; assembles without error
 fn test_error_endif_without_if() {
     let out = run_rhas(b"\t.endif\n");
     assert!(!out.status.success(), ".endif without .if should fail");

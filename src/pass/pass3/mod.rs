@@ -61,6 +61,7 @@ pub struct P3Ctx<'a> {
     pub prn_lines: Vec<PrnLine>,
     /// 現在のソース位置情報（エラー報告用）
     pub(super) current_pos: crate::error::SourcePos,
+    pub(super) all_xref: bool,
 }
 
 impl<'a> P3Ctx<'a> {
@@ -68,6 +69,7 @@ impl<'a> P3Ctx<'a> {
         sym: &'a SymbolTable,
         prn_enable: bool,
         source_file: Vec<u8>,
+        all_xref: bool,
         reporter: &'a mut dyn ErrorReporter,
     ) -> Self {
         P3Ctx {
@@ -85,6 +87,7 @@ impl<'a> P3Ctx<'a> {
             prn_pending: None,
             prn_lines: Vec::new(),
             current_pos: crate::error::SourcePos::new(source_file, 0),
+            all_xref,
             reporter,
         }
     }
@@ -265,6 +268,26 @@ impl<'a> P3Ctx<'a> {
     pub(super) fn get_or_add_xref(&mut self, name: Vec<u8>) -> u16 {
         // RegSym エイリアスチェーンを解決してから登録
         let resolved = resolve_regsym_chain(self.sym, &name);
+
+        let mut is_valid_xref = self.all_xref;
+        if !is_valid_xref {
+            if let Some(Symbol::Value { ext_attrib, .. }) = self.sym.lookup_sym(&resolved) {
+                if matches!(
+                    *ext_attrib,
+                    ExtAttrib::XRef
+                        | ExtAttrib::Globl
+                        | ExtAttrib::Comm
+                        | ExtAttrib::RComm
+                        | ExtAttrib::RLComm
+                ) {
+                    is_valid_xref = true;
+                }
+            }
+        }
+        if !is_valid_xref {
+            self.error_code(crate::error::ErrorCode::UndefSym, Some(&resolved));
+        }
+
         for sym in &self.ext_syms {
             if sym.kind == sym_kind::XREF && sym.name == resolved {
                 return sym.value as u16;
@@ -423,6 +446,7 @@ pub(super) fn emit_rpn_expression(ctx: &mut P3Ctx<'_>, rpn: &Rpn, size: u8) {
 }
 
 /// Pass3: TempRecord → ObjectCode + PRN行リスト
+#[allow(clippy::too_many_arguments)]
 pub fn pass3(
     records: &[TempRecord],
     sym: &SymbolTable,
@@ -430,9 +454,10 @@ pub fn pass3(
     source_file: Vec<u8>,
     prn_enable: bool,
     max_align: u8,
+    all_xref: bool,
     reporter: &mut dyn ErrorReporter,
 ) -> (ObjectCode, Vec<PrnLine>, u32, u32) {
-    let mut ctx = P3Ctx::new(sym, prn_enable, source_file.clone(), reporter);
+    let mut ctx = P3Ctx::new(sym, prn_enable, source_file.clone(), all_xref, reporter);
     let mut obj = ObjectCode::new(source_name);
     obj.source_file = source_file;
     if max_align > 0 {

@@ -121,11 +121,20 @@ fn parse_dc(
         if line[*pos] == b'"' {
             *pos += 1;
             let mut s = Vec::new();
-            while *pos < line.len() && line[*pos] != b'"' {
+            let mut closed = false;
+            while *pos < line.len() {
+                if line[*pos] == b'"' {
+                    closed = true;
+                    *pos += 1;
+                    break;
+                }
                 s.push(line[*pos]);
                 *pos += 1;
             }
-            if *pos < line.len() { *pos += 1; } // closing "
+            if !closed {
+                p1.error_code(crate::error::ErrorCode::TermDoubleQuote, None);
+                return;
+            }
             match byte_size {
                 1 => {
                     p1.advance(s.len() as u32);
