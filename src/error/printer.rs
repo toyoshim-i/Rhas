@@ -58,15 +58,22 @@ pub fn print_warning_context(out: &mut dyn Write, ctx: &WarnContext<'_>, warn_le
 
 /// モダンなエラー出力（rustc 風）
 fn print_modern_error(out: &mut dyn Write, pos: &SourcePos, code: ErrorCode, sym: Option<&[u8]>) {
+    use std::io::IsTerminal;
+    let use_color = std::io::stderr().is_terminal();
+    let c_red = if use_color { "\x1b[1;31m" } else { "" };
+    let c_bold = if use_color { "\x1b[1;37m" } else { "" };
+    let c_blue = if use_color { "\x1b[1;36m" } else { "" };
+    let c_reset = if use_color { "\x1b[0m" } else { "" };
+
     let msg = format_message(&code.to_string(), sym);
-    let _ = writeln!(out, "error[{:?}]: {}", code, msg);
+    let _ = writeln!(out, "{}error[{:?}]: {}{}{}", c_red, code, c_bold, msg, c_reset);
     let filename_str = utils::bytes_to_string(&pos.filename);
-    let _ = writeln!(out, "  --> {}:{}", filename_str, pos.line);
+    let _ = writeln!(out, "  {}-->{} {}:{}", c_blue, c_reset, filename_str, pos.line);
 
     if let Some(ref path) = pos.filepath {
         if let Some(line) = get_source_line(path, pos.line) {
-            let _ = writeln!(out, "   |");
-            let _ = writeln!(out, "{:2} | {}", pos.line, line);
+            let _ = writeln!(out, "   {}|{}", c_blue, c_reset);
+            let _ = writeln!(out, "{}{:2} |{} {}", c_blue, pos.line, c_reset, line);
 
             let mut underline_start = None;
             let mut underline_len = 0;
@@ -100,9 +107,13 @@ fn print_modern_error(out: &mut dyn Write, pos: &SourcePos, code: ErrorCode, sym
                     }
                 }
                 let carets = "^".repeat(underline_len);
-                let _ = writeln!(out, "   | {}{}", spaces, carets);
+                let _ = writeln!(out, "   {}|{} {}{}{}", c_blue, c_reset, spaces, c_red, carets);
             }
         }
+    }
+    // Reset any lingering styles
+    if use_color {
+        let _ = write!(out, "\x1b[0m");
     }
 }
 
@@ -111,15 +122,22 @@ fn print_modern_warning(out: &mut dyn Write, pos: &SourcePos, code: WarnCode, sy
     if warn_level < warn_default_level(code) {
         return;
     }
+    use std::io::IsTerminal;
+    let use_color = std::io::stderr().is_terminal();
+    let c_yellow = if use_color { "\x1b[1;33m" } else { "" };
+    let c_bold = if use_color { "\x1b[1;37m" } else { "" };
+    let c_blue = if use_color { "\x1b[1;36m" } else { "" };
+    let c_reset = if use_color { "\x1b[0m" } else { "" };
+
     let msg = format_message(&code.to_string(), sym);
-    let _ = writeln!(out, "warning[{:?}]: {}", code, msg);
+    let _ = writeln!(out, "{}warning[{:?}]: {}{}{}", c_yellow, code, c_bold, msg, c_reset);
     let filename_str = utils::bytes_to_string(&pos.filename);
-    let _ = writeln!(out, "  --> {}:{}", filename_str, pos.line);
+    let _ = writeln!(out, "  {}-->{} {}:{}", c_blue, c_reset, filename_str, pos.line);
 
     if let Some(ref path) = pos.filepath {
         if let Some(line) = get_source_line(path, pos.line) {
-            let _ = writeln!(out, "   |");
-            let _ = writeln!(out, "{:2} | {}", pos.line, line);
+            let _ = writeln!(out, "   {}|{}", c_blue, c_reset);
+            let _ = writeln!(out, "{}{:2} |{} {}", c_blue, pos.line, c_reset, line);
 
             let mut underline_start = None;
             let mut underline_len = 0;
@@ -153,9 +171,13 @@ fn print_modern_warning(out: &mut dyn Write, pos: &SourcePos, code: WarnCode, sy
                     }
                 }
                 let carets = "^".repeat(underline_len);
-                let _ = writeln!(out, "   | {}{}", spaces, carets);
+                let _ = writeln!(out, "   {}|{} {}{}{}", c_blue, c_reset, spaces, c_yellow, carets);
             }
         }
+    }
+    // Reset any lingering styles
+    if use_color {
+        let _ = write!(out, "\x1b[0m");
     }
 }
 
