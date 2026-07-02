@@ -1,6 +1,8 @@
 use super::codes::{ErrorCode, WarnCode};
 use crate::utils;
 
+use std::path::PathBuf;
+
 /// ソースコード上の位置（ファイル名+行番号）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcePos {
@@ -8,11 +10,17 @@ pub struct SourcePos {
     pub filename: Vec<u8>,
     /// 行番号（1始まり）
     pub line: u32,
+    /// ソースファイルのフルパス（オプション、モダンエラー表示用）
+    pub filepath: Option<PathBuf>,
 }
 
 impl SourcePos {
     pub fn new(filename: Vec<u8>, line: u32) -> Self {
-        SourcePos { filename, line }
+        SourcePos {
+            filename,
+            line,
+            filepath: None,
+        }
     }
 
     /// ファイル名を表示用文字列として取得（最大16文字）

@@ -60,6 +60,17 @@ where
             continue;
         }
 
+        if arg.starts_with(b"--") {
+            if arg == b"--compat-error-format" {
+                opts.compat_error_format = true;
+                continue;
+            }
+            return Err(ParseError::Usage(format!(
+                "不明なオプション: {}",
+                String::from_utf8_lossy(arg)
+            )));
+        }
+
         if arg[0] == b'-' {
             // スイッチ解析（複数連結に対応）
             let inc_list = if in_env_section {

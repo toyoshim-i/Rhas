@@ -70,7 +70,7 @@ fn test_print_error_context() {
     let pos = SourcePos::new(b"prog.s".to_vec(), 42);
     let ctx = ErrorContext::new(&pos, ErrorCode::UndefSym, Some(b"FOO"));
     let mut buf = Vec::new();
-    print_error_context(&mut buf, &ctx);
+    print_error_context(&mut buf, &ctx, true);
     let output = String::from_utf8(buf).unwrap();
     assert!(output.contains("prog.s"));
     assert!(output.contains("42"));
@@ -83,7 +83,7 @@ fn test_print_warning_context() {
     let pos = SourcePos::new(b"prog.s".to_vec(), 50);
     let ctx = WarnContext::new(&pos, warn::ABS, None);
     let mut buf = Vec::new();
-    print_warning_context(&mut buf, &ctx, 5);
+    print_warning_context(&mut buf, &ctx, 5, true);
     let output = String::from_utf8(buf).unwrap();
     assert!(output.contains("prog.s"));
     assert!(output.contains("50"));

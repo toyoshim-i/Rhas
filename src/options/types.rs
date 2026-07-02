@@ -143,6 +143,8 @@ pub struct Options {
 
     // ---- 拡張アライン ----
     pub make_align: bool,
+    /// オリジナル互換のエラー表示形式を強制するフラグ
+    pub compat_error_format: bool,
 }
 
 impl Default for Options {
@@ -218,6 +220,7 @@ impl Default for Options {
 
             g2as_mode: false,
             make_align: false,
+            compat_error_format: false,
         }
     }
 }

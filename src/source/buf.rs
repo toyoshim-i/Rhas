@@ -66,7 +66,9 @@ impl SourceBuf {
 
     /// SourcePos を生成する
     pub fn source_pos(&self) -> SourcePos {
-        SourcePos::new(self.filename_bytes(), self.line)
+        let mut pos = SourcePos::new(self.filename_bytes(), self.line);
+        pos.filepath = Some(self.path.clone());
+        pos
     }
 
     /// EOF かどうか

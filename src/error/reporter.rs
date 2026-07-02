@@ -20,40 +20,43 @@ pub struct StderrReporter<W: Write> {
     warn_level: u8,
     error_count: u32,
     warning_count: u32,
+    compat_error_format: bool,
 }
 
 impl StderrReporter<std::io::Stderr> {
     /// 標準エラー出力用の新規レポーターを作成する
-    pub fn new(warn_level: u8) -> Self {
+    pub fn new(warn_level: u8, compat_error_format: bool) -> Self {
         StderrReporter {
             out: std::io::stderr(),
             warn_level,
             error_count: 0,
             warning_count: 0,
+            compat_error_format,
         }
     }
 }
 
 impl<W: Write> StderrReporter<W> {
     /// 任意の出力先をターゲットにするレポーターを作成する（テスト用など）
-    pub fn with_writer(out: W, warn_level: u8) -> Self {
+    pub fn with_writer(out: W, warn_level: u8, compat_error_format: bool) -> Self {
         StderrReporter {
             out,
             warn_level,
             error_count: 0,
             warning_count: 0,
+            compat_error_format,
         }
     }
 }
 
 impl<W: Write> ErrorReporter for StderrReporter<W> {
     fn report_error(&mut self, ctx: &ErrorContext<'_>) {
-        super::printer::print_error_context(&mut self.out, ctx);
+        super::printer::print_error_context(&mut self.out, ctx, self.compat_error_format);
         self.error_count += 1;
     }
 
     fn report_warning(&mut self, ctx: &WarnContext<'_>) {
-        super::printer::print_warning_context(&mut self.out, ctx, self.warn_level);
+        super::printer::print_warning_context(&mut self.out, ctx, self.warn_level, self.compat_error_format);
         if self.warn_level >= warn_default_level(ctx.code) {
             self.warning_count += 1;
         }

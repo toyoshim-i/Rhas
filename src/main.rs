@@ -64,7 +64,7 @@ fn main() {
 
     // コンテキストを作成
     let mut ctx = context::AssemblyContext::new(opts);
-    let mut reporter = error::StderrReporter::new(ctx.effective_warn_level());
+    let mut reporter = error::StderrReporter::new(ctx.effective_warn_level(), ctx.opts.compat_error_format);
 
     // アセンブル実行
     // オリジナルと同様、エラー/成功メッセージは標準出力へ（main.s 参照）

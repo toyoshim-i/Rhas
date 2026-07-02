@@ -7,6 +7,7 @@ fn run_rhas(src: &[u8]) -> std::process::Output {
     f.write_all(src).expect("write");
 
     Command::new(env!("CARGO_BIN_EXE_rhas"))
+        .arg("--compat-error-format")
         .arg(f.path())
         .output()
         .expect("run rhas")
@@ -17,6 +18,7 @@ fn run_rhas_with_args(src: &[u8], args: &[&str]) -> std::process::Output {
     f.write_all(src).expect("write");
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rhas"));
+    cmd.arg("--compat-error-format");
     cmd.args(args);
     cmd.arg(f.path());
     cmd.output().expect("run rhas")
@@ -456,4 +458,24 @@ fn test_error_endif_without_if() {
         stderr.contains("対応する .if がありません"),
         "stderr: {}", stderr
     );
+}
+
+#[test]
+fn test_modern_error_diagnostics_format() {
+    let mut f = NamedTempFile::new().expect("tempfile");
+    f.write_all(b"\tmove.b d0, a0\n").expect("write");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_rhas"))
+        .arg(f.path())
+        .output()
+        .expect("run rhas");
+
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+
+    // Verify it outputs modern diagnostics
+    assert!(stderr.contains("error[IlSizeAn]: アドレスレジスタはバイトサイズでアクセスできません"), "stderr: {}", stderr);
+    assert!(stderr.contains("  --> "), "stderr: {}", stderr);
+    assert!(stderr.contains("1 | \tmove.b d0, a0"), "stderr: {}", stderr);
+    assert!(stderr.contains("   | \t^^^^^^^^^^^^^"), "stderr: {}", stderr);
 }
