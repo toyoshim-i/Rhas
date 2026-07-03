@@ -1,9 +1,9 @@
-use crate::utils;
+use std::path::PathBuf;
 
 /// ファイル操作エラー（アセンブル中のI/Oエラー）
 #[derive(Debug)]
 pub struct FileError {
-    pub path: Vec<u8>,
+    pub path: PathBuf,
     pub kind: FileErrorKind,
 }
 
@@ -19,7 +19,7 @@ pub enum FileErrorKind {
 
 impl std::fmt::Display for FileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let path = utils::bytes_to_string(&self.path);
+        let path = self.path.to_string_lossy();
         match &self.kind {
             FileErrorKind::NotFound => write!(f, "ファイルが見つかりません: {}", path),
             FileErrorKind::AccessDenied => write!(f, "アクセス拒否: {}", path),

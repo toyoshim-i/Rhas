@@ -13,7 +13,7 @@ fn test_defaults() {
 fn test_basic_parse() {
     let result = parse_args(["source.s"], false);
     let opts = result.unwrap();
-    assert_eq!(opts.source_file, Some(b"source.s".to_vec()));
+    assert_eq!(opts.source_file, Some(std::path::PathBuf::from("source.s")));
     assert!(!opts.all_xref);
 }
 

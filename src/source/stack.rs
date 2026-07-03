@@ -98,7 +98,7 @@ impl SourceStack {
         if self.stack.len() >= INCLD_MAX_NEST {
             // ネスト上限に達した場合は呼び出し元で ErrorCode::TooIncld を発行する
             return Err(FileError {
-                path: filename.to_vec(),
+                path: crate::utils::path_from_bytes(filename),
                 kind: FileErrorKind::NotFound, // ここでは仮; 呼び出し側で TooIncld に変換
             });
         }
@@ -123,7 +123,7 @@ impl SourceStack {
                 return Ok(name_path.to_path_buf());
             }
             return Err(FileError {
-                path: filename.to_vec(),
+                path: crate::utils::path_from_bytes(filename),
                 kind: FileErrorKind::NotFound,
             });
         }
@@ -144,7 +144,7 @@ impl SourceStack {
         }
 
         Err(FileError {
-            path: filename.to_vec(),
+            path: crate::utils::path_from_bytes(filename),
             kind: FileErrorKind::NotFound,
         })
     }

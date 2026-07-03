@@ -7,7 +7,7 @@ use tempfile::NamedTempFile;
 fn test_fpid_sets_id_and_can_disable_fpu() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.fpid\t3\n\t.fpid\t-1\n\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -25,7 +25,7 @@ fn test_fpid_sets_id_and_can_disable_fpu() {
 fn test_fpid_rejects_out_of_range() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.fpid\t8\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -276,7 +276,7 @@ target_g2:\n\
 fn test_fmovecr_rejects_non_extend_size() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.68040\n\tfmovecr.l\t#1,fp0\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         ..Default::default()

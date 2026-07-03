@@ -201,7 +201,7 @@ fn test_pass3_displacement_overflow_error() {
 \t.ds.b\t200\n\
 label:\n\
 \tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),

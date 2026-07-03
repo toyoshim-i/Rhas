@@ -1,6 +1,7 @@
 // HAS060のコマンドラインオプション解析・設定およびデフォルト定数を網羅して定義しており、
 // 一部オプション（ローカルラベルの最大長制限など）が現在未参照である警告を抑制するために付与しています。
 #![allow(dead_code)]
+use std::path::PathBuf;
 // デフォルト値定数（has.equ / work.s より）
 pub const DEFAULT_PRN_WIDTH: u16 = 136;
 pub const DEFAULT_PRN_PAGE_LINES: u16 = 58;
@@ -24,19 +25,18 @@ pub enum PcToAbslMode {
 #[derive(Debug)]
 pub struct Options {
     // ---- ファイル ----
-    /// ソースファイル名（バイト列）
-    pub source_file: Option<Vec<u8>>,
+    /// ソースファイル名
+    pub source_file: Option<PathBuf>,
     /// オブジェクトファイル名（None = ソースと同名.o）
-    pub object_file: Option<Vec<u8>>,
+    pub object_file: Option<PathBuf>,
     /// PRNファイル名（None = ソースと同名.prn）
-    pub prn_file: Option<Vec<u8>>,
+    pub prn_file: Option<PathBuf>,
     /// シンボルファイル名（None = 標準出力）
-    pub sym_file: Option<Vec<u8>>,
+    pub sym_file: Option<PathBuf>,
     /// テンポラリパス（-t）
-    pub temp_path: Option<Vec<u8>>,
+    pub temp_path: Option<PathBuf>,
     /// インクルードパスリスト（-i、複数可）
-    pub include_paths_env: Option<Vec<u8>>, // 環境変数で指定
-    pub include_paths_cmd: Option<Vec<u8>>, // コマンドラインで指定
+    pub include_paths: Vec<PathBuf>,
 
     // ---- 出力制御 ----
     /// PRNファイル作成（-p）
@@ -155,8 +155,7 @@ impl Default for Options {
             prn_file: None,
             sym_file: None,
             temp_path: None,
-            include_paths_env: None,
-            include_paths_cmd: None,
+            include_paths: Vec::new(),
 
             make_prn: false,
             make_sym: false,

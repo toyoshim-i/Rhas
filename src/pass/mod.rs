@@ -14,7 +14,7 @@ use crate::context::AssemblyContext;
 use crate::context::AsmPass;
 use crate::object::writer::write_hlk;
 use crate::object::ObjectCode;
-use crate::source::{parse_include_paths, SourceBuf, SourceStack};
+use crate::source::{SourceBuf, SourceStack};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol::types::{DefAttrib, ExtAttrib};
 use crate::error::ErrorReporter;
@@ -102,8 +102,7 @@ pub fn assemble(
     reporter: &mut dyn ErrorReporter,
 ) -> Result<AssembleResult, AssembleError> {
     // ---- ソースファイル準備 ----
-    let source_path = ctx.opts.source_file.as_deref()
-        .map(crate::utils::path_from_bytes)
+    let source_path = ctx.opts.source_file.clone()
         .unwrap_or_else(|| PathBuf::from("(stdin)"));
 
     let source_buf = SourceBuf::from_file(source_path.clone())
@@ -120,7 +119,7 @@ pub fn assemble(
         .map(|s| s.to_string_lossy().as_bytes().to_vec())
         .unwrap_or_else(|| source_name.clone());
 
-    let include_paths = parse_include_paths(ctx.opts.include_paths_cmd.as_ref());
+    let include_paths = ctx.opts.include_paths.clone();
     let mut source = SourceStack::new(source_buf, include_paths);
 
     // ---- シンボルテーブル初期化 ----
@@ -177,12 +176,11 @@ pub fn assemble(
             ctx.opts.prn_page_lines as usize,
         );
         let prn_path = if let Some(ref p) = ctx.opts.prn_file {
-            crate::utils::path_from_bytes(p)
+            p.clone()
         } else {
             // ソースファイルの拡張子を .prn に変換
-            let src = crate::utils::path_from_bytes(
-                ctx.opts.source_file.as_deref().unwrap_or(b"unknown")
-            );
+            let src = ctx.opts.source_file.clone()
+                .unwrap_or_else(|| PathBuf::from("unknown"));
             src.with_extension("prn")
         };
         if let Err(e) = std::fs::write(&prn_path, &prn_bytes) {
@@ -194,12 +192,11 @@ pub fn assemble(
     if ctx.opts.make_sym {
         let sym_bytes = format_sym_file(&sym);
         let sym_path = if let Some(ref p) = ctx.opts.sym_file {
-            crate::utils::path_from_bytes(p)
+            p.clone()
         } else {
             // ソースファイルの拡張子を .sym に変換
-            let src = crate::utils::path_from_bytes(
-                ctx.opts.source_file.as_deref().unwrap_or(b"unknown")
-            );
+            let src = ctx.opts.source_file.clone()
+                .unwrap_or_else(|| PathBuf::from("unknown"));
             src.with_extension("sym")
         };
         if let Err(e) = std::fs::write(&sym_path, &sym_bytes) {

@@ -14,7 +14,7 @@
 /// the correct file_stem (matching what HAS060.X records).
 fn assemble_file(path: &str) -> Vec<u8> {
     let opts = rhas::options::Options {
-        source_file: Some(path.as_bytes().to_vec()),
+        source_file: Some(std::path::PathBuf::from(path)),
         all_xref: true,
         ..Default::default()
     };
@@ -29,7 +29,7 @@ fn assemble_file(path: &str) -> Vec<u8> {
 /// Used for tests whose golden files are generated with HAS060.X -c4.
 fn assemble_file_c4(path: &str) -> Vec<u8> {
     let opts = rhas::options::Options {
-        source_file: Some(path.as_bytes().to_vec()),
+        source_file: Some(std::path::PathBuf::from(path)),
         all_xref:       true,
         opt_clr:        true,
         opt_movea:      true,
@@ -55,7 +55,7 @@ fn assemble_file_c4(path: &str) -> Vec<u8> {
 /// Assemble with -c0 (all optimizations disabled).
 fn assemble_file_c0(path: &str) -> Vec<u8> {
     let opts = rhas::options::Options {
-        source_file: Some(path.as_bytes().to_vec()),
+        source_file: Some(std::path::PathBuf::from(path)),
         all_xref: true,
         optimize_disabled: true,
         no_quick: true,
@@ -73,7 +73,7 @@ fn assemble_file_c0(path: &str) -> Vec<u8> {
 /// Assemble with -c2 (v2 compatible mode).
 fn assemble_file_c2(path: &str) -> Vec<u8> {
     let opts = rhas::options::Options {
-        source_file: Some(path.as_bytes().to_vec()),
+        source_file: Some(std::path::PathBuf::from(path)),
         all_xref: true,
         no_null_disp: true,
         no_bra_cut: true,
@@ -89,7 +89,7 @@ fn assemble_file_c2(path: &str) -> Vec<u8> {
 /// Assemble with -g (SCD debug output).
 fn assemble_file_g(path: &str) -> Vec<u8> {
     let opts = rhas::options::Options {
-        source_file: Some(path.as_bytes().to_vec()),
+        source_file: Some(std::path::PathBuf::from(path)),
         all_xref: true,
         make_sym_deb: true,
         make_align: true,

@@ -21,7 +21,6 @@ impl SourceBuf {
     /// ファイルを読み込んでバッファを作成する
     pub fn from_file(path: PathBuf) -> Result<Self, FileError> {
         let data = std::fs::read(&path).map_err(|e| {
-            let path_bytes = path.to_string_lossy().as_bytes().to_vec();
             let kind = if e.kind() == std::io::ErrorKind::NotFound {
                 FileErrorKind::NotFound
             } else if e.kind() == std::io::ErrorKind::PermissionDenied {
@@ -30,7 +29,7 @@ impl SourceBuf {
                 FileErrorKind::ReadError(e)
             };
             FileError {
-                path: path_bytes,
+                path: path.clone(),
                 kind,
             }
         })?;

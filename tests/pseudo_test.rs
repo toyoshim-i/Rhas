@@ -109,7 +109,7 @@ fn test_common_symbol_directives_emit_ext_symbols() {
 fn test_comm_rejects_non_positive_size() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.comm\tbuf,0\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -132,10 +132,10 @@ fn test_comm_rejects_non_positive_size() {
 fn test_comm_symbol_is_visible_in_sym_file() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.comm\tbuf,16\n").expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let sym_file = NamedTempFile::new().expect("sym tempfile");
-    let sym_path = sym_file.path().to_str().expect("path").as_bytes().to_vec();
+    let sym_path = sym_file.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -147,9 +147,7 @@ fn test_comm_symbol_is_visible_in_sym_file() {
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
-    let sym_content = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&sym_path).unwrap()
-    )).expect("read sym file");
+    let sym_content = std::fs::read(&sym_path).expect("read sym file");
     let sym_str = String::from_utf8_lossy(&sym_content);
     assert!(sym_str.contains("buf"), "symbol name should be present");
     assert!(sym_str.contains("COMM"), "COMM type should be present");
@@ -193,7 +191,7 @@ fn test_offsym_with_symbol_rejects_alignment_directives() {
     ] {
         let mut f = NamedTempFile::new().expect("tempfile");
         f.write_all(src).expect("write");
-        let path = f.path().to_str().expect("path").as_bytes().to_vec();
+        let path = f.path().to_path_buf();
         let opts = rhas::options::Options {
             source_file: Some(path),
             ..Default::default()
@@ -216,7 +214,7 @@ fn test_offsym_with_symbol_rejects_alignment_directives() {
 fn test_offsym_overwrite_warning_and_error_mode() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"X\t.equ\t1\n\t.offsym\t2,X\n\t.text\n\tmoveq\t#X,d0\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts_warn = rhas::options::Options {
         source_file: Some(path.clone()),

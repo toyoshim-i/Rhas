@@ -39,20 +39,8 @@ where
 
     // 引数を解析
     let mut i = 0;
-    // インクルードパス収集用
-    let mut inc_path_env: Vec<Vec<u8>> = Vec::new();
-    let mut inc_path_cmd: Vec<Vec<u8>> = Vec::new();
-    let mut in_env_section = !env_args.is_empty();
-    let env_arg_count = if env_args.is_empty() {
-        0
-    } else {
-        split_args(env_args.as_bytes()).len()
-    };
 
     while i < all_args.len() {
-        if i == env_arg_count {
-            in_env_section = false;
-        }
         let arg = &all_args[i];
         i += 1;
 
@@ -73,32 +61,20 @@ where
 
         if arg[0] == b'-' {
             // スイッチ解析（複数連結に対応）
-            let inc_list = if in_env_section {
-                &mut inc_path_env
-            } else {
-                &mut inc_path_cmd
-            };
             let remaining = &all_args[i..];
-            let consumed = process_switch(&arg[1..], remaining, &mut opts, inc_list)?;
+            let consumed = process_switch(&arg[1..], remaining, &mut opts)?;
             i += consumed;
         } else {
             // ファイル名
+            let arg_path = crate::utils::path_from_bytes(arg);
             if opts.source_file.is_some()
-                && opts.prn_file.as_deref() != Some(arg.as_slice())
-                && opts.sym_file.as_deref() != Some(arg.as_slice())
+                && opts.prn_file.as_ref() != Some(&arg_path)
+                && opts.sym_file.as_ref() != Some(&arg_path)
             {
                 return Err(ParseError::MultipleSourceFiles);
             }
-            opts.source_file = Some(arg.clone());
+            opts.source_file = Some(arg_path);
         }
-    }
-
-    // インクルードパスを文字列として保存（単純化）
-    if !inc_path_env.is_empty() {
-        opts.include_paths_env = Some(flatten_paths(&inc_path_env));
-    }
-    if !inc_path_cmd.is_empty() {
-        opts.include_paths_cmd = Some(flatten_paths(&inc_path_cmd));
     }
 
     // ソースファイルがなければ usage
@@ -121,7 +97,6 @@ fn process_switch(
     chars: &[u8],
     remaining_args: &[Vec<u8>],
     opts: &mut Options,
-    inc_list: &mut Vec<Vec<u8>>,
 ) -> Result<usize, ParseError> {
     let mut pos = 0;
     let mut consumed = 0;
@@ -141,7 +116,7 @@ fn process_switch(
                 break;
             }
             b'i' => {
-                let n = parse_i_option(chars, remaining_args, consumed, pos, inc_list)?;
+                let n = parse_i_option(chars, remaining_args, consumed, pos, opts)?;
                 consumed += n;
                 break;
             }
@@ -255,7 +230,7 @@ fn parse_t_option(
     opts: &mut Options,
 ) -> Result<usize, ParseError> {
     let (s, n) = get_cmd_string(chars, remaining_args, already_consumed, pos)?;
-    opts.temp_path = Some(s);
+    opts.temp_path = Some(crate::utils::path_from_bytes(&s));
     Ok(n)
 }
 
@@ -271,7 +246,7 @@ fn parse_o_option(
     if !name.contains(&b'.') {
         name.extend_from_slice(b".o");
     }
-    opts.object_file = Some(name);
+    opts.object_file = Some(crate::utils::path_from_bytes(&name));
     Ok(n)
 }
 
@@ -280,10 +255,10 @@ fn parse_i_option(
     remaining_args: &[Vec<u8>],
     already_consumed: usize,
     pos: usize,
-    inc_list: &mut Vec<Vec<u8>>,
+    opts: &mut Options,
 ) -> Result<usize, ParseError> {
     let (path, n) = get_cmd_string(chars, remaining_args, already_consumed, pos)?;
-    inc_list.push(path);
+    opts.include_paths.push(crate::utils::path_from_bytes(&path));
     Ok(n)
 }
 
@@ -297,7 +272,7 @@ fn parse_p_option(
     opts.make_prn = true;
     let (file, n) = get_optional_filename(&chars[pos..], remaining_args, already_consumed);
     if let Some(f) = file {
-        opts.prn_file = Some(f);
+        opts.prn_file = Some(crate::utils::path_from_bytes(&f));
     }
     n
 }
@@ -312,7 +287,7 @@ fn parse_x_option(
     opts.make_sym = true;
     let (file, n) = get_optional_filename(&chars[pos..], remaining_args, already_consumed);
     if let Some(f) = file {
-        opts.sym_file = Some(f);
+        opts.sym_file = Some(crate::utils::path_from_bytes(&f));
     }
     n
 }
@@ -726,12 +701,4 @@ fn split_args(s: &[u8]) -> Vec<Vec<u8>> {
     result
 }
 
-/// パスリストを NUL 区切りのバイト列に変換（内部管理用）
-fn flatten_paths(paths: &[Vec<u8>]) -> Vec<u8> {
-    let mut result = Vec::new();
-    for p in paths {
-        result.extend_from_slice(p);
-        result.push(0);
-    }
-    result
-}
+

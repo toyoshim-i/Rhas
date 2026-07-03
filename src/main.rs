@@ -1,7 +1,7 @@
 // rhas - X68000 HAS060X assembler ported to Rust
 // Based on HAS060X.X by TcbnErik, HAS060.X by M.Kamada, HAS.X v3.09 by Y.Nakamura
 
-use rhas::{context, error, options, pass, utils};
+use rhas::{context, error, options, pass};
 use rhas::options::{parse_args, ParseError};
 use std::io::Write;
 use std::path::PathBuf;
@@ -45,8 +45,8 @@ fn main() {
         print!("{}", options::title_message());
     }
 
-    // ソースファイルが指定されているか確認し、バイト列を取得
-    let source_file_bytes = if let Some(sf) = &opts.source_file {
+    // ソースファイルが指定されているか確認
+    let source_file = if let Some(ref sf) = opts.source_file {
         sf
     } else {
         print!("{}", options::usage_message());
@@ -55,11 +55,10 @@ fn main() {
 
     // 出力ファイル名を決定
     let output_path: PathBuf = if let Some(ref o) = opts.object_file {
-        utils::path_from_bytes(o)
+        o.clone()
     } else {
         // ソースファイルの拡張子を .o に変換
-        let src = utils::path_from_bytes(source_file_bytes);
-        src.with_extension("o")
+        source_file.with_extension("o")
     };
 
     // コンテキストを作成

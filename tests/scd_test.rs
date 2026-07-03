@@ -8,11 +8,11 @@ use tempfile::{Builder, NamedTempFile};
 fn test_prn_list_file() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\tmove.b\td0,d1\n\tnop\n").expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     // PRNファイル用の一時ファイルパス
     let prn_file = NamedTempFile::new().expect("prn tempfile");
-    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path = prn_file.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -25,9 +25,7 @@ fn test_prn_list_file() {
     rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     // PRNファイルが存在して内容が正しいか確認
-    let prn_content = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path).unwrap()
-    )).expect("read prn file");
+    let prn_content = std::fs::read(&prn_path).expect("read prn file");
     let prn_str = String::from_utf8_lossy(&prn_content);
 
     // 行番号1と2が含まれていること
@@ -45,7 +43,7 @@ fn test_prn_list_file() {
 fn test_g_option_emits_b204_record() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\tnop\n").expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -65,7 +63,7 @@ fn test_g_option_emits_b204_record() {
 fn test_g_only_emits_default_scd_line_entry() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\tnop\n").expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -107,7 +105,7 @@ fn test_g_only_emits_default_scd_line_entry() {
 fn test_scd_ln_alias_updates_line_state() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\t.ln\t123,*\n\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -125,7 +123,7 @@ fn test_scd_ln_alias_updates_line_state() {
 fn test_scd_ln_wraps_to_u16() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\t.ln\t70000,*\n\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -143,7 +141,7 @@ fn test_scd_ln_wraps_to_u16() {
 fn test_scd_dim_updates_temp_buffer() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.dim\t1,2,3,4\n\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -162,7 +160,7 @@ fn test_scd_dim_updates_temp_buffer() {
 fn test_scd_line_wraps_to_u16_in_temp_size() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\t.def\tfoo\n\t.line\t70000\n\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -181,7 +179,7 @@ fn test_scd_line_wraps_to_u16_in_temp_size() {
 fn test_scd_scl_rejects_out_of_range() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\t.scl\t256\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -202,7 +200,7 @@ fn test_scd_scl_rejects_out_of_range() {
 fn test_scd_directives_are_ignored_without_g() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.scl\t9999\n\t.dim\tA,B,C,D,E\n\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -219,7 +217,7 @@ fn test_scd_directives_are_ignored_without_g() {
 fn test_scd_footer_uses_input_source_filename() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let expected_file = f
         .path()
         .file_name()
@@ -245,7 +243,7 @@ fn test_scd_footer_uses_input_source_filename() {
 fn test_scd_file_does_not_affect_b204_filename() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let expected_file = f
         .path()
         .file_name()
@@ -296,7 +294,7 @@ fn test_scd_records_are_emitted_in_pass1() {
 fn test_scd_events_are_collected_in_object() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\t.ln\t7,*\n\t.def\tfoo\n\t.val\t.\n\t.endef\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -320,7 +318,7 @@ fn test_scd_events_are_collected_in_object() {
 fn test_g_option_emits_scd_footer_after_terminator() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\t.ln\t7,*\n\t.def\tfoo\n\t.val\t.\n\t.endef\n\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: false,
@@ -347,7 +345,7 @@ fn test_g_option_emits_scd_footer_after_terminator() {
 fn test_g_option_scd_footer_contains_bf_ef_entries() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.file\t\"main.c\"\n\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: true,
@@ -369,7 +367,7 @@ fn test_g_option_scd_footer_emits_exname_for_long_source_filename() {
         .tempfile()
         .expect("tempfile");
     f.write_all(b"\tnop\n").expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: true,
@@ -456,7 +454,7 @@ fn test_scd_enum_member_forces_section_minus2_in_footer() {
         b"\t.file\t\"main.c\"\n\t.def\tenumv\n\t.val\t.\n\t.scl\t16\n\t.endef\n\tnop\n",
     )
     .expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: false,
@@ -543,7 +541,7 @@ fn test_scd_funcend_updates_function_size_in_footer() {
 \tnop\n",
     )
     .expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: false,
@@ -588,7 +586,7 @@ fn test_scd_tag_links_to_existing_tag_definition() {
 \tnop\n",
     )
     .expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: true,
@@ -627,7 +625,7 @@ fn test_scd_unresolved_tag_suppresses_endef_entry() {
 \tnop\n",
     )
     .expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: false,
@@ -656,7 +654,7 @@ fn test_scd_file_entry_moves_short_extension_for_long_filename() {
 \tnop\n",
     )
     .expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: true,
@@ -694,7 +692,7 @@ fn test_scd_file_mode_exname_boundary_14_vs_15() {
 \tnop\n",
     )
     .expect("write");
-    let path14 = f14.path().to_str().expect("path").as_bytes().to_vec();
+    let path14 = f14.path().to_path_buf();
     let opts14 = rhas::options::Options {
         source_file: Some(path14),
         make_sym_deb: false,
@@ -722,7 +720,7 @@ fn test_scd_file_mode_exname_boundary_14_vs_15() {
 \tnop\n",
     )
     .expect("write");
-    let path15 = f15.path().to_str().expect("path").as_bytes().to_vec();
+    let path15 = f15.path().to_path_buf();
     let opts15 = rhas::options::Options {
         source_file: Some(path15),
         make_sym_deb: false,
@@ -756,7 +754,7 @@ fn test_scd_bb_eb_updates_bb_next_chain() {
 \t.nop\n",
     )
     .expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: false,
@@ -801,7 +799,7 @@ fn test_scd_orphan_eb_ef_keep_next_unchanged() {
 \tnop\n",
     )
     .expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: false,
@@ -845,7 +843,7 @@ fn test_scd_tag_last_wins_after_unresolved_tag() {
 \tnop\n",
     )
     .expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: false,
@@ -886,7 +884,7 @@ target:\n\
 \tnop\n",
     )
     .expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(path),
         make_sym_deb: false,
@@ -920,10 +918,10 @@ target:\n\
 fn test_prn_nlist_and_list() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.nlist\n\tmove.b\td0,d1\n\t.list\n\tnop\n").expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let prn_file = NamedTempFile::new().expect("prn tempfile");
-    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path = prn_file.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -935,9 +933,7 @@ fn test_prn_nlist_and_list() {
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
-    let prn_content = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path).unwrap()
-    )).expect("read prn file");
+    let prn_content = std::fs::read(&prn_path).expect("read prn file");
     let prn_str = String::from_utf8_lossy(&prn_content);
 
     assert!(!prn_str.contains("1200"), "nlist section should be hidden");
@@ -951,10 +947,10 @@ fn test_prn_lall_shows_macro_expansion_lines() {
     f.write_all(
         b"m\t.macro\n\tnop\n\t.endm\n\t.lall\n\tm\n"
     ).expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let prn_file = NamedTempFile::new().expect("prn tempfile");
-    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path = prn_file.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -966,9 +962,7 @@ fn test_prn_lall_shows_macro_expansion_lines() {
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
-    let prn_content = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path).unwrap()
-    )).expect("read prn file");
+    let prn_content = std::fs::read(&prn_path).expect("read prn file");
     let prn_str = String::from_utf8_lossy(&prn_content);
 
     assert!(prn_str.contains("*4E71"), "macro expansion line should be marked with '*'");
@@ -984,10 +978,10 @@ fn test_prn_width_directive_limits_line_width() {
 
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(&src).expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let prn_file = NamedTempFile::new().expect("prn tempfile");
-    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path = prn_file.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -999,9 +993,7 @@ fn test_prn_width_directive_limits_line_width() {
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
-    let prn_content = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path).unwrap()
-    )).expect("read prn file");
+    let prn_content = std::fs::read(&prn_path).expect("read prn file");
     let prn_str = String::from_utf8_lossy(&prn_content);
 
     let max_len = prn_str.lines().map(|l| l.len()).max().unwrap_or(0);
@@ -1013,10 +1005,10 @@ fn test_prn_width_directive_limits_line_width() {
 fn test_prn_title_and_subttl_are_reflected() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\t.title\t\"MainTitle\"\n\t.subttl\t\"PartA\"\n\tnop\n").expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let prn_file = NamedTempFile::new().expect("prn tempfile");
-    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path = prn_file.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -1028,9 +1020,7 @@ fn test_prn_title_and_subttl_are_reflected() {
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
-    let prn_content = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path).unwrap()
-    )).expect("read prn file");
+    let prn_content = std::fs::read(&prn_path).expect("read prn file");
     let prn_str = String::from_utf8_lossy(&prn_content);
 
     assert!(prn_str.contains("MainTitle"), "title should appear in PRN");
@@ -1042,10 +1032,10 @@ fn test_prn_title_and_subttl_are_reflected() {
 fn test_prn_page_emits_formfeed_unless_disabled() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\tnop\n\t.page\n\tnop\n").expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let prn_file_a = NamedTempFile::new().expect("prn tempfile");
-    let prn_path_a = prn_file_a.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path_a = prn_file_a.path().to_path_buf();
     let mut opts_a = rhas::options::Options {
         source_file: Some(src_path.clone()),
         make_prn: true,
@@ -1056,13 +1046,11 @@ fn test_prn_page_emits_formfeed_unless_disabled() {
     let mut ctx_a = rhas::context::AssemblyContext::new(opts_a);
     let mut reporter = rhas::error::BufferReporter::new(ctx_a.effective_warn_level());
     rhas::pass::assemble(&mut ctx_a, &mut reporter).expect("assemble a");
-    let prn_a = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path_a).unwrap()
-    )).expect("read prn a");
+    let prn_a = std::fs::read(&prn_path_a).expect("read prn a");
     assert!(prn_a.contains(&0x0C), "formfeed should be emitted for .page");
 
     let prn_file_b = NamedTempFile::new().expect("prn tempfile");
-    let prn_path_b = prn_file_b.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path_b = prn_file_b.path().to_path_buf();
     let mut opts_b = rhas::options::Options {
         source_file: Some(src_path),
         make_prn: true,
@@ -1073,9 +1061,7 @@ fn test_prn_page_emits_formfeed_unless_disabled() {
     let mut ctx_b = rhas::context::AssemblyContext::new(opts_b);
     let mut reporter = rhas::error::BufferReporter::new(ctx_b.effective_warn_level());
     rhas::pass::assemble(&mut ctx_b, &mut reporter).expect("assemble b");
-    let prn_b = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path_b).unwrap()
-    )).expect("read prn b");
+    let prn_b = std::fs::read(&prn_path_b).expect("read prn b");
     assert!(!prn_b.contains(&0x0C), "formfeed should be suppressed when no_page_ff");
 }
 
@@ -1084,10 +1070,10 @@ fn test_prn_page_emits_formfeed_unless_disabled() {
 fn test_prn_page_with_expr_sets_page_lines_without_formfeed() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\tnop\n\t.page\t60\n\tnop\n").expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let prn_file = NamedTempFile::new().expect("prn tempfile");
-    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path = prn_file.path().to_path_buf();
     let opts = rhas::options::Options {
         source_file: Some(src_path),
         make_prn: true,
@@ -1100,9 +1086,7 @@ fn test_prn_page_with_expr_sets_page_lines_without_formfeed() {
 
     assert_eq!(ctx.opts.prn_page_lines, 60);
 
-    let prn = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path).unwrap()
-    )).expect("read prn");
+    let prn = std::fs::read(&prn_path).expect("read prn");
     assert!(!prn.contains(&0x0C), "formfeed should not be emitted for .page <expr>");
 }
 
@@ -1116,10 +1100,10 @@ fn test_prn_auto_page_break_by_line_limit() {
 
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(&src).expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let prn_file = NamedTempFile::new().expect("prn tempfile");
-    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path = prn_file.path().to_path_buf();
 
     let mut opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -1134,9 +1118,7 @@ fn test_prn_auto_page_break_by_line_limit() {
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
-    let prn = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path).unwrap()
-    )).expect("read prn");
+    let prn = std::fs::read(&prn_path).expect("read prn");
     assert!(prn.contains(&0x0C), "auto page break should emit formfeed");
 }
 
@@ -1151,10 +1133,10 @@ fn test_prn_page_minus1_disables_auto_page_break() {
 
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(&src).expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let prn_file = NamedTempFile::new().expect("prn tempfile");
-    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path = prn_file.path().to_path_buf();
 
     let mut opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -1170,9 +1152,7 @@ fn test_prn_page_minus1_disables_auto_page_break() {
     rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
     assert_eq!(ctx.opts.prn_page_lines, u16::MAX, ".page -1 should disable auto page break");
-    let prn = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path).unwrap()
-    )).expect("read prn");
+    let prn = std::fs::read(&prn_path).expect("read prn");
     assert!(!prn.contains(&0x0C), "no formfeed expected when auto page break disabled");
 }
 
@@ -1181,10 +1161,10 @@ fn test_prn_page_minus1_disables_auto_page_break() {
 fn test_prn_page_plus_emits_formfeed() {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(b"\tnop\n\t.page\t+\n\tnop\n").expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let prn_file = NamedTempFile::new().expect("prn tempfile");
-    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path = prn_file.path().to_path_buf();
 
     let mut opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -1198,9 +1178,7 @@ fn test_prn_page_plus_emits_formfeed() {
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
-    let prn = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path).unwrap()
-    )).expect("read prn");
+    let prn = std::fs::read(&prn_path).expect("read prn");
     assert!(prn.contains(&0x0C), "formfeed should be emitted for .page +");
 }
 
@@ -1215,10 +1193,10 @@ fn test_prn_no_page_ff_disables_all_formfeed() {
 
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(&src).expect("write");
-    let src_path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let src_path = f.path().to_path_buf();
 
     let prn_file = NamedTempFile::new().expect("prn tempfile");
-    let prn_path = prn_file.path().to_str().expect("path").as_bytes().to_vec();
+    let prn_path = prn_file.path().to_path_buf();
 
     let mut opts = rhas::options::Options {
         source_file: Some(src_path),
@@ -1233,8 +1211,6 @@ fn test_prn_no_page_ff_disables_all_formfeed() {
     let mut reporter = rhas::error::BufferReporter::new(ctx.effective_warn_level());
     rhas::pass::assemble(&mut ctx, &mut reporter).expect("assemble");
 
-    let prn = std::fs::read(std::path::Path::new(
-        std::str::from_utf8(&prn_path).unwrap()
-    )).expect("read prn");
+    let prn = std::fs::read(&prn_path).expect("read prn");
     assert!(!prn.contains(&0x0C), "no formfeed should be emitted when prn_no_page_ff=true");
 }

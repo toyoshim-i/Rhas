@@ -47,11 +47,4 @@ fn test_line_number_tracking() {
     assert_eq!(buf.line, 3);
 }
 
-#[test]
-fn test_include_paths_parse() {
-    let raw = b"path/a\0path/b\0".to_vec();
-    let paths = parse_include_paths(Some(&raw));
-    assert_eq!(paths.len(), 2);
-    assert_eq!(paths[0], PathBuf::from("path/a"));
-    assert_eq!(paths[1], PathBuf::from("path/b"));
-}
+

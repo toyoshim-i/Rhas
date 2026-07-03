@@ -8,7 +8,7 @@ use tempfile::NamedTempFile;
 pub fn assemble_src(src: &[u8]) -> rhas::pass::AssembleResult {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(src).expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -23,7 +23,7 @@ pub fn assemble_src(src: &[u8]) -> rhas::pass::AssembleResult {
 pub fn assemble_src_c4(src: &[u8]) -> rhas::pass::AssembleResult {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(src).expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
@@ -50,7 +50,7 @@ pub fn assemble_src_c4(src: &[u8]) -> rhas::pass::AssembleResult {
 pub fn assemble_with_ctx(src: &[u8]) -> (rhas::pass::AssembleResult, rhas::context::AssemblyContext) {
     let mut f = NamedTempFile::new().expect("tempfile");
     f.write_all(src).expect("write");
-    let path = f.path().to_str().expect("path").as_bytes().to_vec();
+    let path = f.path().to_path_buf();
 
     let opts = rhas::options::Options {
         source_file: Some(path),
