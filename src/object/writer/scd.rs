@@ -177,8 +177,8 @@ pub(super) fn write_scd_footer(out: &mut Vec<u8>, obj: &ObjectCode) {
     let mut open_bb: Vec<usize> = Vec::new();
     let mut open_bf: Vec<usize> = Vec::new();
     let mut open_tag_defs: Vec<usize> = Vec::new();
-    let mut tag_def_by_name: std::collections::HashMap<Vec<u8>, u32> =
-        std::collections::HashMap::new();
+    let mut tag_def_by_name: rustc_hash::FxHashMap<Vec<u8>, u32> =
+        rustc_hash::FxHashMap::default();
     let mut pending_tag_name: Option<Vec<u8>> = None;
     let mut pending_val: Option<(u32, i16)> = None;
     for ev in &obj.scd_events {

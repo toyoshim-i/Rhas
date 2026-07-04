@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 /// 匿名ローカルラベル（@@: / @b / @f）を行内で展開する。
 /// @@: → @@{count}: に展開（is_anon_def=true を返す）
@@ -70,7 +70,7 @@ fn is_anon_ident_cont(b: u8) -> bool {
 /// - `1b`  -> `__n1__0` （直前の `1:`）
 pub(super) fn preprocess_numeric_local_labels(
     line: &[u8],
-    counts: &mut HashMap<u32, u32>,
+    counts: &mut FxHashMap<u32, u32>,
 ) -> Vec<u8> {
     let mut result = Vec::with_capacity(line.len() + 16);
     let mut i = 0usize;

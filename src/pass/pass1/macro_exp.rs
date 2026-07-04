@@ -103,7 +103,7 @@ pub(crate) fn collect_macro_body(
     let mut template = Vec::new();
     let mut local_count = 0u16;
     let mut nest_depth = 0u32;
-    let mut name_map: std::collections::HashMap<Vec<u8>, u16> = std::collections::HashMap::new();
+    let mut name_map: rustc_hash::FxHashMap<Vec<u8>, u16> = rustc_hash::FxHashMap::default();
 
     while let ReadResult::Line(line) = source.read_line() {
         let trim_len = line
@@ -158,7 +158,7 @@ fn convert_line_params(
     line: &[u8],
     params: &[Vec<u8>],
     local_count: &mut u16,
-    name_map: &mut std::collections::HashMap<Vec<u8>, u16>,
+    name_map: &mut rustc_hash::FxHashMap<Vec<u8>, u16>,
 ) -> Vec<u8> {
     let mut out = Vec::with_capacity(line.len() + 8);
     let mut i = 0;
@@ -483,7 +483,7 @@ fn collect_body_from_slice_impl(
     let mut local_count = 0u16;
     let mut nest_depth = 0u32;
     let mut pos = 0;
-    let mut name_map: std::collections::HashMap<Vec<u8>, u16> = std::collections::HashMap::new();
+    let mut name_map: rustc_hash::FxHashMap<Vec<u8>, u16> = rustc_hash::FxHashMap::default();
 
     while pos < slice.len() {
         let end = slice[pos..]

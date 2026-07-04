@@ -13,7 +13,7 @@ use crate::expr::{eval_rpn, parse_expr, EvalError, Rpn};
 use crate::source::{ReadResult, SourceStack};
 use crate::symbol::types::{DefAttrib, ExtAttrib, FirstDef, InsnHandler, SizeCode};
 use crate::symbol::{Symbol, SymbolTable};
-use std::collections::HashMap;
+
 
 mod insn;
 mod macro_exp;
@@ -31,6 +31,8 @@ use pseudo_dispatch::handle_pseudo;
 pub(crate) use pseudo_dispatch::{
     parse_align_n, parse_align_pad, parse_filename, parse_string_or_ident, read_ident,
 };
+
+use rustc_hash::FxHashMap;
 
 /// Pass1 の作業状態
 pub struct P1Ctx<'a> {
@@ -52,7 +54,7 @@ pub struct P1Ctx<'a> {
     /// 匿名ローカルラベルカウンタ（@@: の通し番号）
     pub(super) local_anon_count: u32,
     /// 数値ローカルラベル（`1:` / `1f` / `1b`）の定義カウンタ
-    pub(super) num_local_counts: HashMap<u32, u32>,
+    pub(super) num_local_counts: FxHashMap<u32, u32>,
     /// 現在処理中のソース位置（エラーメッセージ用）
     pub(super) current_pos: SourcePos,
 }
@@ -74,7 +76,7 @@ impl<'a> P1Ctx<'a> {
             is_end: false,
             local_base: 0,
             local_anon_count: 0,
-            num_local_counts: HashMap::new(),
+            num_local_counts: FxHashMap::default(),
             current_pos: SourcePos::new(Vec::new(), 0),
         }
     }

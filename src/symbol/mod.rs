@@ -12,7 +12,7 @@ mod table;
 pub mod types;
 
 use crate::utils;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 pub use types::Symbol;
 use types::{CpuMask, DefAttrib, ExtAttrib, FirstDef};
 
@@ -24,15 +24,15 @@ use types::{CpuMask, DefAttrib, ExtAttrib, FirstDef};
 pub struct SymbolTable {
     /// ユーザー定義シンボル（ラベル、.equ、.reg等）
     /// キー: 元のバイト列（大文字小文字区別）
-    user_syms: HashMap<Vec<u8>, Symbol>,
+    user_syms: FxHashMap<Vec<u8>, Symbol>,
 
     /// レジスタ名テーブル
     /// キー: 小文字化したバイト列
-    reg_table: HashMap<Vec<u8>, Symbol>,
+    reg_table: FxHashMap<Vec<u8>, Symbol>,
 
     /// 命令名・マクロ名テーブル
     /// キー: 小文字化したバイト列
-    cmd_table: HashMap<Vec<u8>, Symbol>,
+    cmd_table: FxHashMap<Vec<u8>, Symbol>,
 
     /// シンボル識別長 8 バイト制限（-8 オプション）
     sym_len8: bool,
@@ -42,9 +42,9 @@ impl SymbolTable {
     /// 空のシンボルテーブルを作成し、予約済みシンボルを登録する
     pub fn new(sym_len8: bool) -> Self {
         let mut tbl = SymbolTable {
-            user_syms: HashMap::new(),
-            reg_table: HashMap::new(),
-            cmd_table: HashMap::new(),
+            user_syms: FxHashMap::default(),
+            reg_table: FxHashMap::default(),
+            cmd_table: FxHashMap::default(),
             sym_len8,
         };
         tbl.register_builtins();
@@ -149,8 +149,16 @@ impl SymbolTable {
     ///
     /// CPU タイプに一致しないレジスタは返さない。
     pub fn lookup_reg(&self, name: &[u8], cpu_type: u16) -> Option<&Symbol> {
-        let key = utils::to_lowercase_vec(name);
-        let sym = self.reg_table.get(&key)?;
+        let sym = if name.len() <= 32 {
+            let mut buf = [0u8; 32];
+            for i in 0..name.len() {
+                buf[i] = name[i].to_ascii_lowercase();
+            }
+            self.reg_table.get(&buf[..name.len()])?
+        } else {
+            let key = utils::to_lowercase_vec(name);
+            self.reg_table.get(&key)?
+        };
         if sym.is_available_for_cpu(cpu_type) {
             Some(sym)
         } else {
@@ -163,8 +171,17 @@ impl SymbolTable {
     /// オリジナルの `isdefdmac`（マクロ）/ 命令テーブル検索に対応。
     /// CPU タイプに一致しない命令は返さない。
     pub fn lookup_cmd(&self, name: &[u8], cpu_type: u16) -> Option<&Symbol> {
-        let key = utils::to_lowercase_vec(self.truncate_if_len8(name));
-        let sym = self.cmd_table.get(&key)?;
+        let name = self.truncate_if_len8(name);
+        let sym = if name.len() <= 32 {
+            let mut buf = [0u8; 32];
+            for i in 0..name.len() {
+                buf[i] = name[i].to_ascii_lowercase();
+            }
+            self.cmd_table.get(&buf[..name.len()])?
+        } else {
+            let key = utils::to_lowercase_vec(name);
+            self.cmd_table.get(&key)?
+        };
         if sym.is_available_for_cpu(cpu_type) {
             Some(sym)
         } else {
@@ -183,9 +200,9 @@ impl SymbolTable {
     }
 
     /// マクロを登録する（.macro/.endm 処理後）
-    pub fn define_macro(&mut self, name: Vec<u8>, sym: Symbol) {
-        let key = utils::to_lowercase_vec(name);
-        self.cmd_table.insert(key, sym);
+    pub fn define_macro(&mut self, mut name: Vec<u8>, sym: Symbol) {
+        name.make_ascii_lowercase();
+        self.cmd_table.insert(name, sym);
     }
 
     /// シンボルを名前で検索して可変参照を返す（ext_attrib 更新等に使用）

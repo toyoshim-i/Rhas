@@ -8,6 +8,7 @@ authors = ["rhas contributors"]
 [dependencies]
 # コマンドライン引数解析
 clap = { version = "4", features = ["derive"] }
+rustc-hash = "1.1.0"
 
 [dev-dependencies]
 tempfile = "=3.10.1"
