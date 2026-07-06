@@ -145,6 +145,8 @@ pub struct Options {
     pub make_align: bool,
     /// オリジナル互換のエラー表示形式を強制するフラグ
     pub compat_error_format: bool,
+    /// LSPサーバーモードで起動するフラグ
+    pub lsp_mode: bool,
 }
 
 impl Default for Options {
@@ -220,6 +222,7 @@ impl Default for Options {
             g2as_mode: false,
             make_align: false,
             compat_error_format: false,
+            lsp_mode: false,
         }
     }
 }

@@ -11,3 +11,4 @@ pub mod pass;
 pub mod source;
 pub mod symbol;
 pub mod utils;
+pub mod lsp;

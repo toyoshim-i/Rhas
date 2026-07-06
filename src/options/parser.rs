@@ -53,6 +53,10 @@ where
                 opts.compat_error_format = true;
                 continue;
             }
+            if arg == b"--lsp" {
+                opts.lsp_mode = true;
+                continue;
+            }
             return Err(ParseError::Usage(format!(
                 "不明なオプション: {}",
                 String::from_utf8_lossy(arg)
@@ -77,8 +81,8 @@ where
         }
     }
 
-    // ソースファイルがなければ usage
-    if opts.source_file.is_none() {
+    // ソースファイルがなければ usage (LSPモード時は不要)
+    if opts.source_file.is_none() && !opts.lsp_mode {
         return Err(ParseError::Usage(String::new()));
     }
 

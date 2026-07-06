@@ -40,6 +40,14 @@ fn main() {
         }
     };
 
+    if opts.lsp_mode {
+        if let Err(e) = rhas::lsp::start_lsp_server() {
+            let _ = writeln!(err_out, "LSP サーバーエラー: {}", e);
+            std::process::exit(1);
+        }
+        std::process::exit(0);
+    }
+
     // タイトル表示（-l オプション）
     if opts.disp_title {
         print!("{}", options::title_message());
