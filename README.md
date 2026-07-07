@@ -148,15 +148,25 @@ zsh tests/gen_golden.sh
    - **Windows**: `%USERPROFILE%\.vscode\extensions\rhas-support`
    - **Linux / macOS**: `~/.vscode/extensions/rhas-support`
 
-2. **Rhas 実行バイナリパスの設定**
-   VS Code の設定画面（または `settings.json`）で、以下の通り Rhas バイナリの実行ファイルパスを指定します。
+2. **Rhas 実行バイナリの自動検出と手動設定**
+   拡張機能はアクティブなワークスペース内のビルド成果物（`target/debug/rhas` または `target/release/rhas`）や、システム PATH 上のグローバルな `rhas` コマンド、あるいは拡張機能フォルダの親・同階層に配置された `rhas` バイナリを自動検出するため、**通常は追加設定なしで動作します。**
+
+   特定のバイナリパスを明示的に使用したい場合のみ、VS Code の設定（または `settings.json`）で以下を指定してください：
    ```json
    "rhas.executablePath": "/path/to/rhas"
    ```
-   *※システムパスが通っている場合はデフォルトの `"rhas"` のままで動作します。*
 
 3. **VS Code の再起動**
-   拡張機能を配置し設定を行った後、VS Code を再起動するかコマンドパレットから `Developer: Reload Window` を実行します。
+   拡張機能の配置後、VS Code を再起動するかコマンドパレットから `Developer: Reload Window` を実行します。
+
+> [!NOTE]
+> **VS Code のプロファイル（Profiles）機能を使用している場合**
+> 拡張機能ディレクトリ（`~/.vscode/extensions/`）へ手動でファイルを配置しただけでは、デフォルト以外のカスタムプロファイルに拡張機能が自動ロードされない場合があります。
+> その場合は、以下のコマンドを実行してアクティブなプロファイルへ明示的にインストールを行ってください。
+> ```bash
+> code --profile "<プロファイル名>" --install-extension /path/to/rhas/vscode
+> ```
+> *※ `<プロファイル名>` は、VS Code 左下の歯車マーク ＞「プロファイル（Profiles）」から、現在チェックマークがついている名前を指定します。*
 
 ### ✨ 機能一覧
 - **シンタックスハイライト**: 行頭 `*` や `;` によるコメント、定数（`$`/`%`/`@`/10進数）、レジスタ、主要命令、疑似命令などを美しくカラーリングします。
