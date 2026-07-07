@@ -3,7 +3,7 @@
 //! TempRecord 列とシンボルテーブルから最終的なバイト列と
 //! 外部シンボル情報を生成し、ObjectCode を返す。
 
-use super::prn::PrnLine;
+use super::listing::PrnLine;
 use super::temp::TempRecord;
 use crate::expr::eval::EvalValue;
 use crate::expr::rpn::RPNToken;

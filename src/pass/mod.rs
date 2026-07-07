@@ -7,7 +7,7 @@ pub mod temp;
 pub mod pass1;
 pub mod pass2;
 pub mod pass3;
-pub mod prn;
+pub mod listing;
 pub mod pseudo;
 
 use crate::context::AssemblyContext;
@@ -166,7 +166,7 @@ pub fn assemble(
 
     // ---- PRNリストファイル生成 ----
     if ctx.opts.make_prn && !prn_lines.is_empty() {
-        let prn_bytes = prn::format_prn(
+        let prn_bytes = listing::format_prn(
             &prn_lines,
             &ctx.prn_title,
             &ctx.prn_subttl,
