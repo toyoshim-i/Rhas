@@ -1,0 +1,112 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "HAS Assembly",
+  "scopeName": "source.has",
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#string"
+    },
+    {
+      "include": "#label"
+    },
+    {
+      "include": "#register"
+    },
+    {
+      "include": "#instruction"
+    },
+    {
+      "include": "#directive"
+    },
+    {
+      "include": "#number"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.has",
+          "match": ";.*$"
+        },
+        {
+          "name": "comment.line.asterisk.has",
+          "match": "^\\*.*$"
+        }
+      ]
+    },
+    "string": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.has",
+          "begin": "\"",
+          "end": "\""
+        },
+        {
+          "name": "string.quoted.single.has",
+          "begin": "'",
+          "end": "'"
+        }
+      ]
+    },
+    "label": {
+      "patterns": [
+        {
+          "name": "entity.name.function.label.has",
+          "match": "^[a-zA-Z_@.][a-zA-Z0-9_@.]*:"
+        }
+      ]
+    },
+    "register": {
+      "patterns": [
+        {
+          "name": "variable.language.register.has",
+          "match": "(?i)\\b(d[0-7]|a[0-7]|sp|pc|ccr|sr|usp|ssp|vbr|sfc|dfc|cacr|caar|msp|isp|fp[0-7]|fpcr|fpsr|fpiar)\\b"
+        }
+      ]
+    },
+    "instruction": {
+      "patterns": [
+        {
+          "name": "keyword.control.assembly.has",
+          "match": "(?i)\\b(abcd|adda|addi|addq|addx|add|andi|asl|asr|bchg|bclr|bset|btst|bra|bsr|bcs|bcc|beq|bge|bgt|bhi|ble|bls|blt|bmi|bne|bpl|bvc|bvs|chk|clr|cmpa|cmpi|cmpm|cmp|dbcs|dbcc|dbeq|dbge|dbgt|dbhi|dble|dbls|dblt|dbmi|dbne|dbpl|dbvc|dbvs|dbt|dbf|dbra|divs|divu|eori|eor|exg|extb|ext|illegal|jmp|jsr|lea|link|lsl|lsr|movea|movem|movep|moveq|move|muls|mulu|nbcd|negx|neg|nop|ori|or|pea|reset|rol|ror|roxl|roxr|rte|rtr|rts|sbcd|stop|suba|subi|subq|subx|sub|swap|tas|trapcc|trap|trapv|tst|unlk|fmovem|fmovecr|fmove|fsincos|fbcc|fdbcc)\\b"
+        },
+        {
+          "name": "storage.modifier.size.has",
+          "match": "\\.[bBwWlLsS]"
+        }
+      ]
+    },
+    "directive": {
+      "patterns": [
+        {
+          "name": "keyword.other.directive.has",
+          "match": "(?i)(?<=\\s|^|\\.)(text|data|bss|stack|offset|offsym|equ|set|regsym|org|align|even|dc|ds|fail|request|68000|68010|68020|68030|68040|68060|cpu|fpid|macro|endm|irp|irpc|rept|if|else|endif|end)\\b"
+        }
+      ]
+    },
+    "number": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.has",
+          "match": "\\$[0-9a-fA-F]+"
+        },
+        {
+          "name": "constant.numeric.binary.has",
+          "match": "%[01]+"
+        },
+        {
+          "name": "constant.numeric.octal.has",
+          "match": "@[0-7]+"
+        },
+        {
+          "name": "constant.numeric.decimal.has",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    }
+  }
+}

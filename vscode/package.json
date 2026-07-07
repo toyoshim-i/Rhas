@@ -1,0 +1,53 @@
+{
+  "name": "rhas-support",
+  "displayName": "Rhas X68000 Assembly Support",
+  "version": "0.1.0",
+  "publisher": "rhas",
+  "description": "Language support for X68000 HAS assembly via Rhas LSP",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:has"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "has",
+        "aliases": [
+          "HAS Assembly",
+          "has"
+        ],
+        "extensions": [
+          ".has",
+          ".s"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "has",
+        "scopeName": "source.has",
+        "path": "./syntaxes/has.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Rhas",
+      "properties": {
+        "rhas.executablePath": {
+          "type": "string",
+          "default": "rhas",
+          "description": "Path to the rhas executable. Can be a command or an absolute path."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  }
+}
