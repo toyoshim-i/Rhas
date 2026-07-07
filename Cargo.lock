@@ -188,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "rhas"
-version = "0.1.0"
+version = "1.2.5-r1"
 dependencies = [
  "clap",
  "rustc-hash",
