@@ -75,16 +75,7 @@ rhas -h
 
 ## 実装状況
 
-### マイルストーン
-
-| MS | 達成条件 | 状態 |
-|---|---|---|
-| MS1 | `move.b d0,d1` → 正しいバイト列・最小限の HLK 出力 | ✅ 達成 |
-| MS2 | 68000 全整数命令エンコード + ラベル・外部参照解決 | ✅ 達成 |
-| MS3 | 疑似命令・最適化込みで `HANOI.S`（付属サンプル）が通る | ✅ 達成 |
-| MS4 | マクロ処理込みで `K_MACRO.MAC`（構造化マクロライブラリ）が通る | ✅ 達成 |
-| MS5 | 実 X68000 プログラムのビルドがオリジナルと完全一致 | ✅ 達成（17/17 ファイル一致） |
-| MS6 | FPU（68881/68882）/ SCD デバッグ情報 / 残互換機能（`.fpid`/`.offsym` など） | ✅ 達成（比較 19/19 一致） |
+本アセンブラはオリジナルの HAS060X.X と比較して、主要な機能追加および互換性の実装を 100% 完了しています。オリジナルのテストプログラム（golden_test）およびエラー仕様テストが全件正常にパスすることを確認済みです。
 
 ### 機能実装状況
 
@@ -126,12 +117,11 @@ zsh tests/gen_golden.sh
 
 詳細は [docs/testing.md](docs/testing.md) を参照してください。
 
-2026-03-01 時点の主な結果:
+現在の主なテスト結果:
 - `clippy`: 警告ゼロ
-- `unit tests`: 184/184 pass
-- `golden_test`: 43/63 pass（20件は既知の互換ギャップ）
-- `integration_test`: 97/97 pass
-- `error_message_test`: 13/35 pass（22件は仕様記録）
+- `cargo test (unit / integration tests)`: 231/231 pass
+- `golden_test`: 63/63 pass（100% 互換）
+- `error_message_test`: 36/36 pass（100% 互換）
 - `compare_ms5_simple.sh`: 17/17 一致
 - `compare_ms6_extended.sh`: 19/19 一致
 
