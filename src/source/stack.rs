@@ -114,7 +114,9 @@ impl SourceStack {
     /// 1. カレントファイルと同じディレクトリを先に探す
     /// 2. -i で指定したパスを順番に探す
     fn resolve_include_path(&self, filename: &[u8]) -> Result<PathBuf, FileError> {
-        let name_str = utils::bytes_to_string(filename);
+        let mut name_str = utils::bytes_to_string(filename);
+        // Replace Windows/Human68k path separator '\' with standard '/' for cross-platform support
+        name_str = name_str.replace('\\', "/");
         let name_path = Path::new(&name_str);
 
         // 絶対パスならそのまま
