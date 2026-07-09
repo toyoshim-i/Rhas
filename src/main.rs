@@ -41,7 +41,7 @@ fn main() {
     };
 
     if opts.lsp_mode {
-        if let Err(e) = rhas::lsp::start_lsp_server() {
+        if let Err(e) = rhas::lsp::start_lsp_server(opts) {
             let _ = writeln!(err_out, "LSP サーバーエラー: {}", e);
             std::process::exit(1);
         }

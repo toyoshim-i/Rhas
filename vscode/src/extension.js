@@ -10,12 +10,41 @@ let client;
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
+    startLanguageServer(context);
+
+    // 設定変更（実行パスやインクルードパス）を監視し、自動でサーバーを再起動
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('rhas')) {
+            restartLanguageServer(context);
+        }
+    }));
+}
+
+function startLanguageServer(context) {
     const executablePath = findExecutable(context);
+
+    // インクルードパス設定を取得して引数に追加
+    const config = vscode.workspace.getConfiguration('rhas');
+    const includePaths = config.get('includePaths') || [];
+    const args = ['--lsp'];
+
+    // ワークスペースのルートパスを取得
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    const workspaceRoot = workspaceFolders ? workspaceFolders[0].uri.fsPath : null;
+
+    for (const p of includePaths) {
+        if (workspaceRoot && !path.isAbsolute(p)) {
+            // 相対パスの場合はワークスペースのルート基準で絶対パスに解決
+            args.push('-i', path.resolve(workspaceRoot, p));
+        } else {
+            args.push('-i', p);
+        }
+    }
 
     // LSPサーバー起動設定（標準入出力経由で通信）
     const serverOptions = {
-        run: { command: executablePath, args: ['--lsp'] },
-        debug: { command: executablePath, args: ['--lsp'] }
+        run: { command: executablePath, args: args },
+        debug: { command: executablePath, args: args }
     };
 
     // クライアント動作設定
@@ -33,6 +62,21 @@ function activate(context) {
     );
 
     client.start();
+}
+
+function restartLanguageServer(context) {
+    if (client) {
+        const oldClient = client;
+        client = null;
+        oldClient.stop().then(() => {
+            startLanguageServer(context);
+        }).catch(err => {
+            console.error('Failed to stop language server during restart:', err);
+            startLanguageServer(context);
+        });
+    } else {
+        startLanguageServer(context);
+    }
 }
 
 /**

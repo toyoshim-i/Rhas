@@ -22,7 +22,7 @@ pub enum PcToAbslMode {
 }
 
 /// コマンドラインオプション全体
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Options {
     // ---- ファイル ----
     /// ソースファイル名

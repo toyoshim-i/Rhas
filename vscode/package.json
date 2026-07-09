@@ -43,6 +43,14 @@
           "type": "string",
           "default": "rhas",
           "description": "Path to the rhas executable. Can be a command or an absolute path."
+        },
+        "rhas.includePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional include paths to search when resolving .include files. Relative paths will be resolved against the workspace root."
         }
       }
     }

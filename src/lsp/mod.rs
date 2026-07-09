@@ -27,7 +27,7 @@ struct JsonRpcNotification {
 }
 
 /// LSPサーバーのメインループを開始する
-pub fn start_lsp_server() -> io::Result<()> {
+pub fn start_lsp_server(opts: Options) -> io::Result<()> {
     let stdin = io::stdin();
     let mut stdin_lock = stdin.lock();
     let mut stdout = io::stdout();
@@ -67,7 +67,7 @@ pub fn start_lsp_server() -> io::Result<()> {
         if let Ok(req) = serde_json::from_slice::<JsonRpcRequest>(&body_buf) {
             handle_request(&req, &mut stdout)?;
         } else if let Ok(notif) = serde_json::from_slice::<JsonRpcNotification>(&body_buf) {
-            handle_notification(&notif, &mut stdout)?;
+            handle_notification(&notif, &opts, &mut stdout)?;
         }
     }
 }
@@ -101,7 +101,7 @@ fn handle_request<W: Write>(req: &JsonRpcRequest, out: &mut W) -> io::Result<()>
     Ok(())
 }
 
-fn handle_notification<W: Write>(notif: &JsonRpcNotification, out: &mut W) -> io::Result<()> {
+fn handle_notification<W: Write>(notif: &JsonRpcNotification, opts: &Options, out: &mut W) -> io::Result<()> {
     match notif.method.as_str() {
         "exit" => {
             std::process::exit(0);
@@ -110,7 +110,7 @@ fn handle_notification<W: Write>(notif: &JsonRpcNotification, out: &mut W) -> io
             if let Some(ref params) = notif.params {
                 if let Some(doc) = params.get("textDocument") {
                     if let (Some(uri), Some(text)) = (doc.get("uri").and_then(|u| u.as_str()), doc.get("text").and_then(|t| t.as_str())) {
-                        run_and_publish_diagnostics(uri, text, out)?;
+                        run_and_publish_diagnostics(uri, text, opts, out)?;
                     }
                 }
             }
@@ -120,7 +120,7 @@ fn handle_notification<W: Write>(notif: &JsonRpcNotification, out: &mut W) -> io
                 if let (Some(doc), Some(changes)) = (params.get("textDocument"), params.get("contentChanges").and_then(|c| c.as_array())) {
                     if let (Some(uri), Some(change)) = (doc.get("uri").and_then(|u| u.as_str()), changes.first()) {
                         if let Some(text) = change.get("text").and_then(|t| t.as_str()) {
-                            run_and_publish_diagnostics(uri, text, out)?;
+                            run_and_publish_diagnostics(uri, text, opts, out)?;
                         }
                     }
                 }
@@ -131,18 +131,15 @@ fn handle_notification<W: Write>(notif: &JsonRpcNotification, out: &mut W) -> io
     Ok(())
 }
 
-fn run_and_publish_diagnostics<W: Write>(uri: &str, text: &str, out: &mut W) -> io::Result<()> {
+fn run_and_publish_diagnostics<W: Write>(uri: &str, text: &str, opts: &Options, out: &mut W) -> io::Result<()> {
     let path = uri_to_path(uri).unwrap_or_else(|| PathBuf::from("temp.s"));
     let content = text.as_bytes().to_vec();
 
-    let mut ctx = AssemblyContext::new(Options {
-        disp_title: false,
-        ..Default::default()
-    });
+    let mut ctx = AssemblyContext::new(opts.clone());
 
     let source_buf = SourceBuf::from_bytes(content, path);
-    // インクルードパスは空（または将来設定）
-    let mut source = crate::source::SourceStack::new(source_buf, Vec::new());
+    // Use include paths from Options
+    let mut source = crate::source::SourceStack::new(source_buf, ctx.opts.include_paths.clone());
     let mut sym = SymbolTable::new(ctx.opts.sym_len8);
     let mut reporter = BufferReporter::new(2); // 警告レベル2
 
