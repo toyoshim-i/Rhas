@@ -51,12 +51,39 @@ function findExecutable(context) {
         }
     }
 
-    // 2. システムPATH上のグローバルコマンド "rhas" を探索
-    if (commandExists('rhas')) {
-        return 'rhas';
+    // 2. 同梱されたプラットフォーム固有のバイナリを優先使用（自己完結配布用）
+    const platform = process.platform; // 'win32', 'linux', 'darwin'
+    const arch = process.arch;         // 'x64', 'arm64'
+    let binName = '';
+    
+    if (platform === 'win32' && arch === 'x64') {
+        binName = 'rhas-win32-x64.exe';
+    } else if (platform === 'linux' && arch === 'x64') {
+        binName = 'rhas-linux-x64';
+    } else if (platform === 'darwin') {
+        if (arch === 'arm64') {
+            binName = 'rhas-darwin-arm64';
+        } else if (arch === 'x64') {
+            binName = 'rhas-darwin-x64';
+        }
+    }
+    
+    if (binName) {
+        const bundledPath = path.join(context.extensionPath, 'bin', binName);
+        if (fs.existsSync(bundledPath)) {
+            // Windows 以外の場合、実行可能パーミッション (chmod +x) を保証
+            if (platform !== 'win32') {
+                try {
+                    fs.chmodSync(bundledPath, '755');
+                } catch (e) {
+                    console.error('Failed to set executable permissions on bundled binary:', e);
+                }
+            }
+            return bundledPath;
+        }
     }
 
-    // 3. ローカル開発環境のビルド成果物を探索 (target/debug/rhas または target/release/rhas)
+    // 3. 開発用フォールバック: ワークスペースのビルド成果物 (target/debug/rhas または target/release/rhas)
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders) {
         const rootPath = workspaceFolders[0].uri.fsPath;
@@ -70,14 +97,9 @@ function findExecutable(context) {
         }
     }
 
-    // 4. 配布パッケージ等の配置構造を探索 (拡張機能フォルダの親・同階層)
-    const siblingPath = path.join(context.extensionPath, '..', binaryName());
-    if (fs.existsSync(siblingPath)) {
-        return siblingPath;
-    }
-    const parentSiblingPath = path.join(context.extensionPath, '..', '..', binaryName());
-    if (fs.existsSync(parentSiblingPath)) {
-        return parentSiblingPath;
+    // 4. システムPATH上のグローバルコマンド "rhas" を探索
+    if (commandExists('rhas')) {
+        return 'rhas';
     }
 
     // フォールバック

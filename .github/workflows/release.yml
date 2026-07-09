@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  build-release:
-    name: Build Release (${{ matrix.target }})
+  build:
+    name: Build Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -19,19 +19,15 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: rhas
-            asset_suffix: linux-x86_64.tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: rhas.exe
-            asset_suffix: windows-x86_64.zip
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: rhas
-            asset_suffix: macos-x86_64.tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: rhas
-            asset_suffix: macos-aarch64.tar.gz
 
     steps:
       - name: Checkout
@@ -50,32 +46,76 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Install VS Code Extension dependencies
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rhas-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          if-no-files-found: error
+
+  publish:
+    name: Package and Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Setup Bundled Extension Binaries
+        run: |
+          mkdir -p vscode/bin
+          # Linux x86_64
+          cp artifacts/rhas-x86_64-unknown-linux-gnu/rhas vscode/bin/rhas-linux-x64
+          # Windows x86_64
+          cp artifacts/rhas-x86_64-pc-windows-msvc/rhas.exe vscode/bin/rhas-win32-x64.exe
+          # macOS x86_64
+          cp artifacts/rhas-x86_64-apple-darwin/rhas vscode/bin/rhas-darwin-x64
+          # macOS aarch64 (Apple Silicon)
+          cp artifacts/rhas-aarch64-apple-darwin/rhas vscode/bin/rhas-darwin-arm64
+          
+          # Ensure execution permissions on Unix binaries inside extension
+          chmod +x vscode/bin/rhas-linux-x64 vscode/bin/rhas-darwin-x64 vscode/bin/rhas-darwin-arm64
+
+      - name: Package VS Code Extension (.vsix)
         run: |
           cd vscode
           npm install
+          npx @vscode/vsce package -o ../rhas-support-${{ github.ref_name }}.vsix
 
-      - name: Package binary (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: bash
+      - name: Package Standalone CLI Archives
         run: |
-          mkdir staging
-          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} staging/
-          cp -r vscode staging/vscode
-          cd staging
-          7z a ../rhas-${{ github.ref_name }}-${{ matrix.asset_suffix }} .
+          # Package Windows CLI
+          mkdir staging-win
+          cp vscode/bin/rhas-win32-x64.exe staging-win/rhas.exe
+          zip -j rhas-${{ github.ref_name }}-windows-x86_64.zip staging-win/rhas.exe
+          
+          # Package Linux CLI
+          mkdir staging-linux
+          cp vscode/bin/rhas-linux-x64 staging-linux/rhas
+          tar -czf rhas-${{ github.ref_name }}-linux-x86_64.tar.gz -C staging-linux rhas
+          
+          # Package macOS Intel CLI
+          mkdir staging-macos-x64
+          cp vscode/bin/rhas-darwin-x64 staging-macos-x64/rhas
+          tar -czf rhas-${{ github.ref_name }}-macos-x86_64.tar.gz -C staging-macos-x64 rhas
+          
+          # Package macOS Apple Silicon CLI
+          mkdir staging-macos-arm64
+          cp vscode/bin/rhas-darwin-arm64 staging-macos-arm64/rhas
+          tar -czf rhas-${{ github.ref_name }}-macos-aarch64.tar.gz -C staging-macos-arm64 rhas
 
-      - name: Package binary (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          mkdir staging
-          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} staging/
-          cp -r vscode staging/vscode
-          cd staging
-          tar -czf ../rhas-${{ github.ref_name }}-${{ matrix.asset_suffix }} *
-
-      - name: Upload Release Asset
+      - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
-          files: rhas-${{ github.ref_name }}-${{ matrix.asset_suffix }}
+          files: |
+            rhas-support-${{ github.ref_name }}.vsix
+            rhas-${{ github.ref_name }}-windows-x86_64.zip
+            rhas-${{ github.ref_name }}-linux-x86_64.tar.gz
+            rhas-${{ github.ref_name }}-macos-x86_64.tar.gz
+            rhas-${{ github.ref_name }}-macos-aarch64.tar.gz
           generate_release_notes: true
