@@ -80,6 +80,9 @@ jobs:
           
           # Ensure execution permissions on Unix binaries inside extension
           chmod +x vscode/bin/rhas-linux-x64 vscode/bin/rhas-darwin-x64 vscode/bin/rhas-darwin-arm64
+          
+          # Copy LICENSE to extension folder for packaging validation
+          cp LICENSE vscode/LICENSE
 
       - name: Package VS Code Extension (.vsix)
         run: |
@@ -119,3 +122,9 @@ jobs:
             rhas-${{ github.ref_name }}-macos-x86_64.tar.gz
             rhas-${{ github.ref_name }}-macos-aarch64.tar.gz
           generate_release_notes: true
+
+      - name: Publish VS Code Extension to Marketplace
+        if: success()
+        run: |
+          cd vscode
+          npx @vscode/vsce publish -p ${{ secrets.VSCE_PAT }}

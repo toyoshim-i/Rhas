@@ -2,7 +2,7 @@
   "name": "rhas-support",
   "displayName": "Rhas X68000 Assembly Support",
   "version": "1.2.5-r2",
-  "publisher": "rhas",
+  "publisher": "TOYOSHIMA-HOUSE",
   "description": "Language support for X68000 HAS assembly via Rhas LSP",
   "engines": {
     "vscode": "^1.75.0"
