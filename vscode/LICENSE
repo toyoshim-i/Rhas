@@ -1,0 +1,11 @@
+Rhas (Rust HAS060X.X Assembler Port)
+
+このプロジェクトは HAS060X.X（HAS060.X / HAS.X の改造版）の移植です。
+著作権については以下の通りです。
+
+- HAS.X v3.09 の基本部分: 著作権は原作者 中村 祐一 氏にあります。
+- HAS060.X の改造部分: 著作権は改造者 M.Kamada 氏にあります。
+- HAS060X.X の改造部分: 著作権は改造者 TcbnErik 氏にあります。
+  - リポジトリ: https://github.com/kg68k/has060xx
+
+配布規定については HAS060.X に準じるものとします。
