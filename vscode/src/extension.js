@@ -5,11 +5,15 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 let client;
+let outputChannel;
 
 /**
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
+    outputChannel = vscode.window.createOutputChannel("Rhas Assembler");
+    context.subscriptions.push(outputChannel);
+
     startLanguageServer(context);
 
     // 設定変更（実行パスやインクルードパス）を監視し、自動でサーバーを再起動
@@ -18,6 +22,83 @@ function activate(context) {
             restartLanguageServer(context);
         }
     }));
+
+    // アセンブル実行コマンドの登録
+    context.subscriptions.push(vscode.commands.registerCommand('rhas.assemble', () => {
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor) {
+            vscode.window.showErrorMessage("No active editor to assemble.");
+            return;
+        }
+
+        const document = activeEditor.document;
+        if (document.languageId !== 'has') {
+            vscode.window.showErrorMessage("Active file is not a HAS assembly file.");
+            return;
+        }
+
+        // 保存されていない場合はアセンブル前に自動保存
+        if (document.isDirty) {
+            document.save().then(saved => {
+                if (saved) {
+                    runAssemble(context, document.fileName);
+                }
+            });
+        } else {
+            runAssemble(context, document.fileName);
+        }
+    }));
+}
+
+function runAssemble(context, filePath) {
+    outputChannel.clear();
+    outputChannel.show(true);
+    outputChannel.appendLine(`Assembling ${filePath}...`);
+
+    const executablePath = findExecutable(context);
+    const config = vscode.workspace.getConfiguration('rhas');
+    const includePaths = config.get('includePaths') || [];
+
+    // コマンド引数の組み立て
+    const args = [];
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    const workspaceRoot = workspaceFolders ? workspaceFolders[0].uri.fsPath : null;
+
+    for (const p of includePaths) {
+        if (workspaceRoot && !path.isAbsolute(p)) {
+            args.push('-i', path.resolve(workspaceRoot, p));
+        } else {
+            args.push('-i', p);
+        }
+    }
+
+    // 対象ソースファイルの追加
+    args.push(filePath);
+
+    outputChannel.appendLine(`Command: ${executablePath} ${args.join(' ')}\n`);
+
+    // 非同期でアセンブラプロセスを実行
+    const { spawn } = require('child_process');
+    const child = spawn(executablePath, args, {
+        cwd: workspaceRoot || path.dirname(filePath)
+    });
+
+    child.stdout.on('data', (data) => {
+        outputChannel.append(data.toString());
+    });
+
+    child.stderr.on('data', (data) => {
+        outputChannel.append(data.toString());
+    });
+
+    child.on('close', (code) => {
+        outputChannel.appendLine(`\nProcess exited with code ${code}`);
+        if (code === 0) {
+            vscode.window.showInformationMessage("Assembly completed successfully.");
+        } else {
+            vscode.window.showErrorMessage(`Assembly failed with exit code ${code}. Check output channel for details.`);
+        }
+    });
 }
 
 function startLanguageServer(context) {

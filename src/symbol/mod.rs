@@ -36,6 +36,10 @@ pub struct SymbolTable {
 
     /// シンボル識別長 8 バイト制限（-8 オプション）
     sym_len8: bool,
+
+    /// ユーザー定義シンボルの定義位置（LSP 定義ジャンプ用）
+    /// キー: 元のバイト列（大文字小文字区別）
+    pub def_positions: FxHashMap<Vec<u8>, crate::error::SourcePos>,
 }
 
 impl SymbolTable {
@@ -45,6 +49,7 @@ impl SymbolTable {
             user_syms: FxHashMap::default(),
             reg_table: FxHashMap::default(),
             cmd_table: FxHashMap::default(),
+            def_positions: FxHashMap::default(),
             sym_len8,
         };
         tbl.register_builtins();
@@ -197,6 +202,12 @@ impl SymbolTable {
     pub fn define(&mut self, name: Vec<u8>, sym: Symbol) {
         let key = self.make_user_key(name);
         self.user_syms.insert(key, sym);
+    }
+
+    /// シンボルの定義位置を記録する
+    pub fn define_pos(&mut self, name: Vec<u8>, pos: crate::error::SourcePos) {
+        let key = self.make_user_key(name);
+        self.def_positions.insert(key, pos);
     }
 
     /// マクロを登録する（.macro/.endm 処理後）

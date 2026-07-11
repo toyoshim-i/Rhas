@@ -11,7 +11,8 @@
     "Programming Languages"
   ],
   "activationEvents": [
-    "onLanguage:has"
+    "onLanguage:has",
+    "onCommand:rhas.assemble"
   ],
   "main": "./src/extension.js",
   "contributes": {
@@ -53,6 +54,21 @@
           "description": "Additional include paths to search when resolving .include files. Relative paths will be resolved against the workspace root."
         }
       }
+    },
+    "commands": [
+      {
+        "command": "rhas.assemble",
+        "title": "Rhas: Assemble Current File"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "rhas.assemble",
+          "when": "editorLangId == has",
+          "group": "navigation"
+        }
+      ]
     }
   },
   "dependencies": {

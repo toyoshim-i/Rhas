@@ -49,7 +49,10 @@ pub fn handle_macro(
             let params = parse_macro_params(line, pos);
             let (template, local_count) = collect_macro_body(source, p1.sym, p1.ctx, &params);
             let sym = Symbol::Macro { params, local_count, template };
+            let mut name_lower = mac_name.clone();
+            name_lower.make_ascii_lowercase();
             p1.sym.define_macro(mac_name, sym);
+            p1.sym.define_pos(name_lower, p1.current_pos.clone());
         }
         InsnHandler::Rept => {
             let count = if let Ok(rpn) = parse_expr(line, pos) {

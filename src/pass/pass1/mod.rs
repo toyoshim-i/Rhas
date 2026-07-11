@@ -186,6 +186,7 @@ impl<'a> P1Ctx<'a> {
             value,
         };
         self.sym.define(name.clone(), sym);
+        self.sym.define_pos(name.clone(), self.current_pos.clone());
         if warn_overwrite {
             self.warn_code(crate::error::warn::REDEF_SET, Some(&name));
         }

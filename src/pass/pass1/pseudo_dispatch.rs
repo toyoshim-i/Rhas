@@ -306,6 +306,7 @@ pub(super) fn handle_pseudo(
                                     value: 0,
                                 };
                                 p1.sym.define(target.clone(), sym);
+                                p1.sym.define_pos(target.clone(), p1.current_pos.clone());
                             }
                             records.push(TempRecord::XRef { name: target });
                         }
@@ -313,6 +314,7 @@ pub(super) fn handle_pseudo(
                     list
                 };
                 p1.sym.define(name.clone(), Symbol::RegSym { define: rpns });
+                p1.sym.define_pos(name.clone(), p1.current_pos.clone());
             }
         }
 
@@ -368,6 +370,7 @@ pub(super) fn handle_pseudo(
                         *section = 0;
                         *first = FirstDef::Offsym;
                         *value = init;
+                        p1.sym.define_pos(name.clone(), p1.current_pos.clone());
                     }
                     Some(_) => {
                         p1.error_code(ErrorCode::IlSymValue, None);
@@ -384,6 +387,7 @@ pub(super) fn handle_pseudo(
                             value: init,
                         };
                         p1.sym.define(name.clone(), sym);
+                        p1.sym.define_pos(name.clone(), p1.current_pos.clone());
                     }
                 }
                 if warn_overwrite {
