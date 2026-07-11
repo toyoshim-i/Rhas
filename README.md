@@ -122,10 +122,19 @@ zsh tests/gen_golden.sh
    拡張機能パッケージには、Windows、Linux、macOS 用のビルド済みアセンブラバイナリがすべて内包されています。
    **アセンブラ単体のインストールや実行パス（PATH）の設定を行う必要はなく、インストール後すぐにリアルタイムエラー表示が動作します。**
 
-   *※特定のローカルバイナリパスを明示的に使用したい場合のみ、VS Code の設定（`settings.json`）で以下を指定してください：*
-   ```json
-   "rhas.executablePath": "/path/to/rhas"
-   ```
+    *※特定のローカルバイナリパスの指定や、インクルードファイル（`.include`）の検索ディレクトリを設定したい場合は、VS Code の設定（`settings.json`）で以下を指定してください（相対パスはワークスペースのルートからのパスとして解決されます）：*
+    ```json
+    {
+        // 実行バイナリの手動指定（通常は設定不要です）
+        "rhas.executablePath": "/path/to/rhas",
+
+        // インクルードファイルの検索ディレクトリ（複数指定可）
+        "rhas.includePaths": [
+            "libs",
+            "include"
+        ]
+    }
+    ```
 
 > [!NOTE]
 > **VS Code のプロファイル（Profiles）機能を使用している場合**
