@@ -6,7 +6,7 @@ pub use cpu::cpu_number_to_type;
 pub use parser::parse_args;
 pub use types::{Options, ParseError};
 
-pub const VERSION: &str = "3.0.9-x1.2.5-r2";
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const VERSION_BASE: &str = "3.09+91";
 pub const COPYRIGHT: &str = "(C) 1990-1994/1996-2023 Y.Nakamura/M.Kamada";
 pub const COPYRIGHT_X: &str = "(C) 2026 TcbnErik / Rust port by rhas contributors";
