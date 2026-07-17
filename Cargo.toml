@@ -1,6 +1,6 @@
 [package]
 name = "rhas"
-version = "1.2.5-r2"
+version = "3.0.9-x1.2.5-r2"
 edition = "2021"
 description = "X68000 HAS060X assembler ported to Rust"
 authors = ["rhas contributors"]
